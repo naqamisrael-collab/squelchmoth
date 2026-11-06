@@ -7,6 +7,13 @@ on:
     paths: [ "dist/Squelchmoth-Windows.zip", ".github/workflows/windows-test.yml" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-test
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: windows-latest
@@ -65,3 +72,16 @@ jobs:
             selftest.log
             selftest.err
             screenshot.png
+
+      - name: Save results to the test-results branch (readable with git)
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          foreach ($f in "selftest.log","selftest.err","screenshot.png") { if (Test-Path $f) { Copy-Item $f out/ } }
+          "run: ${{ github.run_id }}  sha: ${{ github.sha }}  job status: ${{ job.status }}  when: $(Get-Date -Format o)" | Out-File out/RESULT.txt
+          cd out
+          git init -q -b test-results
+          git config user.name "windows-test"; git config user.email "actions@github.com"
+          git add -A; git commit -qm "Windows test results for ${{ github.sha }}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" test-results
