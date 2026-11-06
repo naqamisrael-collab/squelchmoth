@@ -101,7 +101,18 @@ inline int runSelfTest()
     {
         auto p = new juce::DynamicObject();
         p->setProperty ("name", tool);
-        p->setProperty ("arguments", juce::JSON::parse (argsJson));
+        // The checks splice file paths into JSON text. A Windows path's backslashes are not valid JSON escapes, so
+        // turn every backslash that does not start a JSON escape into '/' (Windows accepts both separators).
+        juce::String json;
+        for (int i = 0; i < argsJson.length(); ++i)
+        {
+            const auto c = argsJson[i];
+            if (c == '\\' && i + 1 < argsJson.length() && juce::String ("\"\\/bfnrtu").containsChar (argsJson[i + 1])
+                && ! (juce::File::getSeparatorChar() == '\\' && argsJson[i + 1] != '"' && argsJson[i + 1] != '\\'))
+                { json << c << argsJson[i + 1]; ++i; continue; }
+            json << (c == '\\' ? juce::juce_wchar ('/') : c);
+        }
+        p->setProperty ("arguments", juce::JSON::parse (json));
         auto r = rpc ("tools/call", juce::var (p));
         auto text = r["result"]["content"][0]["text"].toString();
         bool isErr = (bool) r["result"]["isError"];
