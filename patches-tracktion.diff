@@ -1,0 +1,441 @@
+diff --git a/modules/tracktion_engine/model/clips/tracktion_LaunchHandle.cpp b/modules/tracktion_engine/model/clips/tracktion_LaunchHandle.cpp
+index 65a8bf6a83c..b3849a7f78c 100644
+--- a/modules/tracktion_engine/model/clips/tracktion_LaunchHandle.cpp
++++ b/modules/tracktion_engine/model/clips/tracktion_LaunchHandle.cpp
+@@ -56,7 +56,7 @@ void LaunchHandle::nudge (BeatDuration duration)
+     if (currentPlayState.load (std::memory_order_acquire) != PlayState::playing)
+         return;
+ 
+-   #if __APPLE__ && __clang_major__ < 16
++   #if (__APPLE__ && __clang_major__ < 16) || (defined (_LIBCPP_VERSION) && _LIBCPP_VERSION < 180000)
+     double expected = nudgeBeats.load (std::memory_order_acquire);
+     while (nudgeBeats.compare_exchange_weak (expected, expected + duration.inBeats()))
+         ;
+diff --git a/modules/tracktion_engine/model/clips/tracktion_StepClip.cpp b/modules/tracktion_engine/model/clips/tracktion_StepClip.cpp
+index 241c5e8eff2..32ad9b5ef54 100644
+--- a/modules/tracktion_engine/model/clips/tracktion_StepClip.cpp
++++ b/modules/tracktion_engine/model/clips/tracktion_StepClip.cpp
+@@ -326,14 +326,158 @@ void StepClip::generateMidiSequenceForChannels (juce::MidiMessageSequence& resul
+     for (int f = 0; f < numChannels; ++f)
+         caches.add (new Pattern::CachedPattern (pattern, f));
+ 
++    // Squelchmoth Beat Lab extensions (all optional, stored as properties so old sessions play unchanged):
++    //  clip "sqmSwing" 0..1             - delays every second step by up to half a step (MPC 50% .. 75%)
++    //  channel "sqmSwingMix" 0..1       - how much of the clip swing this row takes (default 1)
++    //  channel "sqmMute" / "sqmSolo"    - row mute / solo
++    //  pattern row "sqmLen" 1..n        - row length in steps (polyrhythm: the row loops inside the pattern)
++    //  pattern row "sqmShifts"          - per-step micro-timing, -0.5 .. +0.5 of a step
++    //  pattern row "sqmRepeats"         - per-step repeats (rolls / ratchets), 1 .. 16
++    //  1.8 Channel Rack lanes (Graph Editor / Keyboard Editor):
++    //  pattern row "sqmNotes"           - per-step note(s): "0" = the channel's note, else MIDI numbers, chords as "60+64+67"
++    //  pattern row "sqmRelease"         - per-step note-off velocity 0..1 (FL "release")
++    //  pattern row "sqmPitch"           - per-step fine pitch in cents, -100 .. 100 (sent as pitch wheel, 2-semitone range)
++    //  pattern row "sqmPan"             - per-step pan -1 .. 1 (CC 10)
++    //  pattern row "sqmModX" / "sqmModY" - per-step Mod X / Mod Y 0..1 (CC 74 / CC 71)
++    const double clipSwing = juce::jlimit (0.0, 1.0, (double) state.getProperty ("sqmSwing", 0.0));
++    bool anySolo = false;
++
++    for (auto* ch : getChannels())
++        anySolo = anySolo || (bool) ch->state.getProperty ("sqmSolo", false);
++
++    struct RowExtras { int len = 0; juce::Array<float> shifts; juce::Array<int> repeats; bool silent = false; double swingMix = 1.0;
++                       juce::Array<juce::String> notes; juce::Array<float> release, pitch, pan, modX, modY; };
++    std::vector<RowExtras> extras ((size_t) numChannels);
++
++    for (int f = 0; f < numChannels; ++f)
++    {
++        auto& e = extras[(size_t) f];
++        auto row = pattern.state.getChild (f);
++        auto* ch = getChannels()[f];
++        e.len = juce::jlimit (0, numNotes, (int) row.getProperty ("sqmLen", 0));
++
++        for (auto& t : juce::StringArray::fromTokens (row.getProperty ("sqmShifts").toString(), false))
++            e.shifts.add (juce::jlimit (-0.5f, 0.5f, t.getFloatValue()));
++
++        for (auto& t : juce::StringArray::fromTokens (row.getProperty ("sqmRepeats").toString(), false))
++            e.repeats.add (juce::jlimit (1, 16, t.getIntValue()));
++
++        for (auto& t : juce::StringArray::fromTokens (row.getProperty ("sqmNotes").toString(), false))   e.notes.add (t);
++        for (auto& t : juce::StringArray::fromTokens (row.getProperty ("sqmRelease").toString(), false)) e.release.add (juce::jlimit (0.0f, 1.0f, t.getFloatValue()));
++        for (auto& t : juce::StringArray::fromTokens (row.getProperty ("sqmPitch").toString(), false))   e.pitch.add (juce::jlimit (-100.0f, 100.0f, t.getFloatValue()));
++        for (auto& t : juce::StringArray::fromTokens (row.getProperty ("sqmPan").toString(), false))     e.pan.add (juce::jlimit (-1.0f, 1.0f, t.getFloatValue()));
++        for (auto& t : juce::StringArray::fromTokens (row.getProperty ("sqmModX").toString(), false))    e.modX.add (juce::jlimit (0.0f, 1.0f, t.getFloatValue()));
++        for (auto& t : juce::StringArray::fromTokens (row.getProperty ("sqmModY").toString(), false))    e.modY.add (juce::jlimit (0.0f, 1.0f, t.getFloatValue()));
++
++        if (ch != nullptr)
++        {
++            e.silent = (bool) ch->state.getProperty ("sqmMute", false) || (anySolo && ! (bool) ch->state.getProperty ("sqmSolo", false));
++            e.swingMix = juce::jlimit (0.0, 1.0, (double) ch->state.getProperty ("sqmSwingMix", 1.0));
++        }
++    }
++
++    // per-step controller / pitch / note overrides for the note that is about to be added
++    struct StepCtl { int noteOverride = -1; int releaseVel = -1; float pitchCents = 0; bool hasPitch = false; float pan = 0; bool hasPan = false; float modX = 0; bool hasModX = false; float modY = 0; bool hasModY = false; };
++    StepCtl stepCtl;
++
++    auto beatToEventTime = [&] (BeatPosition b)
++    {
++        return convertToSeconds ? (tempoSequence.toTime (b) - toDuration (pos.getStart())).inSeconds() : b.inBeats();
++    };
++
++    auto addNote = [&] (const Channel& c, BeatPosition noteStart, BeatPosition noteEnd, float velocity)
++    {
++        auto start  = std::max (clipStartBeat, noteStart);
++        auto end    = std::min (clipEndBeat - 0.0001_bd, noteEnd);
++
++        if (! (end > (start + 0.0001_bd)))
++            return;
++
++        // controllers land a hair before the note so synths see them first
++        {
++            const double ctlTime = beatToEventTime (start) - 1.0e-5;
++            const auto chanNum = c.channel.get().getChannelNumber();
++            if (stepCtl.hasPitch) result.addEvent (juce::MidiMessage::pitchWheel (chanNum, juce::jlimit (0, 16383, 8192 + juce::roundToInt (stepCtl.pitchCents / 200.0f * 8192.0f))), ctlTime);
++            if (stepCtl.hasPan)   result.addEvent (juce::MidiMessage::controllerEvent (chanNum, 10, juce::jlimit (0, 127, juce::roundToInt ((stepCtl.pan + 1.0f) * 63.5f))), ctlTime);
++            if (stepCtl.hasModX)  result.addEvent (juce::MidiMessage::controllerEvent (chanNum, 74, juce::jlimit (0, 127, juce::roundToInt (stepCtl.modX * 127.0f))), ctlTime);
++            if (stepCtl.hasModY)  result.addEvent (juce::MidiMessage::controllerEvent (chanNum, 71, juce::jlimit (0, 127, juce::roundToInt (stepCtl.modY * 127.0f))), ctlTime);
++        }
++
++        double eventStart = start.inBeats();
++        double eventEnd = end.inBeats();
++
++        if (convertToSeconds)
++        {
++            const auto startTime = tempoSequence.toTime (start) - toDuration (pos.getStart());
++            const auto endTime = tempoSequence.toTime (end) - toDuration (pos.getStart());
++
++            if (auto gt = gtm.getTemplateByName (c.grooveTemplate))
++            {
++                eventStart = gt->editTimeToGroovyTime (startTime, c.grooveStrength, edit).inSeconds();
++                eventEnd = gt->editTimeToGroovyTime (endTime, c.grooveStrength, edit).inSeconds();
++            }
++            else
++            {
++                eventStart = startTime.inSeconds();
++                eventEnd = endTime.inSeconds();
++            }
++        }
++        else
++        {
++            if (auto gt = gtm.getTemplateByName (c.grooveTemplate))
++            {
++                eventStart = gt->beatsTimeToGroovyTime (start, c.grooveStrength).inBeats();
++                eventEnd = gt->beatsTimeToGroovyTime (end, c.grooveStrength).inBeats();
++            }
++        }
++
++        const float channelVelScale = static_cast<float> (c.noteValue) / 127.0f;
++        jassert (c.channel.get().isValid());
++        auto chan = c.channel.get().getChannelNumber();
++        const int noteNum = stepCtl.noteOverride >= 0 ? stepCtl.noteOverride : (int) c.noteNumber;
++        const int offVel = stepCtl.releaseVel >= 0 ? stepCtl.releaseVel : juce::jlimit (0, 127, c.noteValue.get());
++        result.addEvent (juce::MidiMessage::noteOn  (chan, noteNum, juce::jlimit (0.0f, 1.0f, velocity * channelVelScale)), eventStart);
++        result.addEvent (juce::MidiMessage::noteOff (chan, noteNum, (uint8_t) offVel), eventEnd);
++    };
++
++    // a step may hold a chord ("60+64+67"): add every note of it
++    auto addStep = [&] (const Channel& c, const RowExtras& e, int idx, BeatPosition noteStart, BeatPosition noteEnd, float velocity)
++    {
++        stepCtl = {};
++        if (juce::isPositiveAndBelow (idx, e.release.size())) stepCtl.releaseVel = juce::roundToInt (e.release[idx] * 127.0f);
++        if (juce::isPositiveAndBelow (idx, e.pitch.size()))   { stepCtl.hasPitch = true; stepCtl.pitchCents = e.pitch[idx]; }
++        if (juce::isPositiveAndBelow (idx, e.pan.size()))     { stepCtl.hasPan = true;   stepCtl.pan = e.pan[idx]; }
++        if (juce::isPositiveAndBelow (idx, e.modX.size()))    { stepCtl.hasModX = true;  stepCtl.modX = e.modX[idx]; }
++        if (juce::isPositiveAndBelow (idx, e.modY.size()))    { stepCtl.hasModY = true;  stepCtl.modY = e.modY[idx]; }
++
++        juce::StringArray chord;
++        if (juce::isPositiveAndBelow (idx, e.notes.size()) && e.notes[idx].getIntValue() != 0)
++            chord = juce::StringArray::fromTokens (e.notes[idx], "+", "");
++
++        if (chord.isEmpty()) { addNote (c, noteStart, noteEnd, velocity); return; }
++
++        bool first = true;
++        for (auto& n : chord)
++        {
++            const int nn = n.getIntValue();
++            if (nn <= 0 || nn > 127) continue;
++            stepCtl.noteOverride = nn;
++            addNote (c, noteStart, noteEnd, velocity);
++            if (first) { stepCtl.hasPitch = stepCtl.hasPan = stepCtl.hasModX = stepCtl.hasModY = false; first = false; }   // controllers once per step
++        }
++    };
++
++    const auto stepLen = noteLength * ratio;
++
+     for (int i = 0; i < numNotes; ++i)
+     {
+-        auto currentBeatEnd = startBeat + (noteLength * ratio);
++        auto currentBeatEnd = startBeat + stepLen;
+ 
+         if (startBeat >= clipEndBeat)
+             break;
+ 
+-        if (currentBeatEnd > clipStartBeat)
++        // shifted / swung notes can reach half a step either side of their slot
++        if (currentBeatEnd + stepLen > clipStartBeat)
+         {
+             for (int f = 0; f < numChannels; ++f)
+             {
+@@ -345,58 +489,45 @@ void StepClip::generateMidiSequenceForChannels (juce::MidiMessageSequence& resul
+                     continue;
+                 }
+ 
+-                if (cache->getNote (i))
++                auto& e = extras[(size_t) f];
++
++                if (e.silent)
++                    continue;
++
++                const int idx = e.len > 0 ? (i % e.len) : i;
++
++                if (cache->getNote (idx))
+                 {
+-                    auto prob = cache->getProbability (i);
++                    auto prob = cache->getProbability (idx);
+ 
+-                    if (juce::Random::getSystemRandom().nextFloat() >= prob)
++                    if (prob < 1.0f && juce::Random::getSystemRandom().nextFloat() >= prob)
+                         continue;
+ 
+-                    auto gate = cache->getGate (i);
+-                    auto beatEnd = startBeat + (noteLength * gate * ratio);
++                    auto gate = cache->getGate (idx);
+                     jassert (gate > 0.0);
++                    const float vel = static_cast<float> (cache->getVelocity (idx)) / 127.0f;
+ 
+-                    auto start  = std::max (clipStartBeat, startBeat);
+-                    auto end    = std::min (clipEndBeat - 0.0001_bd, beatEnd);
++                    double shift = juce::isPositiveAndBelow (idx, e.shifts.size()) ? (double) e.shifts[idx] : 0.0;
++                    if ((i % 2) == 1)
++                        shift += clipSwing * e.swingMix * 0.5;
+ 
+-                    double eventStart = start.inBeats();
+-                    double eventEnd = end.inBeats();
++                    const int reps = juce::isPositiveAndBelow (idx, e.repeats.size()) ? e.repeats[idx] : 1;
++                    auto& c = *getChannels().getUnchecked (f);
++                    auto noteStart = startBeat + stepLen * shift;
+ 
+-                    if (end > (start + 0.0001_bd))
++                    if (reps <= 1)
++                    {
++                        addStep (c, e, idx, noteStart, noteStart + stepLen * gate, vel);
++                    }
++                    else
+                     {
+-                        auto& c = *getChannels().getUnchecked (f);
++                        const auto sub = stepLen * (1.0 / reps);
+ 
+-                        if (convertToSeconds)
++                        for (int r = 0; r < reps; ++r)
+                         {
+-                            const auto startTime = tempoSequence.toTime (start) - toDuration (pos.getStart());
+-                            const auto endTime = tempoSequence.toTime (end) - toDuration (pos.getStart());
+-
+-                            if (auto gt = gtm.getTemplateByName (c.grooveTemplate))
+-                            {
+-                                eventStart = gt->editTimeToGroovyTime (startTime, c.grooveStrength, edit).inSeconds();
+-                                eventEnd = gt->editTimeToGroovyTime (endTime, c.grooveStrength, edit).inSeconds();
+-                            }
+-                            else
+-                            {
+-                                eventStart = startTime.inSeconds();
+-                                eventEnd = endTime.inSeconds();
+-                            }
++                            auto s0 = noteStart + sub * (double) r;
++                            addStep (c, e, idx, s0, s0 + sub * juce::jmin (gate, 0.95), vel);
+                         }
+-                        else
+-                        {
+-                            if (auto gt = gtm.getTemplateByName (c.grooveTemplate))
+-                            {
+-                                eventStart = gt->beatsTimeToGroovyTime (start, c.grooveStrength).inBeats();
+-                                eventEnd = gt->beatsTimeToGroovyTime (end, c.grooveStrength).inBeats();
+-                            }
+-                        }
+-
+-                        const float channelVelScale = static_cast<float> (c.noteValue) / 127.0f;
+-                        const float vel = static_cast<float> (cache->getVelocity (i)) / 127.0f;
+-                        jassert (c.channel.get().isValid());
+-                        auto chan = c.channel.get().getChannelNumber();
+-                        result.addEvent (juce::MidiMessage::noteOn  (chan, c.noteNumber, vel * channelVelScale), eventStart);
+-                        result.addEvent (juce::MidiMessage::noteOff (chan, c.noteNumber, (uint8_t) juce::jlimit (0, 127, c.noteValue.get())), eventEnd);
+                     }
+                 }
+             }
+@@ -644,6 +775,11 @@ juce::Array<StepClip::Pattern> StepClip::getPatterns()
+     return p;
+ }
+ 
++int StepClip::getNumPatterns() const
++{
++    return state.getChildWithName (IDs::PATTERNS).getNumChildren();
++}
++
+ StepClip::Pattern StepClip::getPattern (int index)
+ {
+     return Pattern (*this, state.getChildWithName (IDs::PATTERNS).getChild (index));
+diff --git a/modules/tracktion_engine/model/export/tracktion_Renderer.cpp b/modules/tracktion_engine/model/export/tracktion_Renderer.cpp
+index 4b5107212e5..7a75b5379a6 100644
+--- a/modules/tracktion_engine/model/export/tracktion_Renderer.cpp
++++ b/modules/tracktion_engine/model/export/tracktion_Renderer.cpp
+@@ -694,6 +694,11 @@ juce::File Renderer::renderToFile (const juce::String& taskDescription, const Pa
+     {
+         auto& ui = r.edit->engine.getUIBehaviour();
+ 
++        // Squelchmoth: never write into an existing file - juce::FileOutputStream appends, which left the old
++        // audio after the new header when re-bouncing to the same name
++        if (r.destFile.existsAsFile())
++            r.destFile.deleteFile();
++
+         if (auto task = render_utils::createRenderTask (r, taskDescription, nullptr, nullptr))
+         {
+             ui.runTaskWithProgressBar (*task);
+diff --git a/modules/tracktion_engine/playback/devices/tracktion_InputDevice.cpp b/modules/tracktion_engine/playback/devices/tracktion_InputDevice.cpp
+index c0675a36e4d..d42d0ae4d32 100644
+--- a/modules/tracktion_engine/playback/devices/tracktion_InputDevice.cpp
++++ b/modules/tracktion_engine/playback/devices/tracktion_InputDevice.cpp
+@@ -190,6 +190,15 @@ bool InputDeviceInstance::isLivePlayEnabled (const Track& t) const
+         if (dest->targetID != t.itemID)
+             continue;
+ 
++        // Squelchmoth: Pro Tools' per-track Input Monitor button ("I"). It forces live input on this track only;
++        // the device-wide mode (Input Only / Auto Input Monitoring) still decides for every other track.
++        if (t.state.getProperty ("sqmInputMonitor", false))
++            return owner.getMonitorMode() != InputDevice::MonitorMode::off;
++
++        // Squelchmoth: MIDI Thru follows the first selected MIDI / instrument track (Pro Tools' default thru instrument)
++        if (owner.isMidi() && t.state.getProperty ("sqmMidiThru", false))
++            return owner.getMonitorMode() != InputDevice::MonitorMode::off;
++
+         switch (owner.getMonitorMode())
+         {
+             case InputDevice::MonitorMode::on:          return true;
+diff --git a/modules/tracktion_engine/playback/graph/tracktion_PluginNode.cpp b/modules/tracktion_engine/playback/graph/tracktion_PluginNode.cpp
+index 2f55d8c12e1..50a7dd009e9 100644
+--- a/modules/tracktion_engine/playback/graph/tracktion_PluginNode.cpp
++++ b/modules/tracktion_engine/playback/graph/tracktion_PluginNode.cpp
+@@ -209,6 +209,30 @@ void PluginNode::process (ProcessContext& pc)
+         }
+     }
+ 
++    // Dynamic plug-in processing: skip an effect that is fed silence once its own output has gone silent
++    const bool dynamicCandidate = shouldProcessPlugin && ! isRendering && dynamicPluginProcessingEnabled().load (std::memory_order_relaxed)
++                                   && ! plugin->producesAudioWhenNoAudioInput() && ! plugin->isSynth();
++    auto isSilentBlock = [] (auto view)
++    {
++        if (view.getNumChannels() == 0 || view.getNumFrames() == 0) return true;
++        auto ab = toAudioBuffer (view);
++        return ab.getMagnitude (0, ab.getNumSamples()) < 1.0e-6f;
++    };
++
++    if (dynamicCandidate
++        && silentOutputSamples > (int64_t) (sampleRate * 0.5)
++        && inputBuffers.midi.isEmpty() && ! isAllNotesOff
++        && isSilentBlock (inputAudioBlock))
++    {
++        shouldProcessPlugin = false;   // output already holds the (silent) input copy
++        dynamicPluginBlocksSkipped().fetch_add (1, std::memory_order_relaxed);
++        silentOutputSamples += (int64_t) blockNumSamples;
++    }
++    else if (! dynamicCandidate)
++    {
++        silentOutputSamples = 0;
++    }
++
+     // Fast path for disabled plugins: skip sub-block loop and pass MIDI straight through
+     if (! shouldProcessPlugin)
+     {
+@@ -270,6 +294,12 @@ void PluginNode::process (ProcessContext& pc)
+         }
+     }
+ 
++    if (dynamicCandidate && shouldProcessPlugin)
++    {
++        if (isSilentBlock (outputAudioView)) silentOutputSamples += (int64_t) blockNumSamples;
++        else silentOutputSamples = 0;
++    }
++
+     // If the plugin was bypassed, use the delayed audio
+     if (latencyProcessor)
+     {
+diff --git a/modules/tracktion_engine/playback/graph/tracktion_PluginNode.h b/modules/tracktion_engine/playback/graph/tracktion_PluginNode.h
+index 9000b7e20b4..37c30eec594 100644
+--- a/modules/tracktion_engine/playback/graph/tracktion_PluginNode.h
++++ b/modules/tracktion_engine/playback/graph/tracktion_PluginNode.h
+@@ -76,6 +76,7 @@ private:
+     std::shared_ptr<tracktion::graph::LatencyProcessor> latencyProcessor;
+     std::optional<NodeProperties> cachedNodeProperties;
+     bool isPrepared = false, canUseSourceBuffers = false;
++    int64_t silentOutputSamples = 0;   // dynamic processing: consecutive silent samples at this plug-in's output
+ 
+     //==============================================================================
+     void initialisePlugin (double sampleRateToUse, int blockSizeToUse);
+diff --git a/modules/tracktion_engine/plugins/tracktion_PluginManager.cpp b/modules/tracktion_engine/plugins/tracktion_PluginManager.cpp
+index 8b10702a9e5..c3cb5fac122 100644
+--- a/modules/tracktion_engine/plugins/tracktion_PluginManager.cpp
++++ b/modules/tracktion_engine/plugins/tracktion_PluginManager.cpp
+@@ -439,6 +439,10 @@ Plugin::Ptr PluginManager::createPlugin (Edit& ed, const juce::ValueTree& v, boo
+     if (type == RackInstance::xmlTypeName)
+         return new RackInstance (info);
+ 
++    if (! engine.getEngineBehaviour().isPluginTypeAllowed (type))
++        if (auto placeholder = engine.getEngineBehaviour().createPlaceholderPlugin (info))
++            return placeholder;
++
+     for (auto builtIn : builtInTypes)
+         if (builtIn->type == type)
+             if (auto af = builtIn->create (info))
+diff --git a/modules/tracktion_engine/plugins/tracktion_PluginScanHelpers.h b/modules/tracktion_engine/plugins/tracktion_PluginScanHelpers.h
+index 0247e72fbeb..1881d7bf622 100644
+--- a/modules/tracktion_engine/plugins/tracktion_PluginScanHelpers.h
++++ b/modules/tracktion_engine/plugins/tracktion_PluginScanHelpers.h
+@@ -271,6 +271,13 @@ struct CustomScanner  : public juce::KnownPluginList::CustomScanner
+     {
+         const auto succeeded = findTypes (format, result, fileOrIdentifier);
+         keepUpdateTimesOfUnchangedPlugins (result);
++
++        // Squelchmoth: a scan that was stopped (the app quitting, the user cancelling) is not a plug-in failure.
++        // Returning false here makes JUCE blacklist the plug-in for good, which is how installed plug-ins
++        // (e.g. a Waves shell that takes a while to scan) used to vanish. Nothing is added; it is scanned next time.
++        if (! succeeded && shouldAbortScan())
++            return true;
++
+         return succeeded;
+     }
+ 
+diff --git a/modules/tracktion_engine/utilities/tracktion_EngineBehaviour.h b/modules/tracktion_engine/utilities/tracktion_EngineBehaviour.h
+index a21ea9c0d8d..e22fc4d5cfb 100644
+--- a/modules/tracktion_engine/utilities/tracktion_EngineBehaviour.h
++++ b/modules/tracktion_engine/utilities/tracktion_EngineBehaviour.h
+@@ -48,6 +48,11 @@ public:
+     /// This will be called if the PluginManager doesn't know how to create a Plugin for the given info.
+     virtual Plugin::Ptr createCustomPlugin (PluginCreationInfo)                     { return {}; }
+ 
++    /** Squelchmoth: licensing gate for built-in plugin types. When this returns false for a type, the
++        PluginManager asks createPlaceholderPlugin for a stand-in that keeps the saved state untouched. */
++    virtual bool isPluginTypeAllowed (const juce::String& /*type*/)                 { return true; }
++    virtual Plugin::Ptr createPlaceholderPlugin (PluginCreationInfo)               { return {}; }
++
+     /// Gives the host a chance to do any extra configuration after a plugin is loaded
+     virtual void doAdditionalInitialisation (ExternalPlugin&)                       {}
+ 
+@@ -298,3 +303,19 @@ public:
+ };
+ 
+ } // namespace tracktion::inline engine
++/** Dynamic plug-in processing (Squelchmoth): when true, an effect plug-in whose input has gone silent stops being
++    processed once its own output has also decayed to silence (so reverb and delay tails finish), and starts again
++    on the first non-silent block or MIDI event. Instruments and offline renders always process. */
++inline std::atomic<bool>& dynamicPluginProcessingEnabled()
++{
++    static std::atomic<bool> enabled { false };
++    return enabled;
++}
++
++/** How many plug-in blocks dynamic processing has skipped (for the System Usage window). */
++inline std::atomic<uint64_t>& dynamicPluginBlocksSkipped()
++{
++    static std::atomic<uint64_t> n { 0 };
++    return n;
++}
++

@@ -1,0 +1,44 @@
+SQUELCHMOTH PRIVACY POLICY
+Version 1.9 - 2026. Squelchmoth is created and owned by Jamar Stewart.
+
+Short version: Squelchmoth does not collect, sell or share your personal data. Your music stays on your computer.
+
+WHAT STAYS ON YOUR COMPUTER
+- Sessions, recordings, bounces, stems, presets, insert chains, mix snapshots and backups.
+- Preferences, the plug-in list, crash logs and the activity log (Help > Copy diagnostics copies them only when you ask).
+- Your licence key. Keys are checked on your computer with a digital signature - nothing is sent anywhere to activate.
+
+NO ANALYTICS, NO ADS, NO TRACKING
+Squelchmoth contains no analytics, advertising or tracking code and sends no usage statistics.
+
+WHEN SQUELCHMOTH USES THE INTERNET
+Only when you choose to:
+1. Connect Claude (Claude menu > Connect Claude). Squelchmoth starts a private, encrypted link (a Cloudflare tunnel, or
+   ngrok if you entered your own ngrok token) so that Claude can control the app. The link address contains a long
+   random secret and stops working when you disconnect or quit. While connected, Claude can read what it asks for
+   through Squelchmoth's tools - track names, clip positions, plug-in settings, meter readings and screenshots of the
+   app - in order to do what you ask. Audio files are not uploaded unless you ask Claude to work with one.
+   What you say to Claude is handled by Anthropic under Anthropic's privacy policy.
+2. If the link helper is missing, Squelchmoth downloads it once from its official publisher (Cloudflare on GitHub, or
+   ngrok) over HTTPS.
+3. Help > Visit the Store, the Buy buttons in Help > Licences and Upgrades and similar items open web pages in your browser.
+Third-party plug-ins you load may have their own internet features and privacy policies.
+
+BUYING AND THE WEBSITE
+The squelchmoth.com website has no analytics, advertising or tracking code. When you download the Demo or buy a product,
+the store provider (Payhip) handles checkout: it receives your email address and payment details, emails your
+download link and licence key, and handles tax, under Payhip's own privacy policy. The Licensor receives your name,
+email address and what you bought, uses them to support your purchase and, only if you agree at checkout, to send
+product news. You can unsubscribe from any email.
+
+CHILDREN
+Squelchmoth is not directed at children under 13 and collects no personal information from anyone.
+
+YOUR CHOICES
+Disconnect Claude at any time from the Claude menu. Uninstalling (Help > Uninstall Squelchmoth) removes the app, its
+preferences, caches and logs; your sessions are kept unless you choose to remove them too.
+
+CHANGES
+If this policy changes, the new version ships with the next update and is shown in Help > Privacy Policy.
+
+Contact: Jamar Stewart, support@squelchmoth.com, https://squelchmoth.com/support.html

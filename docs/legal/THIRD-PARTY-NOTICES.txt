@@ -1,0 +1,49 @@
+SQUELCHMOTH - THIRD-PARTY NOTICES
+Squelchmoth (c) 2026 Jamar Stewart. All rights reserved. The components below remain under their own licences.
+
+POWERED BY TRACKTION ENGINE
+Tracktion Engine (c) Tracktion Corporation. Used under a Tracktion Engine licence. https://www.tracktion.com/develop/tracktion-engine
+
+MADE WITH JUCE
+JUCE (c) Raw Material Software Limited. Used under the JUCE licence. https://juce.com
+JUCE includes: FLAC (BSD-3-Clause, (c) Josh Coalson and Xiph.Org Foundation); Ogg Vorbis (BSD-3-Clause, (c) Xiph.Org
+Foundation); zlib ((c) Jean-loup Gailly and Mark Adler, zlib licence); libpng (libpng licence); IJG libjpeg (c) Thomas
+G. Lane / Independent JPEG Group - "this software is based in part on the work of the Independent JPEG Group";
+HarfBuzz (MIT); the VST3 SDK (c) Steinberg Media Technologies GmbH (MIT licence, VST 3.8 and later) - VST is a
+registered trademark of Steinberg Media Technologies GmbH; the LV2 SDK, serd, sord, sratom and lilv (ISC, (c) David
+Robillard and contributors).
+
+INCLUDED WITH TRACKTION ENGINE
+- Signalsmith Stretch (c) Geraint Luff / Signalsmith Audio - MIT licence (time-stretch and pitch for every Elastic
+  Audio mode).
+- AirWindows effects (c) Chris Johnson - MIT licence.
+- libsamplerate (c) Erik de Castro Lopo - BSD-2-Clause.
+- choc (c) Julian Storer - ISC licence. crill (c) Timur Doumler - Boost Software Licence 1.0.
+- magic_enum (c) Daniil Goncharov - MIT. rpmalloc (c) Mattias Jansson - public domain / MIT.
+- rigtorp SPSCQueue / MPMCQueue (c) Erik Rigtorp - MIT. tl::expected (c) Sy Brand - CC0.
+
+OTHER COMPONENTS
+- cpp-httplib (c) Yuji Hirose - MIT licence (the local server Claude connects to).
+- cloudflared (c) Cloudflare, Inc. - Apache License 2.0 (bundled link helper, unmodified, run as a separate program).
+  Source: https://github.com/cloudflare/cloudflared
+
+MIT LICENCE TEXT (applies to the MIT components above, each with its own copyright line)
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+persons to whom the Software is furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
+Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+BSD-3-CLAUSE / BSD-2-CLAUSE / ISC / BOOST / APACHE-2.0
+The full texts of these licences are at https://opensource.org/licenses. Redistribution in binary form keeps the
+copyright notices above, and the names of the copyright holders are not used to endorse Squelchmoth.
+
+TRADEMARKS
+Pro Tools, Studio One, FL Studio, Logic and other product names mentioned in Squelchmoth's documentation
+belong to their owners and are used only to describe compatibility or comparable features. Squelchmoth is not
+affiliated with or endorsed by them. Claude is a trademark of Anthropic.

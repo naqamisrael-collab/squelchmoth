@@ -1,0 +1,1562 @@
+#pragma once
+// Headless end-to-end test: drives the DAW exclusively through the MCP JSON-RPC layer,
+// exactly the way Claude does, and checks the results. Run:  Squelchmoth --selftest
+
+#include "McpServer.h"
+#include "Behaviours.h"
+#include "Licence.h"
+
+inline int runSelfTest()
+{
+    auto ui = std::make_unique<SquelchmothUIBehaviour>();
+    ui->headless = true;
+    ui->onMessage = [] (const juce::String& m) { std::cout << "  [engine] " << m << "\n"; };
+    auto engine = std::make_unique<te::Engine> ("SquelchmothSelfTest", std::move (ui), std::make_unique<SquelchmothEngineBehaviour>());
+    engine->getPluginManager().initialiseAirWindows();
+    engine->getPluginManager().createBuiltInType<te::ImpulseResponsePlugin>();
+    engine->getPluginManager().createBuiltInType<te::ToneGeneratorPlugin>();
+    engine->getPluginManager().createBuiltInType<SqStereoPanPlugin>();
+    engine->getPluginManager().createBuiltInType<SqMonoSumPlugin>();
+    engine->getPluginManager().createBuiltInType<SqAnalyzerPlugin>();
+    engine->getPluginManager().createBuiltInType<Sq808Plugin>();
+    engine->getPluginManager().createBuiltInType<SqBlossomPlugin>();
+    engine->getPluginManager().createBuiltInType<SqTunePlugin>();
+    engine->getPluginManager().createBuiltInType<SqTuneFxPlugin>();
+    engine->getPluginManager().createBuiltInType<SqApexDynamicsPlugin>();
+    engine->getPluginManager().createBuiltInType<SqApexLimiterPlugin>();
+    engine->getPluginManager().createBuiltInType<SqApexMultibandPlugin>();
+    engine->getPluginManager().createBuiltInType<SqApexSubPlugin>();
+    engine->getPluginManager().createBuiltInType<SqAuroraPlugin>();
+    engine->getPluginManager().createBuiltInType<SqOptoPlugin>();
+    engine->getPluginManager().createBuiltInType<SqPulseEqPlugin>();
+    engine->getPluginManager().createBuiltInType<SqOilCanPlugin>();
+    engine->getPluginManager().createBuiltInType<SqLadderPlugin>();
+    engine->getPluginManager().createBuiltInType<SqRingPlugin>();
+    engine->getPluginManager().createBuiltInType<SqPhase12Plugin>();
+    engine->getPluginManager().createBuiltInType<SqBucketPlugin>();
+    engine->getPluginManager().createBuiltInType<SqHivePadsPlugin>();
+    engine->getPluginManager().createBuiltInType<SqRackChannelPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqMothsynth2Plugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqVenomPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqSimMothPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqMiniMothPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqThumpPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqDial10Plugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqHexwingPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqToxinPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqLanternPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqLanternExoPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqLarvaBassPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqThornBassPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqCarapacePlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqLiveDrumSynthPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqDrumPadModelPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqThumpLivePlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqChrysalis2Plugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqChrysalisSFPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqMandiblePlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqMandibleLitePlugin>();
+    engine->getPluginManager().createBuiltInType<SqSynth::SqPollenPlugin>();
+    engine->getPluginManager().createBuiltInType<SqTimeWeaverPlugin>();
+    engine->getPluginManager().createBuiltInType<SqLarvaFilterPlugin>();
+    engine->getPluginManager().createBuiltInType<SqApexTriadPlugin>();
+
+    juce::PropertiesFile::Options opts;
+    opts.applicationName = "SquelchmothSelfTest";
+    opts.filenameSuffix = ".settings";
+    opts.folderName = "SquelchmothSelfTest";
+    juce::PropertiesFile props (opts);
+    Prefs::file() = &props;
+
+    auto session = std::make_unique<Session> (*engine);
+    session->sessionsDir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sm_selftest");
+    session->sessionsDir.deleteRecursively();
+    session->sessionsDir.createDirectory();
+    session->bouncesDir = session->sessionsDir.getChildFile ("Bounces");
+    session->bouncesDir.createDirectory();
+
+    SqHivePadsPlugin::kitFiles = [&] (int kit) { return DrumKit::ensureKit (*session, kit); };   // Hive Pads kit channels need the rendered kits
+    SqFactory::rootHook() = [&] { return session->sessionsDir.getChildFile ("Factory"); }; FactoryLoops::install();
+    auto scannerOwner = std::make_unique<PluginScanner> (*engine);
+    auto& scanner = *scannerOwner;
+    McpTools tools (*session, scanner);
+    McpServer server (tools, props);
+
+    int failures = 0, passes = 0, id = 1;
+    juce::String sid;
+
+    auto rpc = [&] (const juce::String& method, const juce::var& params) -> juce::var
+    {
+        auto o = new juce::DynamicObject();
+        o->setProperty ("jsonrpc", "2.0");
+        o->setProperty ("id", id++);
+        o->setProperty ("method", method);
+        o->setProperty ("params", params);
+        bool notif = false;
+        auto out = server.handleBody (juce::JSON::toString (juce::var (o)), sid, notif);
+        return juce::JSON::parse (out);
+    };
+
+    auto call = [&] (const juce::String& tool, const juce::String& argsJson, bool expectOk = true) -> juce::String
+    {
+        auto p = new juce::DynamicObject();
+        p->setProperty ("name", tool);
+        p->setProperty ("arguments", juce::JSON::parse (argsJson));
+        auto r = rpc ("tools/call", juce::var (p));
+        auto text = r["result"]["content"][0]["text"].toString();
+        bool isErr = (bool) r["result"]["isError"];
+        bool good = (isErr != expectOk);
+        (good ? passes : failures)++;
+        std::cout << (good ? "  PASS " : "  FAIL ") << tool << " " << argsJson.substring (0, 90) << "\n       -> " << text.substring (0, 300).replace ("\n", " ") << "\n";
+        return text;
+    };
+
+    auto check = [&] (bool cond, const juce::String& what)
+    {
+        (cond ? passes : failures)++;
+        std::cout << (cond ? "  PASS " : "  FAIL ") << what << "\n";
+    };
+
+    std::cout << "== Squelchmoth MCP self-test ==\n";
+    Edition::owned() = Edition::Owned { true, true, true, true, true, true };   // the self-test runs as Complete; the editions section switches to the Demo itself
+
+    auto init = rpc ("initialize", juce::JSON::parse (R"({"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"selftest","version":"1"}})"));
+    check (init["result"]["serverInfo"]["name"].toString() == "squelchmoth", "initialize returns serverInfo");
+    check (sid.isNotEmpty(), "initialize assigns Mcp-Session-Id");
+
+    bool notif = false;
+    auto none = server.handleBody (R"({"jsonrpc":"2.0","method":"notifications/initialized"})", sid, notif);
+    check (notif && none.isEmpty(), "notification gets no response (202)");
+
+    auto list = rpc ("tools/list", juce::var (new juce::DynamicObject()));
+    auto numTools = list["result"]["tools"].size();
+    check (numTools >= 35, "tools/list returns " + juce::String (numTools) + " tools");
+
+    // every schema must be a valid object schema
+    bool schemasOk = true;
+    for (auto& t : *list["result"]["tools"].getArray())
+        schemasOk = schemasOk && t["inputSchema"]["type"].toString() == "object";
+    check (schemasOk, "all tool schemas are object schemas");
+
+    call ("get_session", "{}", false);   // no session yet -> error
+    call ("new_session", R"({"name":"Selftest"})");
+    call ("get_session", "{}");
+    call ("set_tempo", R"({"bpm":92,"numerator":4,"denominator":4})");
+    call ("add_track", R"({"kind":"instrument","name":"Keys","instrument":"4OSC Synth"})");
+    call ("create_midi_clip", R"({"track":"Keys","start_bar":1,"length_bars":4,"name":"Chords","notes":[
+        {"pitch":"C4","start_beat":0,"length_beats":4,"velocity":100},{"pitch":"E4","start_beat":0,"length_beats":4},{"pitch":"G4","start_beat":0,"length_beats":4},
+        {"pitch":"A3","start_beat":4,"length_beats":4},{"pitch":"C4","start_beat":4,"length_beats":4},{"pitch":"E4","start_beat":4,"length_beats":4},
+        {"pitch":"F3","start_beat":8,"length_beats":4},{"pitch":"A3","start_beat":8,"length_beats":4},{"pitch":"C4","start_beat":8,"length_beats":4},
+        {"pitch":"G3","start_beat":12,"length_beats":4},{"pitch":"B3","start_beat":12,"length_beats":4},{"pitch":"D4","start_beat":12,"length_beats":4}]})");
+    auto notes = call ("get_midi_notes", R"({"track":"Keys"})");
+    check (notes.contains ("\"pitch\": 60") || notes.contains ("\"pitch\":60"), "C4 parsed as MIDI 60");
+    call ("quantize_midi", R"({"track":"Keys","grid_beats":0.25})");
+    call ("transpose_midi", R"({"track":"Keys","semitones":2})");
+    call ("transpose_midi", R"({"track":"Keys","semitones":-2})");
+
+    call ("insert_plugin", R"({"track":"Keys","plugin":"Compressor"})");
+    call ("insert_plugin", R"({"track":"Keys","plugin":"4-Band EQ"})");
+    call ("insert_plugin", R"({"track":"Keys","plugin":"Drum Slam"})");
+    call ("insert_plugin", R"({"track":"Keys","plugin":"Definitely Not A Plugin"})", false);
+    auto params = call ("get_plugin_parameters", R"({"track":"Keys","slot":"Compressor"})");
+    check (params.contains ("parameters"), "compressor exposes parameters");
+    call ("set_plugin_parameters", R"({"track":"Keys","slot":"Compressor","params":[{"param":0,"value":0.4},{"param":1,"value":0.7}]})");
+    call ("bypass_plugin", R"({"track":"Keys","slot":"Drum Slam","bypassed":true})");
+    call ("move_plugin", R"({"track":"Keys","slot":"4-Band EQ","to_slot":2})");
+    call ("remove_plugin", R"({"track":"Keys","slot":"Drum Slam"})");
+    call ("plugin_presets", R"({"track":"Keys","slot":"Compressor","action":"save","name":"Glue"})");
+    call ("plugin_presets", R"({"track":"Keys","slot":"Compressor","action":"recall","name":"Glue"})");
+
+    call ("add_send", R"({"track":"Keys","bus":"new","bus_name":"Verb Bus","level_db":-8})");
+    call ("insert_plugin", R"({"track":"Verb Bus","plugin":"Reverb"})");
+    call ("update_track", R"({"track":"Keys","volume_db":-3,"pan":-0.2,"colour":"#ff3ad1"})");
+    call ("update_track", R"({"track":"master","volume_db":-1})");
+    call ("insert_plugin", R"({"track":"master","plugin":"Compressor"})");
+    call ("write_automation", R"({"track":"Keys","target":"volume","points":[{"bar":1,"value":-12},{"bar":2,"value":-3},{"bar":4,"value":-6}]})");
+    call ("write_automation", R"({"track":"Keys","slot":"4-Band EQ","param":0,"points":[{"bar":1,"value":0.2},{"bar":3,"value":0.8}]})");
+
+    call ("set_loop", R"({"enabled":true,"start_bar":1,"end_bar":5})");
+    call ("set_click", R"({"enabled":false})");
+    call ("transport", R"({"action":"go_to_start"})");
+
+    auto a = call ("analyze_mix", R"({"start_bar":1,"end_bar":5})");
+    auto av = juce::JSON::parse (a);
+    check ((double) av["peak_dbfs"] > -60.0, "mix is audible (peak " + av["peak_dbfs"].toString() + " dBFS)");
+
+    auto bounce = call ("bounce", R"({"name":"selftest bounce","start_bar":1,"end_bar":5})");
+    auto bounced = session->bouncesDir.findChildFiles (juce::File::findFiles, false, "*.wav");
+    check (bounced.size() == 1 && bounced[0].getSize() > 100000, "bounce wrote a WAV file");
+
+    if (bounced.size() == 1)
+    {
+        call ("import_audio", R"({"track":1,"path":")" + bounced[0].getFullPathName().replace ("\\", "/") + R"(","start_bar":2})");
+        call ("edit_clip", R"({"track":1,"clip":1,"gain_db":-4,"fade_in_seconds":0.5,"fade_out_seconds":1})");
+        call ("split_clip", R"({"track":1,"at_bar":3})");
+        call ("duplicate_clip", R"({"track":1,"clip":2,"times":2})");
+        auto clips = call ("list_clips", R"({"track":1})");
+        check (juce::JSON::parse (clips)[0]["clips"].size() == 4, "split + duplicate gives 4 clips");
+        call ("delete_clip", R"({"track":1,"clip":4})");
+        call ("edit_clip", R"({"track":1,"clip":1,"move_to_track":2})");
+    }
+
+    auto bounceLufs = call ("bounce", R"({"name":"loud","start_bar":1,"end_bar":5,"normalize_lufs":-14,"format":"flac"})");
+    check (bounceLufs.contains (".flac"), "FLAC + LUFS-normalised bounce");
+
+    call ("bounce", R"({"name":"stem","tracks":["Keys"],"start_bar":1,"end_bar":3})");
+    call ("add_track", R"({"kind":"audio","name":"Vox","count":2})");
+    call ("update_track", R"({"track":"Vox 1","output":"Verb Bus"})");
+    call ("update_track", R"({"track":"Vox 2","move_to":1,"mute":true,"solo":false})");
+    call ("delete_track", R"({"track":"Vox 2"})");
+    call ("list_inputs", "{}");
+    call ("list_plugins", R"({"filter":"reverb"})");
+    call ("get_meters", "{}");
+    call ("undo", "{}");
+    call ("undo", R"({"redo":true})");
+    call ("clear_automation", R"({"track":"Keys","target":"volume"})");
+
+    call ("add_drum_track", R"({"name":"Drums","bars":4})");
+    call ("set_beat", R"({"track":"Drums","steps":{"kick":"x...x...x...x...","snare":"....x.......x...","closed hat":"x.x.x.x.x.x.x.x.","open hat":"..............x.","clap":"....X.......X..."},"swing":0.2})");
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (300);   // let the sampler load its sounds (async in the engine)
+    auto beat = call ("get_beat", R"({"track":"Drums"})");
+    check (beat.contains ("x...x...x...x...") && beat.contains ("....X.......X..."), "beat pattern round-trips");
+    auto drumMix = call ("analyze_mix", R"({"start_bar":1,"end_bar":3,"tracks":["Drums"]})");
+    check (juce::JSON::parse (drumMix)["peak_dbfs"].toString().getDoubleValue() > -40, "drum track makes sound (peak " + juce::JSON::parse (drumMix)["peak_dbfs"].toString() + " dBFS)");
+    call ("set_beat", R"({"track":"Drums","steps":{"bogus":"x..."}})");
+
+    call ("save_session", "{}");
+    auto file = session->getFile();
+    call ("new_session", R"({"name":"Second"})");
+    call ("open_session", R"({"path":")" + file.getFullPathName().replace ("\\", "/") + "\"}");
+    auto s = call ("get_session", "{}");
+    check (s.contains ("Keys") && s.contains ("Verb Bus") && s.contains ("92"), "session reopened with tracks, bus and tempo intact");
+    call ("list_sessions", "{}");
+
+    if (juce::SystemStats::getEnvironmentVariable ("SQUELCH_TEST_VST3", {}).isNotEmpty())
+    {
+        std::cout << "-- third-party plugin hosting --\n";
+        call ("scan_plugins", "{}");
+        for (int i = 0; i < 600 && scanner.isScanning(); ++i)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+        auto lp = call ("list_plugins", R"({"category":"thirdparty"})");
+        check (lp.contains (juce::SystemStats::getEnvironmentVariable ("SQUELCH_TEST_VST3", {})), "scanned third-party plugin is listed");
+        call ("insert_plugin", R"({"track":"Keys","plugin":")" + juce::SystemStats::getEnvironmentVariable ("SQUELCH_TEST_VST3", {}) + R"("})");
+        auto pp = call ("get_plugin_parameters", R"({"track":"Keys","slot":"Moth"})");
+        check (pp.contains ("Output Gain") && pp.contains ("Character"), "third-party parameters visible");
+        auto sp = call ("set_plugin_parameters", R"({"track":"Keys","slot":"Moth","params":[{"param":"Output Gain","text":"-12"},{"param":"Character","value":1.0}]})");
+        check (sp.contains ("-12"), "set third-party parameter by text");
+        auto pr = call ("plugin_presets", R"({"track":"Keys","slot":"Moth","action":"list"})");
+        check (pr.contains ("Loud"), "factory presets listed");
+        call ("plugin_presets", R"({"track":"Keys","slot":"Moth","action":"load","index":2})");
+        auto pp2 = call ("get_plugin_parameters", R"({"track":"Keys","slot":"Moth","filter":"Gain"})");
+        check (pp2.contains ("Loud"), "preset load changes program");
+        call ("write_automation", R"({"track":"Keys","slot":"Moth","param":"Output Gain","points":[{"bar":1,"value":0.2},{"bar":3,"value":0.6}]})");
+        auto an = call ("analyze_mix", R"({"start_bar":1,"end_bar":3,"tracks":["Keys"]})");
+        check (juce::JSON::parse (an)["peak_dbfs"].toString().getDoubleValue() > -60, "audio flows through third-party plugin");
+        call ("save_session", "{}");
+        call ("open_session", R"({"path":")" + session->getFile().getFullPathName() + "\"}");
+        auto again = call ("get_plugin_parameters", R"({"track":"Keys","slot":"Moth","filter":"Character"})");
+        check (again.contains ("Character"), "third-party plugin restored after reopening session");
+    }
+
+
+    {
+        std::cout << "-- Pro Tools parity layer --\n";
+        // A headless TimelineState stands in for the Edit window so the selection-based tools work.
+        TimelineState headlessState;
+        tools.ui.state = &headlessState;
+        call ("new_session", R"({"name":"Parity"})");
+        call ("set_tempo", R"({"bpm":120})");
+        call ("add_track", R"({"kind":"instrument","name":"Keys","instrument":"Mothsynth"})");
+        call ("create_midi_clip", R"({"track":"Keys","start_bar":1,"length_bars":8,"name":"Pad","notes":[{"pitch":"C3","start_beat":0,"length_beats":32,"velocity":90}]})");
+        auto mode = call ("set_edit_mode", R"({"mode":"grid","grid":"1/8 note","nudge":"1/16 note"})");
+        check (mode.contains ("Grid") && mode.contains ("1/8"), "edit mode + grid value set");
+        call ("set_tool", R"({"tool":"grabber"})");
+        auto sel = call ("set_selection", R"({"start_bar":3,"end_bar":5,"tracks":["Keys"]})");
+        check (sel.contains ("3|1|000") && sel.contains ("5|1|000"), "Edit selection set on a track");
+        auto sep = call ("edit_command", R"({"command":"separate"})");
+        check (sep.contains ("2 item"), "separate splits at both selection edges");
+        auto clipsNow = call ("list_clips", R"({"track":"Keys"})");
+        auto clipCount = [] (const juce::String& json) { auto v = juce::JSON::parse (json); return v[0]["clips"].size(); };
+        check (clipCount (clipsNow) == 3, "three clips after separate");
+        call ("set_selection", R"({"start_bar":3,"end_bar":5,"tracks":["Keys"],"all_clips_in_range":true})");
+        auto dup = call ("edit_command", R"({"command":"duplicate"})");
+        check (clipCount (call ("list_clips", R"({"track":"Keys"})")) == 4, "duplicate adds a clip after the selection");
+        call ("set_edit_mode", R"({"mode":"shuffle"})");
+        call ("set_selection", R"({"start_bar":3,"end_bar":5,"tracks":["Keys"]})");
+        auto del = call ("edit_command", R"({"command":"delete_close_gap"})");
+        auto afterDel = juce::JSON::parse (call ("list_clips", R"({"track":"Keys"})"))[0]["clips"];
+        bool closed = true;
+        for (auto& c : *afterDel.getArray()) if (c["start"].toString().startsWith ("5|")) closed = false;
+        check (afterDel.size() >= 2 && closed, "shuffle delete closes the gap");
+        auto nudged = call ("edit_command", R"({"command":"nudge","direction":1})");
+        check (! nudged.contains ("0 item"), "nudge moves the selection");
+        auto sel2 = call ("get_selection", "{}");
+        check (sel2.contains ("Shuffle") && sel2.contains ("Grabber"), "get_selection reports mode and tool");
+
+        auto mk = call ("add_marker", R"({"name":"Verse","bar":3})");
+        check (mk.contains ("Verse") && mk.contains ("3|1|000"), "marker added at bar 3");
+        call ("add_marker", R"({"name":"Chorus","bar":5,"length_bars":2})");
+        auto markers = juce::JSON::parse (call ("list_markers", "{}"));
+        check (markers.size() == 2 && markers[1]["length_seconds"].toString().isNotEmpty(), "selection marker has a length");
+        auto em = call ("edit_marker", R"({"marker":"Verse","name":"Intro","bar":2})");
+        check (em.contains ("Intro") && em.contains ("2|1|000"), "marker renamed and moved");
+        call ("edit_marker", R"({"marker":"Chorus","delete":true})");
+        check (juce::JSON::parse (call ("list_markers", "{}")).size() == 1, "marker deleted");
+
+        call ("add_track", R"({"kind":"audio","name":"Gtr L"})");
+        call ("add_track", R"({"kind":"audio","name":"Gtr R"})");
+        auto fold = call ("create_folder", R"({"kind":"folder","name":"Guitars","tracks":["Gtr L","Gtr R"]})");
+        check (fold.contains ("Guitars") && fold.contains ("2 member"), "folder track with two members");
+        auto vca = call ("create_folder", R"({"kind":"vca","name":"Band","tracks":["Keys"]})");
+        check (vca.contains ("VCA"), "VCA master created");
+        auto folders = juce::JSON::parse (call ("list_folders", "{}"));
+        check (folders.size() == 2, "two folder/VCA rows listed");
+        auto grp = call ("mix_group", R"({"action":"create","name":"Gtrs","tracks":["Gtr L","Gtr R"]})");
+        check (grp.contains ("2 track"), "mix group created");
+        call ("update_track", R"({"track":"Gtr L","volume_db":-6})");
+        // group linking happens through Session::setTrackVolume (used by the faders); exercise it directly
+        if (auto gl = session->findTrack ("Gtr L")) if (auto gr = session->findTrack ("Gtr R"))
+        {
+            session->setTrackVolume (*gl, -12.0f);
+            check (std::abs (gr->getVolumePlugin()->getVolumeDb() - (-6.0f)) < 0.01f, "grouped fader follows the moved fader by the same offset");
+            session->setTrackMute (*gl, true);
+            check (gr->isMuted (false), "grouped mute follows");
+        }
+        auto am = call ("set_automation_mode", R"({"track":"Keys","mode":"latch"})");
+        check (am.contains ("Latch"), "automation mode set");
+        auto el = call ("set_elastic_audio", R"({"track":"Gtr L","mode":"polyphonic"})");
+        check (el.contains ("Polyphonic"), "elastic audio mode set");
+        auto rm = call ("set_record_mode", R"({"mode":"quickpunch","pre_roll_seconds":1.5,"count_off_bars":2,"click":true})");
+        check (rm.contains ("QuickPunch") && rm.contains ("1.5 s") && rm.contains ("count-off 2"), "record modes applied");
+        call ("set_record_mode", R"({"mode":"normal","pre_roll_seconds":0,"count_off_bars":0})");
+        auto th = call ("set_theme", R"({"preset":"Carbon"})");
+        check (th.contains ("Carbon"), "theme preset applied");
+        call ("set_theme", R"({"preset":"Moth"})");
+        auto col = call ("set_colour", R"({"tracks":["Keys"],"palette_index":3})");
+        check (col.contains ("1 item"), "track colour set from palette");
+        auto pr = call ("set_preference", R"({"key":"ed_fadeCmd","value":0.5})");
+        check (pr.contains ("0.5"), "preference written and read back");
+        auto cg = call ("set_clip_gain", R"({"track":"Keys","clip":1,"name":"PadA"})");
+        check (cg.contains ("PadA"), "clip renamed through set_clip_gain");
+
+        std::cout << "-- Signature bundle & sound kits --\n";
+        auto sig = juce::JSON::parse (call ("list_plugins", R"({"category":"signature"})"));
+        check (sig["count"].toString().getIntValue() >= 40, "40+ Signature plugins listed");
+        auto ins = call ("insert_plugin", R"({"track":"Keys","plugin":"Ember Tape"})");
+        check (ins.contains ("Ember Tape"), "Signature plugin inserted by brand name and reported by brand name");
+        auto ins2 = call ("insert_plugin", R"({"track":"Keys","plugin":"Cocoon Compressor"})");
+        check (ins2.contains ("Cocoon Compressor"), "core compressor carries its Signature name");
+        auto params = call ("get_plugin_parameters", R"({"track":"Keys","slot":"Ember Tape"})");
+        check (params.contains ("Ember Tape"), "parameters addressed by Signature name");
+        for (auto kit : { "Hive 909", "Chrome Trap", "Velvet Lo-Fi", "Dust Acoustic" })
+        {
+            auto dk = call ("add_drum_track", "{\"name\":\"" + juce::String (kit) + "\",\"bars\":2,\"kit\":\"" + juce::String (kit) + "\"}");
+            check (dk.contains (kit), juce::String ("kit '") + kit + "' loads");
+        }
+        auto swap = call ("set_drum_kit", R"({"track":"Hive 909","kit":"Mothwing 808"})");
+        check (swap.contains ("Mothwing 808"), "kit swapped on an existing drum track");
+        auto kitFiles = session->sessionsDir.getChildFile ("Kits").getChildFile ("Chrome Trap").findChildFiles (juce::File::findFiles, false, "*.wav");
+        check (kitFiles.size() == 12, "each kit renders 12 sounds");
+        bool allLoud = true;
+        for (auto& f : kitFiles) if (f.getSize() < 20000) allLoud = false;
+        check (allLoud, "kit samples are real 24-bit renders");
+
+        // presets: Basic + Advanced banks on every Signature plugin, applied by name
+        int withBanks = 0;
+        for (auto& e : Signature::entries()) if (e.presets.size() >= 10) ++withBanks;
+        check (withBanks >= 40, "40+ Signature plugins carry 10+ factory presets");
+        auto prs = call ("plugin_presets", R"({"track":"Keys","slot":"Cocoon Compressor","preset":"Drum Punch"})");
+        check (prs.contains ("Drum Punch"), "factory preset applied by name");
+        auto thr = juce::JSON::parse (call ("get_plugin_parameters", R"({"track":"Keys","slot":"Cocoon Compressor","filter":"Threshold"})"));
+        check (thr["parameters"][0]["display"].toString().contains ("-14"), "compressor threshold preset lands at -14 dB (gain-domain parameter mapped correctly)");
+        auto ir = call ("insert_plugin", R"({"track":"Keys","plugin":"Cavern IR"})");
+        check (ir.contains ("Cavern IR"), "convolution reverb (Cavern IR) is registered and inserts");
+
+        // panning: session pan depth + Pro Tools dual panner
+        session->setPanLaw (3);
+        check (session->getPanLaw() == 3 && session->getTracks()[0]->getVolumePlugin()->getPanLaw() == te::PanLaw4point5dBCenter, "pan depth applies to every track fader");
+        auto sp = call ("update_track", R"({"track":"Keys","stereo_pan":true,"pan_l":-0.8,"pan_r":0.6})");
+        check (! sp.contains ("error") && Session::getStereoPan (*session->findTrack ("Keys")) != nullptr, "stereo (L/R) panner engages on a track");
+        {
+            auto spp = Session::getStereoPan (*session->findTrack ("Keys"));
+            float gl, gr; spp->gainsFor (0.0f, gl, gr);
+            check (std::abs (gl - gr) < 0.001f && gl < 0.75f && gl > 0.5f, "stereo panner centre gain follows the -4.5 dB law");
+            spp->gainsFor (-1.0f, gl, gr);
+            check (gl > 0.99f && gr < 0.001f, "hard left sends nothing to the right");
+        }
+        session->setPanLaw (2);
+        tools.ui.state = nullptr;
+    }
+    {
+        std::cout << "-- mastering (Studio One Project page) --\n";
+        MasteringProject mp (*session);
+        tools.ui.mastering = [&] { return &mp; };
+        auto bounce = call ("bounce", R"({"name":"mastersrc","start_bar":1,"end_bar":9})");
+        auto src = session->sessionsDir.getChildFile ("Bounces").getChildFile ("mastersrc.wav");
+        check (src.existsAsFile(), "source bounce for the album exists");
+        auto mn = call ("mastering_new", R"({"name":"Selftest Album"})");
+        check (mn.contains ("Selftest Album"), "mastering project created");
+        call ("mastering_set_album", R"({"album":"Selftest Album","artist":"Jamar Stewart","genre":"Test","year":"2026","upc":"0123456789012"})");
+        juce::String add = "{\"paths\":[\"" + src.getFullPathName().replace ("\\", "\\\\") + "\",\"" + src.getFullPathName().replace ("\\", "\\\\") + "\"]}";
+        auto added = juce::JSON::parse (call ("mastering_add_tracks", add));
+        check (added["tracks"].isArray() && added["tracks"].size() == 2, "two album tracks added and sequenced");
+        check (added["tracks"].isArray() && added["tracks"][0]["start"].toString() == "0:02.00", "track 1 starts after the Red Book 2 s pause");
+        auto st = juce::JSON::parse (call ("mastering_set_track", R"({"track":1,"title":"First","isrc":"USQLM2600001","auto_isrc":true,"fade_out":1})"));
+        check (st["tracks"].isArray() && st["tracks"][1]["isrc"].toString() == "USQLM2600002", "ISRC auto-increments across the album");
+        auto st2 = juce::JSON::parse (call ("mastering_set_track", R"({"track":2,"title":"Second","pause_seconds":1.5})"));
+        check (st2["tracks"].isArray() && st2["tracks"][1]["pause_seconds"].toString().startsWith ("1.5"), "pause between tracks set");
+        auto mi = call ("mastering_insert", R"({"target":"master","plugin":"Clamp Limiter","preset":"Master Transparent"})");
+        check (mi.contains ("Clamp Limiter"), "master rack insert");
+        auto ti = call ("mastering_insert", R"({"target":1,"plugin":"Prism EQ"})");
+        check (ti.contains ("Prism EQ"), "track rack insert");
+        auto ld = juce::JSON::parse (call ("mastering_detect_loudness", R"({"track":1})"));
+        auto lufs = ld["loudness"].isArray() ? (float) ld["loudness"][0]["pre_lufs"] : -100.0f;
+        check (lufs > -60.0f && lufs < 0.0f, "EBU R128 loudness detection returns a real reading");
+        auto pub = juce::JSON::parse (call ("mastering_publish", R"({"kind":"digital","format":"wav","bit_depth":24,"loudness_target":"spotify"})"));
+        auto files = juce::StringArray::fromLines (pub["files"].toString());
+        check (files.size() == 2 && juce::File (files[0]).existsAsFile(), "digital release writes one file per track");
+        auto measured = measureFile (juce::File (files[0]));
+        check (std::abs (measured.integrated + 14.0f) < 0.6f || measured.truePeak > -1.2f, "released track is matched to -14 LUFS (or true-peak limited)");
+        auto img = juce::JSON::parse (call ("mastering_publish", R"({"kind":"image"})"));
+        auto imgDir = juce::File (img["folder"].toString());
+        check (imgDir.getChildFile ("Selftest Album.cue").existsAsFile() && imgDir.getChildFile ("Selftest Album.cue").loadFileAsString().contains ("INDEX 01 00:02:00"), "image export writes a CUE sheet with Red Book indexes");
+        auto ddp = juce::JSON::parse (call ("mastering_publish", R"({"kind":"ddp"})"));
+        auto ddpDir = juce::File (ddp["folder"].toString());
+        check (ddpDir.getChildFile ("DDPID").getSize() == 128 && ddpDir.getChildFile ("DDPMS").getSize() % 128 == 0 && ddpDir.getChildFile ("PQDESCR").getSize() % 64 == 0, "DDP 2.00 fileset has 128-byte DDPID / map packets and 64-byte PQ packets");
+        check (ddpDir.getChildFile ("IMAGE.DAT").getSize() % 2352 == 0 && ddpDir.getChildFile ("CDTEXT.BIN").getSize() % 18 == 0 && ddpDir.getChildFile ("CHECKSUM.MD5").existsAsFile(), "DDP audio image is whole sectors, CD-Text packs are 18 bytes, checksums present");
+        check (ddpDir.getChildFile ("DDPID").loadFileAsString().startsWith ("DDP 2.000123456789012"), "DDPID carries the level and the UPC");
+        check (ddpDir.getChildFile ("PQDESCR").loadFileAsString().contains ("VVVSAA01"), "PQ descriptor ends with the lead-out");
+        auto tr = juce::JSON::parse (call ("mastering_transport", R"({"action":"locate","position_seconds":5})"));
+        check (tr["position"].toString() == "0:05.00", "mastering transport locates");
+        tools.ui.mastering = nullptr;
+    }
+    {
+        std::cout << "-- licensing --\n";
+        juce::RSAKey pub, priv;
+        juce::RSAKey::createKeyPair (pub, priv, 2048);
+        auto key = Licence::makeKey (priv.toString(), "Test Buyer", "buyer@example.com");
+        juce::String n, e;
+        check (key.startsWith ("SQM1-") && Licence::verify (key, n, e, pub.toString()) && n == "Test Buyer", "licence key verifies with matching public key");
+        check (! Licence::verify (key, n, e), "key from another key pair is rejected by the shipped public key");
+        auto tampered = key.substring (0, key.length() - 6) + "AAAAAA";
+        check (! Licence::verify (tampered, n, e, pub.toString()), "tampered key is rejected");
+        check (! Licence::verify ("SQM1-hello", n, e, pub.toString()), "garbage key is rejected");
+        // 1.9 store keys (SQM2, Ed25519): a test key pair, so nothing here needs the real store key
+        const juce::String testPub = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8";
+        const juce::String coreKey = "SQM2-AREiM0SQvrhNOYNL81nf8N3SEfrnuomnehHof3wOnhd-WbRpbQiU2ySz7b4YyJ0zQx9EyOJ3qNUS4MdHRmXFdn7DBy8M";
+        const juce::String vocalKey = "SQM2-AwoLDA3q_IGKmVFP3YKoHdG4CER9hSwjrIhquCpWUcNY-AZtGpbeqY9wIPMRY0cI8Xw7VKh18P9GtHShpIRvjzHxsFQC";
+        juce::String prod, serial;
+        check (coreKey.length() <= 100 && Licence::verifyStoreKey (coreKey, prod, serial, testPub) && prod == "CORE" && serial == "11223344", "store key verifies (Ed25519), names its product and serial, fits the store's 100-character key list (" + juce::String (coreKey.length()) + ")");
+        check (Licence::verifyStoreKey (vocalKey, prod, serial, testPub) && prod == "VOCAL", "a pack key names its pack");
+        check (! Licence::verifyStoreKey (coreKey, prod, serial), "a key signed by another store key is refused by the shipped store key");
+        auto flipped = coreKey.substring (0, 20) + (coreKey[20] == 'A' ? "B" : "A") + coreKey.substring (21);
+        check (! Licence::verifyStoreKey (flipped, prod, serial, testPub), "a store key with one character changed is refused");
+        check (! Licence::verifyStoreKey ("SQM2-AAAA", prod, serial, testPub), "garbage store key is refused");
+        {
+            // a fresh install has no full access: the Demo edition, no time-limited trial
+            const auto saved = Edition::owned();
+            props.removeValue ("licenceKeys"); props.removeValue ("licenceKey");
+            Licence lic (props);
+            check (lic.isDemo() && Edition::isDemo() && Edition::editionName() == "Squelchmoth Demo", "a fresh install runs the Demo - nobody gets the full program without a key");
+            auto ownerKey = juce::SystemStats::getEnvironmentVariable ("SQUELCH_TEST_KEY", {});
+            if (ownerKey.isNotEmpty())
+                check (lic.activate (ownerKey, false).isEmpty() && lic.isLicensed() && Edition::editionName() == "Squelchmoth Complete", "owner key activates against the shipped public key and unlocks everything");
+            Edition::owned() = saved;
+        }
+    }
+
+    //==========================================================================
+    std::cout << "\n-- Pro Tools tracks, I/O names and routing --\n";
+    {
+        auto pump = [] (int ms) { juce::MessageManager::getInstance()->runDispatchLoopUntil (ms); };
+        session->defaultInputAssigner = [&] (te::AudioTrack& t, int index, bool stereo) { IO::assignDefaultInput (*session, t, index, stereo); };
+        call ("new_session", R"({"name":"Selftest PT Tracks"})");
+        pump (800);
+        auto types = call ("new_tracks", R"({"type":"audio","count":2,"format":"mono","name":"Vox"})");
+        call ("new_tracks", R"({"type":"audio","format":"stereo","name":"Keys"})");
+        call ("new_tracks", R"({"type":"aux","name":"Plate"})");
+        call ("new_tracks", R"({"type":"instrument","name":"Pad"})");
+        call ("new_tracks", R"({"type":"midi","name":"Seq"})");
+        call ("new_tracks", R"({"type":"vca","name":"VCA Vox"})");
+        call ("new_tracks", R"({"type":"basic_folder","name":"Drums Folder"})");
+        call ("new_tracks", R"({"type":"routing_folder","name":"Strings Sub"})");
+        check (call ("new_tracks", R"({"type":"master_fader"})").contains ("already has its Master Fader"), "New Tracks: only one Master Fader per session");
+        pump (1500);
+        auto sess = juce::JSON::parse (call ("get_session", "{}"));
+        auto findT = [&] (const juce::String& n) { if (auto arr = sess["tracks"].getArray()) for (auto& t : *arr) if (t["name"].toString() == n) return t; return juce::var(); };
+        check (findT ("Vox 1")["type"].toString() == "audio" && findT ("Vox 1")["format"].toString() == "mono", "New Tracks: mono audio track");
+        check (findT ("Keys")["format"].toString() == "stereo", "New Tracks: stereo audio track");
+        check (findT ("Plate")["type"].toString() == "aux" && findT ("Plate")["input"].toString() == "Plate", "New Tracks: Aux Input listens on its own named bus");
+        check (findT ("Seq")["type"].toString() == "midi" && findT ("Seq")["output"].toString() == "Pad", "New Tracks: MIDI track plays the Instrument track");
+        check (findT ("Pad")["type"].toString() == "instrument", "New Tracks: instrument track");
+        auto folders = call ("list_folders", "{}");
+        check (folders.contains ("VCA Vox") && folders.contains ("Drums Folder") && folders.contains ("Strings Sub"), "New Tracks: VCA, basic folder and routing folder");
+
+        const int numIn = IO::numInterfaceChannels (session->getEngine(), true);
+        if (numIn >= 4)
+        {
+            check (findT ("Vox 1")["input"].toString().startsWith ("In ") && findT ("Vox 1")["input"].toString() != findT ("Vox 2")["input"].toString(),
+                   "default inputs: each new mono track gets its own free path (" + findT ("Vox 1")["input"].toString() + ", " + findT ("Vox 2")["input"].toString() + ")");
+            check (findT ("Keys")["input"].toString().contains ("-"), "default input: stereo track gets a stereo pair (" + findT ("Keys")["input"].toString() + ")");
+            call ("io_setup", R"({"action":"rename_input","channels":"1","name":"Lead Mic"})");
+            check (IO::pathName (true, 0, 1) == "Lead Mic", "I/O Setup: rename input path");
+            call ("set_input", R"({"track":"Vox 1","input":"Lead Mic"})");
+            pump (1500);
+            check (call ("get_session", "{}").contains ("\"input\": \"Lead Mic\""), "track input follows the renamed path");
+            call ("io_setup", R"({"action":"default_names"})");
+            check (IO::pathName (true, 0, 1) == "In 1", "I/O Setup: default names restored");
+        }
+        else check (true, "interface input tests skipped (no audio interface in this environment)");
+
+        call ("set_output", R"({"track":"Vox 2","output":"Plate"})");
+        check (call ("get_session", "{}").contains ("\"output\": \"Plate\""), "Output selector: route a track to a bus by name");
+        call ("io_setup", R"({"action":"rename_bus","bus":"Plate","name":"Vocal Plate"})");
+        check (call ("io_setup", R"({"action":"list"})").contains ("Vocal Plate"), "I/O Setup: rename bus");
+        call ("set_output", R"({"track":"Plate","output":"Vox 2"})", false);   // feedback refused
+
+        // MIDI track -> Instrument track makes sound; Make Inactive silences it
+        call ("create_midi_clip", R"({"track":"Seq","length_bars":1,"notes":[{"pitch":"C4","start_beat":0,"length_beats":2,"velocity":110}]})");
+        call ("track_options", R"({"tracks":["Vox 1","Vox 2","Keys","Synth 1","Audio 1","Audio 2","Audio 3","Audio 4"],"inactive":true})");
+        auto live = juce::JSON::parse (call ("analyze_mix", R"({"start_bar":1,"end_bar":2})"));
+        check ((double) live["peak_dbfs"] > -40.0, "MIDI track routed to an Instrument track plays (peak " + live["peak_dbfs"].toString() + " dBFS)");
+        call ("track_options", R"({"track":"Pad","inactive":true})");
+        auto off = juce::JSON::parse (call ("analyze_mix", R"({"start_bar":1,"end_bar":2})"));
+        check ((double) off["peak_dbfs"] < -90.0, "Make Inactive removes the track from playback");
+        call ("track_options", R"({"track":"Pad","inactive":false})");
+
+        call ("track_options", R"({"track":"Keys","record_safe":true})");
+        call ("update_track", R"({"track":"Keys","armed":true})", false);
+        call ("track_options", R"({"track":"Pad","solo_safe":true,"comments":"warm pad","timebase":"ticks"})");
+        auto pad = juce::JSON::parse (call ("get_session", "{}"));
+        bool padOk = false;
+        if (auto arr = pad["tracks"].getArray()) for (auto& t : *arr) if (t["name"] == "Pad") padOk = (bool) t["solo_safe"] && t["comments"] == "warm pad" && t["timebase"] == "ticks";
+        check (padOk, "Solo Safe, comments and Ticks timebase stored");
+
+        call ("track_options", R"({"track":"Pad","duplicate":2,"copy_clips":false})");
+        check (call ("get_session", "{}").contains ("Pad.dup2"), "Duplicate with options makes 2 copies");
+        call ("track_options", R"({"track":"Pad","hidden":true})");
+        check (call ("get_session", "{}").contains ("\"hidden\": true"), "Hide track");
+
+        call ("master_fader", R"({"name":"Main Mix","volume_db":-2})");
+        auto mf = call ("master_fader", "{}");
+        check (mf.contains ("Main Mix") && mf.contains ("-2"), "Master Fader rename + level");
+        call ("master_fader", R"({"exists":false})");
+        check (! TrackOps::hasMasterFader (*session) && session->edit->getMasterVolumePlugin()->getVolumeDb() == 0.0f, "Delete Master Fader resets it to unity");
+        call ("master_fader", R"({"exists":true})");
+
+        // Split into Mono / Freeze / Commit on a stereo audio track (uses the stereo bounce made earlier)
+        if (! bounced.isEmpty())
+        {
+            call ("import_audio", R"({"track":"Keys","path":")" + bounced[0].getFullPathName().replace ("\\", "/") + R"(","start_bar":1})");
+            call ("track_options", R"({"track":"Keys","record_safe":false,"inactive":false})");
+            call ("track_options", R"({"track":"Keys","split_mono":true})");
+            auto afterSplit = call ("list_clips", R"({"track":"Keys.L"})");
+            check (afterSplit.contains ("Keys.L") && call ("list_clips", R"({"track":"Keys.R"})").contains ("clip"), "Split into Mono makes Keys.L and Keys.R with clips");
+            call ("track_options", R"({"track":"Keys","freeze":true})");
+            check (session->findTrack ("Keys") != nullptr && session->findTrack ("Keys")->isFrozen (te::Track::individualFreeze), "Freeze");
+            call ("track_options", R"({"track":"Keys","freeze":false})");
+            call ("track_options", R"({"track":"Keys","commit":true})");
+            auto cm = session->findTrack ("Keys.cm");
+            check (cm != nullptr && cm->getClips().size() == 1 && session->findTrack ("Keys")->isHidden() && TrackOps::isInactive (*session->findTrack ("Keys")),
+                   "Commit renders to Keys.cm; the source is hidden and inactive");
+        }
+
+        // Track formats: every type with a format can be mono or stereo, and mono is really mono
+        {
+            call ("new_tracks", R"({"type":"aux","format":"mono","name":"MonoAux"})");
+            call ("new_tracks", R"({"type":"instrument","format":"mono","name":"MonoInst"})");
+            call ("new_tracks", R"({"type":"routing_folder","format":"mono","name":"MonoFolder"})");
+            call ("new_tracks", R"({"type":"audio","format":"stereo","name":"StAudio"})");
+            auto js = call ("get_session", "{}");
+            auto fmtOf = [&] (const juce::String& nm)
+            {
+                auto v = juce::JSON::parse (js);
+                if (auto arr = v["tracks"].getArray()) for (auto& t : *arr) if (t["name"].toString() == nm) return t["format"].toString();
+                return juce::String();
+            };
+            check (fmtOf ("MonoAux") == "mono" && fmtOf ("MonoInst") == "mono" && fmtOf ("StAudio") == "stereo", "New Tracks: mono / stereo formats for aux, instrument and audio");
+            auto* mf = session->findRow ("MonoFolder");
+            check (mf != nullptr && TrackOps::isMonoFormat (*session, *mf), "Mono routing folder");
+            auto* mi = session->findTrack ("MonoInst");
+            check (mi != nullptr && Session::getInserts (mi->pluginList, mi).size() == 1, "mono summing stage stays hidden from the insert slots");
+
+            // a hard-left stereo file on a mono track comes out identical on both sides at half level
+            auto wav = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sqm_left_only.wav");
+            {
+                juce::AudioBuffer<float> b (2, 44100);
+                b.clear();
+                for (int i = 0; i < b.getNumSamples(); ++i) b.setSample (0, i, 0.5f * std::sin (2.0 * juce::MathConstants<double>::pi * 220.0 * i / 44100.0));
+                juce::WavAudioFormat fmt;
+                wav.deleteFile();
+                if (auto os = std::unique_ptr<juce::OutputStream> (wav.createOutputStream()))
+                    if (auto w = std::unique_ptr<juce::AudioFormatWriter> (fmt.createWriterFor (os.get(), 44100.0, 2, 24, {}, 0)))
+                    { os.release(); w->writeFromAudioSampleBuffer (b, 0, b.getNumSamples()); }
+            }
+            call ("new_tracks", R"({"type":"audio","format":"mono","name":"MonoVox"})");
+            call ("import_audio", R"({"track":"MonoVox","path":")" + wav.getFullPathName().replace ("\\", "/") + R"(","start_bar":1})");
+            juce::String err;
+            auto rendered = session->findTrack ("MonoVox") != nullptr
+                ? TrackOps::renderTrack (*session, *session->findTrack ("MonoVox"), juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sqm_mono_render.wav"), err) : juce::File();
+            float pl = 0, pr = 0;
+            juce::AudioFormatManager afm; afm.registerBasicFormats();
+            if (auto rd = std::unique_ptr<juce::AudioFormatReader> (afm.createReaderFor (rendered)))
+            {
+                juce::AudioBuffer<float> rb ((int) rd->numChannels, (int) std::min ((juce::int64) rd->lengthInSamples, (juce::int64) 88200));
+                rd->read (&rb, 0, rb.getNumSamples(), 0, true, true);
+                pl = rb.getMagnitude (0, 0, rb.getNumSamples());
+                pr = rb.getNumChannels() > 1 ? rb.getMagnitude (1, 0, rb.getNumSamples()) : pl;
+            }
+            check (pl > 0.1f && std::abs (pl - pr) < 0.01f, "mono track sums a stereo source to one channel (L " + juce::String (pl, 3) + ", R " + juce::String (pr, 3) + ")");
+            wav.deleteFile();
+        }
+
+        call ("edit_window_views", R"({"io":true,"inserts_ae":true,"inserts_fj":true,"sends_ae":true,"sends_fj":true,"comments":true})");
+        check (EditViews::width() == EditViews::ioW + 4 * EditViews::slotW + EditViews::commentsW, "Edit Window Views: all columns");
+        call ("edit_window_views", R"({"inserts_fj":false,"sends_fj":false,"comments":false,"inserts_ae":false,"sends_ae":false})");
+        session->defaultInputAssigner = nullptr;
+    }
+
+    std::cout << "\n-- Plug-in catalogue (Pro Tools categories, Waves shells) --\n";
+    {
+        juce::Array<juce::PluginDescription> types;
+        auto add = [&] (const char* name, const char* maker, const char* format, const char* cat = "Fx", bool inst = false)
+        {
+            juce::PluginDescription d; d.name = name; d.manufacturerName = maker; d.pluginFormatName = format; d.category = cat; d.isInstrument = inst;
+            d.fileOrIdentifier = juce::String ("/Library/Audio/Plug-Ins/") + format + "/WaveShell1"; d.uniqueId = types.size() + 1; d.deprecatedUid = d.uniqueId;
+            types.add (d);
+        };
+        for (auto f : { "VST3", "AudioUnit" })
+        {
+            add ("RCompressor Mono", "Waves", f); add ("RCompressor Stereo", "Waves", f);
+            add ("H-Reverb Mono", "Waves", f); add ("H-Reverb Mono/Stereo", "Waves", f); add ("H-Reverb Stereo", "Waves", f);
+            add ("H-Delay Mono", "Waves", f); add ("H-Delay Stereo", "Waves", f);
+            add ("SSL E-Channel Mono", "Waves", f); add ("SSL E-Channel Stereo", "Waves", f);
+            add ("Linear Phase EQ Mono", "Waves", f); add ("Linear Phase EQ Stereo", "Waves", f);
+            add ("Waves Tune Mono", "Waves", f); add ("Clarity Vx Mono", "Waves", f); add ("S1 Imager Stereo", "Waves", f);
+            add ("Abbey Road Plates Stereo", "Waves", f); add ("L2 Stereo", "Waves", f); add ("Kramer Master Tape Mono", "Waves", f);
+        }
+        add ("Pro-Q 3", "FabFilter", "VST3", "Fx|EQ");
+        add ("Nightjar Synth", "Example Audio", "VST3", "Instrument|Synth", true);
+        auto items = PluginCatalog::thirdPartyItems (types, true);
+        auto find = [&] (const juce::String& n) -> const PluginCatalog::Item* { for (auto& i : items) if (i.name == n) return &i; return nullptr; };
+        check (items.size() == 13, "Waves shells fold to one entry per plug-in, one format (" + juce::String ((int) items.size()) + " entries from " + juce::String (types.size()) + " descriptions)");
+        auto cat = [&] (const char* n) { auto i = find (n); return i ? i->category : juce::String ("missing"); };
+        check (cat ("RCompressor") == "Dynamics" && cat ("H-Reverb") == "Reverb" && cat ("H-Delay") == "Delay" && cat ("SSL E-Channel") == "Channel Strip"
+               && cat ("Linear Phase EQ") == "EQ" && cat ("Waves Tune") == "Pitch Shift" && cat ("Clarity Vx") == "Noise Reduction" && cat ("S1 Imager") == "Sound Field"
+               && cat ("Abbey Road Plates") == "Reverb" && cat ("L2") == "Dynamics" && cat ("Kramer Master Tape") == "Harmonic" && cat ("Pro-Q 3") == "EQ" && cat ("Nightjar Synth") == "Instrument",
+               "Waves and other plug-ins land in their categories");
+        auto cla = find ("RCompressor");
+        check (cla != nullptr && types[cla->typeIndex].name == "RCompressor Stereo" && types[cla->typeIndex].pluginFormatName == "VST3", "stereo track gets the Stereo variant, VST3 preferred");
+        auto mono = PluginCatalog::thirdPartyItems (types, false);
+        for (auto& i : mono) if (i.name == "H-Reverb") check (types[i.typeIndex].name == "H-Reverb Mono/Stereo", "mono track gets the Mono/Stereo variant of a reverb");
+    }
+
+    std::cout << "\n-- EQ frequency chart --\n";
+    {
+        auto& rs = EQRef::rows();
+        bool sane = true; juce::String bad;
+        for (auto& r : rs)
+        {
+            if (r.eLo < 20.0f || r.eHi > 20000.0f || r.eLo >= r.eHi || (r.fLo > 0.0f && (r.fLo > r.fHi || r.fLo < r.eLo - 1.0f || r.fHi > r.eHi))) { sane = false; bad = r.name; }
+            for (auto& b : r.bands) if (b.lo < 20.0f || b.hi > 20000.0f || b.lo >= b.hi || b.kind < 0 || b.kind > 3) { sane = false; bad = juce::String (r.name) + " / " + b.label; }
+        }
+        check (rs.size() >= 40 && sane, juce::String ((int) rs.size()) + " instruments, every range inside 20 Hz - 20 kHz" + (bad.isNotEmpty() ? " (bad: " + bad + ")" : juce::String()));
+        check (EQRef::thirdOctaves().size() == 31, "31 ISO 1/3-octave centres on the scale");
+        check (EQRef::noteName (440.0f) == "A4" && EQRef::noteName (27.5f) == "A0" && EQRef::noteName (4186.0f) == "C8" && EQRef::noteName (41.2f) == "E1", "note names (A4 440, A0, C8, E1)");
+        check (std::abs (EQRef::parseHz ("4k") - 4000.0f) < 0.01f && std::abs (EQRef::parseHz ("3.15 kHz") - 3150.0f) < 0.01f && std::abs (EQRef::parseHz ("300hz") - 300.0f) < 0.01f
+               && EQRef::parseHz ("snare") == 0.0f && std::abs (EQRef::parseNote ("A4") - 440.0f) < 0.01f && EQRef::parseNote ("bass") == 0.0f, "Find understands 4k, 3.15 kHz, 300hz and A4");
+        check (EQRef::rangeText (200, 450) == "200 - 450 Hz" && EQRef::rangeText (2500, 5000) == "2.5 - 5 kHz" && EQRef::rangeText (450, 1200) == "450 Hz - 1.2 kHz"
+               && EQRef::hzPrecise (312.44f) == "312.4 Hz" && EQRef::hzPrecise (3152.0f) == "3.152 kHz" && EQRef::scaleLabel (31.5f) == "31.5" && EQRef::scaleLabel (1250) == "1.25k",
+               "numbers and units: 200 - 450 Hz, 2.5 - 5 kHz, 450 Hz - 1.2 kHz, 312.4 Hz, 3.152 kHz");
+        auto at = call ("eq_reference", R"({"query":"300"})");
+        auto snare = call ("eq_reference", R"({"query":"snare"})");
+        auto sib = call ("eq_reference", R"({"query":"sibilance"})");
+        check (at.contains ("D4") && at.contains ("Kick drum") && snare.contains ("Snare drum") && snare.contains ("crack") && sib.contains ("Male vocal"), "eq_reference: a frequency, an instrument and a problem word");
+        juce::File png = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sqm-eqchart-test.png");
+        {
+            EQChartContent chart;
+            chart.setSize (1400, 860);
+            check (chart.writePng (png) && png.getSize() > 50000, "the chart renders and saves as PNG (" + juce::String (png.getSize() / 1024) + " KB)");
+        }
+        if (juce::SystemStats::getEnvironmentVariable ("SQM_KEEP_EQ_PNG", {}).isEmpty()) png.deleteFile();
+    }
+
+    std::cout << "\n-- Beat Lab (channel rack) --\n";
+    {
+        call ("new_session", R"({"name":"Selftest Beat Lab"})");
+        call ("add_drum_track", R"({"name":"BL","bars":2,"kit":"Neon Trap"})");
+        auto* t = session->findTrack ("BL");
+        auto* clip = t != nullptr ? DrumKit::findStepClip (*t) : nullptr;
+        check (clip != nullptr && DrumKit::numKits == 27 && DrumKit::kitIndexFor ("amapiano") == 8 && DrumKit::kitIndexFor ("Drill Smoke") == 6, "27 kits; genre words pick a kit");
+        if (clip != nullptr)
+        {
+            call ("beat_lab", R"({"track":"BL","action":"write","rows":{"kick":"x...x...x...x...","closed hat":"x.x.x.x.3.x.x.x.","perc":"x.."}})");
+            call ("beat_lab", R"({"track":"BL","action":"row","row":"perc","op":"length","steps":3})");
+            call ("beat_lab", R"({"track":"BL","action":"step","row":"kick","step":5,"shift":25})");
+            call ("beat_lab", R"({"track":"BL","action":"swing","amount":50})");
+            auto seq = clip->generateMidiSequence (te::MidiList::TimeBase::beats);
+            auto starts = [&] (int note, double from, double to)
+            {
+                juce::Array<double> a;
+                for (int i = 0; i < seq.getNumEvents(); ++i)
+                {
+                    auto& m = seq.getEventPointer (i)->message;
+                    if (m.isNoteOn() && m.getNoteNumber() == note && m.getTimeStamp() >= from - 1e-6 && m.getTimeStamp() < to - 1e-6) a.add (m.getTimeStamp());
+                }
+                a.sort();
+                return a;
+            };
+            auto closeTo = [] (double a, double b) { return std::abs (a - b) < 1.0e-3; };
+            auto roll = starts (42, 2.0, 2.25);
+            check (roll.size() == 3 && closeTo (roll[0], 2.0) && closeTo (roll[1], 2.0 + 1.0 / 12.0) && closeTo (roll[2], 2.0 + 2.0 / 12.0), "a 3-hit roll splits the step into triplet 64ths (" + juce::String (roll.size()) + " hits)");
+            auto kick = starts (36, 0.0, 4.0);
+            check (kick.size() == 4 && closeTo (kick[1], 1.0 + 0.0625), "Shift +25% moves a kick a quarter step late");
+            auto perc = starts (56, 0.0, 4.0);
+            check (perc.size() >= 5 && closeTo (perc[1], 0.75 + 0.0625) && closeTo (perc[2], 1.5), "a 3-step row loops inside the 16-step pattern (polyrhythm, swung on the off-steps)");
+            call ("beat_lab", R"({"track":"BL","action":"write","rows":{"closed hat":".x.x.x.x.x.x.x.x"}})");
+            seq = clip->generateMidiSequence (te::MidiList::TimeBase::beats);
+            auto sw = starts (42, 0.0, 1.0);
+            check (sw.size() == 2 && closeTo (sw[0], 0.25 + 0.0625), "50% swing delays the off-beat 16ths");
+            call ("beat_lab", R"({"track":"BL","action":"row","row":"closed hat","op":"mute","value":true})");
+            seq = clip->generateMidiSequence (te::MidiList::TimeBase::beats);
+            check (starts (42, 0.0, 8.0).isEmpty(), "muted rows don't play");
+            call ("beat_lab", R"({"track":"BL","action":"row","row":"closed hat","op":"mute","value":false})");
+            call ("beat_lab", R"({"track":"BL","action":"pattern","pattern":"B"})");
+            call ("beat_lab", R"({"track":"BL","action":"starter","genre":"Drill","seed":4})");
+            call ("beat_lab", R"({"track":"BL","action":"chain","chain":"A A B A"})");
+            check (clip->getNumPatterns() >= 2 && clip->getPatternSequence().size() == 4 && clip->repeatSequence.get(), "patterns A-H and a chain that repeats to fill the clip");
+            auto e = BeatLab::euclid (3, 8);
+            check (e[0] && ! e[1] && ! e[2] && e[3] && ! e[4] && ! e[5] && e[6] && ! e[7], "Euclidean 3 over 8 = x..x..x.");
+            int genresOk = 0;
+            juce::Random rnd (9);
+            for (int g = 0; g < (int) BeatLab::genres().size(); ++g)
+            {
+                BeatLab::starter (*clip, g, rnd);
+                auto sq = clip->generateMidiSequence (te::MidiList::TimeBase::beats);
+                if (sq.getNumEvents() > 8) ++genresOk;
+            }
+            check (BeatLab::genres().size() == 17 && genresOk == 17, "Beat Starter writes a groove in all " + juce::String (genresOk) + " genres");
+            auto get = call ("beat_lab", R"({"track":"BL","action":"get"})");
+            auto notesBefore = clip->generateMidiSequence (te::MidiList::TimeBase::beats).getNumEvents() / 2;
+            call ("beat_lab", R"({"track":"BL","action":"to_piano_roll"})");
+            te::MidiClip* mc = nullptr;
+            for (auto c : t->getClips()) if ((mc = dynamic_cast<te::MidiClip*> (c)) != nullptr) break;
+            check (mc != nullptr && mc->getSequence().getNumNotes() == notesBefore && DrumKit::findStepClip (*t) == nullptr, "To Piano Roll turns the beat into a MIDI clip (" + juce::String (notesBefore) + " notes)");
+        }
+    }
+
+    std::cout << "\n-- Piano roll tools --\n";
+    {
+        check (MidiTools::chordNotes (60, MidiTools::chordIndex ("Minor 7")) == juce::Array<int> { 60, 63, 67, 70 }
+               && MidiTools::chordNotes (60, MidiTools::chordIndex ("Minor 7"), 1) == juce::Array<int> { 63, 67, 70, 72 }, "chord stamps and inversions");
+        check (MidiTools::snapToScale (61, 0, 1) == 60 && MidiTools::snapToScale (66, 0, 1) == 65 && MidiTools::scaleStep (60, 2, 0, 1) == 64 && MidiTools::scaleStep (60, -1, 9, 2) == 59,
+               "snap to scale and scale steps");
+        auto dm7 = MidiTools::degreeChord (2, 0, false, true, -1);
+        auto e5 = MidiTools::degreeChord (5, 9, true, false, 0);
+        check (dm7.first == 2 && dm7.second == 11 && e5.first % 12 == 4 && e5.second == 0 && MidiTools::keyUsesFlats (3, false) && MidiTools::chordName (10, 9, true) == "Bb7",
+               "progression degrees (Dm7 in C, E major as V of A minor) and flat spelling");
+        call ("add_track", R"({"kind":"instrument","name":"PR"})");
+        call ("create_midi_clip", R"({"track":"PR","length_bars":4})");
+        auto prog = call ("midi_tools", R"({"track":"PR","action":"progression","progression":"R&B","root":"Eb","bass":true})");
+        auto* pt = session->findTrack ("PR");
+        te::MidiClip* mc = nullptr;
+        if (pt != nullptr) for (auto c : pt->getClips()) if ((mc = dynamic_cast<te::MidiClip*> (c)) != nullptr) break;
+        check (mc != nullptr && mc->getSequence().getNumNotes() == 20 && prog.contains ("Fm7") && prog.contains ("Bb7") && prog.contains ("Ebmaj7"), "R&B progression in Eb: Fm7 - Bb7 - Ebmaj7 - Cm7 with a bass line");
+        if (mc != nullptr)
+        {
+            auto& undo = mc->edit.getUndoManager();
+            mc->getSequence().clear (&undo);
+            auto chord = MidiTools::stampChord (*mc, 60, 0, 0, 0.0, 2.0);
+            MidiTools::strum (*mc, chord, 0.125, true);
+            juce::Array<double> st; for (auto* n : mc->getSequence().getNotes()) st.add (n->getStartBeat().inBeats()); st.sort();
+            check (st.size() == 3 && std::abs (st[1] - 0.125) < 1e-6 && std::abs (st[2] - 0.25) < 1e-6, "strum spreads a chord");
+            mc->getSequence().clear (&undo);
+            MidiTools::stampChord (*mc, 60, 0, 0, 0.0, 1.0);
+            MidiTools::arpeggiate (*mc, {}, 0.25, MidiTools::ArpMode::up);
+            juce::Array<int> ps; for (auto* n : mc->getSequence().getNotes()) ps.add (n->getNoteNumber());
+            check (ps.size() == 4 && ps.contains (60) && ps.contains (64) && ps.contains (67), "arpeggiate turns a held chord into 16ths");
+            mc->getSequence().clear (&undo);
+            for (int k = 0; k < 3; ++k) mc->getSequence().addNote (36 + k * 3, te::BeatPosition::fromBeats (k), te::BeatDuration::fromBeats (0.5), 100, 0, &undo);
+            MidiTools::slides (*mc, {}, 0.125);
+            auto* n0 = mc->getSequence().getNotes()[0];
+            check (std::abs (n0->getEndBeat().inBeats() - 1.125) < 1e-6, "808 slides overlap each note into the next");
+            call ("midi_tools", R"({"track":"PR","action":"quantize","grid":"1/8","strength":100})");
+        }
+    }
+
+    auto pitchAt = [] (const juce::File& f, double seconds, double lenSeconds = 0.1) -> double
+    {
+        juce::AudioFormatManager fm; fm.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> r (fm.createReaderFor (f));
+        if (r == nullptr) return -1;
+        const int n = (int) (lenSeconds * r->sampleRate);
+        juce::AudioBuffer<float> b (1, n);
+        r->read (&b, 0, n, (juce::int64) (seconds * r->sampleRate), true, false);
+        const float* x = b.getReadPointer (0);
+        const int W = n / 2;
+        const int lo = (int) (r->sampleRate / 1500.0), hi = juce::jmin (W - 2, (int) (r->sampleRate / 25.0));
+        std::vector<double> d ((size_t) hi + 2, 0.0), cm ((size_t) hi + 2, 1.0);
+        double run = 0;
+        for (int tau = 1; tau <= hi + 1; ++tau)
+        {
+            double s = 0; for (int i = 0; i < W; ++i) { auto df = x[i] - x[i + tau]; s += df * df; }
+            d[(size_t) tau] = s; run += s; cm[(size_t) tau] = s * tau / juce::jmax (1.0e-12, run);
+        }
+        int best = lo;
+        for (int tau = lo; tau < hi; ++tau) if (cm[(size_t) tau] < 0.12 && cm[(size_t) tau] < cm[(size_t) tau + 1]) { best = tau; break; }
+        if (best == lo) for (int tau = lo; tau < hi; ++tau) if (cm[(size_t) tau] < cm[(size_t) best]) best = tau;
+        const double a = cm[(size_t) best - 1], bb = cm[(size_t) best], c = cm[(size_t) best + 1], den = a - 2 * bb + c;
+        const double tt = best + (std::abs (den) > 1e-12 ? 0.5 * (a - c) / den : 0.0);
+        return r->sampleRate / tt;
+    };
+    auto peakOf = [] (const juce::File& f) -> float
+    {
+        juce::AudioFormatManager fm; fm.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> r (fm.createReaderFor (f));
+        if (r == nullptr) return -1;
+        juce::AudioBuffer<float> b ((int) r->numChannels, (int) r->lengthInSamples);
+        r->read (&b, 0, (int) r->lengthInSamples, 0, true, true);
+        for (int c = 0; c < b.getNumChannels(); ++c) for (int i = 0; i < b.getNumSamples(); ++i) if (! std::isfinite (b.getSample (c, i))) return 99.0f;
+        return b.getMagnitude (0, b.getNumSamples());
+    };
+    std::cout << "\n-- Moth 808 and Blossom --\n";
+    {
+        auto cents = [] (double hz, double target) { return 1200.0 * std::log2 (hz / target); };
+        auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory);
+
+        call ("new_session", R"({"name":"Selftest Instruments"})");
+        call ("set_tempo", R"({"bpm":120})");
+        call ("add_track", R"({"kind":"instrument","name":"Bass","instrument":"Moth 808"})");
+        call ("create_midi_clip", R"({"track":"Bass","length_bars":2,"notes":[{"pitch":36,"start_beat":0,"length_beats":1.5},{"pitch":24,"start_beat":2,"length_beats":1.25},{"pitch":31,"start_beat":3,"length_beats":1}]})");
+        auto f808 = dir.getChildFile ("sqm-808-test.wav");
+        call ("bounce", "{\"path\":\"" + f808.getFullPathName() + "\",\"tracks\":[\"Bass\"],\"start_bar\":1,\"end_bar\":3,\"bit_depth\":32}");
+        auto c2 = pitchAt (f808, 0.4, 0.12), c1 = pitchAt (f808, 1.25, 0.12), g1 = pitchAt (f808, 1.75, 0.12);
+        auto pk = peakOf (f808);
+        check (std::abs (cents (c2, 65.406)) < 6 && std::abs (cents (c1, 32.703)) < 6 && std::abs (cents (g1, 48.999)) < 6 && pk > 0.2f && pk < 1.01f,
+               "Moth 808 in tune (C2 " + juce::String (cents (c2, 65.406), 1) + " ct, C1 " + juce::String (cents (c1, 32.703), 1) + " ct) and the overlapping G1 slides in (" + juce::String (cents (g1, 48.999), 1) + " ct)");
+
+        call ("add_track", R"({"kind":"instrument","name":"Str","instrument":"Blossom 2"})");
+        call ("create_midi_clip", R"({"track":"Str","length_bars":2,"notes":[{"pitch":57,"start_beat":0,"length_beats":4},{"pitch":69,"start_beat":4,"length_beats":2}]})");
+        auto fbl = dir.getChildFile ("sqm-blossom-test.wav");
+        call ("bounce", "{\"path\":\"" + fbl.getFullPathName() + "\",\"tracks\":[\"Str\"],\"start_bar\":1,\"end_bar\":3,\"bit_depth\":32}");
+        auto a3 = pitchAt (fbl, 0.3, 0.12), a4 = pitchAt (fbl, 2.2, 0.12);
+        pk = peakOf (fbl);
+        check (std::abs (cents (a3, 220.0)) < 5 && std::abs (cents (a4, 440.0)) < 5 && pk > 0.05f && pk < 1.01f,
+               "Blossom waveguide strings in tune (A3 " + juce::String (cents (a3, 220.0), 1) + " ct, A4 " + juce::String (cents (a4, 440.0), 1) + " ct)");
+
+        // every Blossom preset renders cleanly (no blow-ups, no NaN) and every 808 preset too
+        int clean = 0, total = 0;
+        for (auto inst : { "Blossom 2", "Moth 808" })
+        {
+            auto* e = Signature::findByName (inst);
+            auto* tr = session->findTrack (juce::String (inst) == "Blossom 2" ? "Str" : "Bass");
+            if (e == nullptr || tr == nullptr) continue;
+            te::Plugin* pl = nullptr;
+            for (auto p : tr->pluginList.getPlugins()) if (p->getPluginType() == e->type) pl = p;
+            for (auto& pr : e->presets)
+            {
+                if (pl == nullptr) break;
+                Signature::applyPreset (*pl, pr);
+                auto f = dir.getChildFile ("sqm-preset-test.wav");
+                call ("bounce", "{\"path\":\"" + f.getFullPathName() + "\",\"tracks\":[\"" + tr->getName() + "\"],\"start_bar\":1,\"end_bar\":3}");
+                auto p2 = peakOf (f);
+                ++total;
+                if (p2 > 0.001f && p2 < 1.01f) ++clean; else std::cout << "     preset " << pr.name << " peak " << p2 << "\n";
+                f.deleteFile();
+            }
+        }
+        check (total >= 29 && clean == total, juce::String (clean) + " of " + juce::String (total) + " instrument presets render cleanly");
+
+        // performance: 16-note Blossom chords for 4 seconds, offline
+        call ("create_midi_clip", R"({"track":"Str","start_bar":3,"length_bars":2,"notes":[
+            {"pitch":40,"start_beat":0,"length_beats":8},{"pitch":45,"start_beat":0,"length_beats":8},{"pitch":50,"start_beat":0,"length_beats":8},{"pitch":55,"start_beat":0,"length_beats":8},
+            {"pitch":59,"start_beat":0,"length_beats":8},{"pitch":64,"start_beat":0,"length_beats":8},{"pitch":67,"start_beat":0,"length_beats":8},{"pitch":71,"start_beat":0,"length_beats":8},
+            {"pitch":52,"start_beat":0.5,"length_beats":7},{"pitch":57,"start_beat":0.5,"length_beats":7},{"pitch":62,"start_beat":0.5,"length_beats":7},{"pitch":69,"start_beat":0.5,"length_beats":7},
+            {"pitch":72,"start_beat":1,"length_beats":7},{"pitch":76,"start_beat":1,"length_beats":7},{"pitch":79,"start_beat":1,"length_beats":7},{"pitch":83,"start_beat":1,"length_beats":7}]})");
+        if (auto e = Signature::findByName ("Blossom 2"))
+            if (auto* tr = session->findTrack ("Str"))
+                for (auto p : tr->pluginList.getPlugins()) if (p->getPluginType() == e->type) Signature::applyPreset (*p, e->presets.front());
+        auto fperf = dir.getChildFile ("sqm-blossom-perf.wav");
+        auto t0 = juce::Time::getMillisecondCounterHiRes();
+        call ("bounce", "{\"path\":\"" + fperf.getFullPathName() + "\",\"tracks\":[\"Str\"],\"start_bar\":3,\"end_bar\":5}");
+        auto ms = juce::Time::getMillisecondCounterHiRes() - t0;
+        check (ms < 4000.0, "16 Blossom voices render " + juce::String (4000.0 / juce::jmax (1.0, ms), 1) + "x faster than real time (" + juce::String ((int) ms) + " ms for 4 s)");
+        for (auto f : { f808, fbl, fperf }) f.deleteFile();
+    }
+
+    std::cout << "\n-- Edit window mixing: per-track I, track views, plug-in menus --\n";
+    {
+        call ("new_session", R"({"name":"Selftest Edit Mix"})");
+        call ("new_tracks", R"({"type":"instrument","format":"stereo","name":"KeysA"})");
+        call ("new_tracks", R"({"type":"instrument","format":"stereo","name":"KeysB"})");
+        auto* a = session->findTrack ("KeysA");
+        auto* b = session->findTrack ("KeysB");
+        if (a != nullptr && b != nullptr)
+        {
+            TrackOps::setInputOnlyMonitoring (*session, false);   // what the app does at launch: devices back to automatic
+            TrackOps::updateMidiThruTarget (*session, nullptr);
+            TrackOps::setInputMonitor (*session, *a, true);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
+            bool aLive = false, bLive = false;
+            for (auto in : session->edit->getAllInputDevices())
+            {
+                if (te::isOnTargetTrack (*in, *a, 0)) aLive = aLive || in->isLivePlayEnabled (*a);
+                if (te::isOnTargetTrack (*in, *b, 0)) bLive = bLive || in->isLivePlayEnabled (*b);
+            }
+            check (TrackOps::isInputMonitorOn (*a) && ! TrackOps::isInputMonitorOn (*b) && aLive && ! bLive,
+                   "I (input monitor) on one track does not switch on other tracks sharing the input");
+            MixCtl::setView (*a, "volume");
+            check (MixCtl::viewParam (*session, *a) == MixCtl::volumeParam (*session, *a) && MixCtl::viewLabel (*session, *a) == "volume", "Track View: volume lane");
+            call ("insert_plugin", R"({"track":"KeysA","plugin":"Prism EQ"})");
+            auto views = MixCtl::viewChoices (*session, *a);
+            bool eqParam = false;
+            for (auto& v : views) if (v.label.startsWith ("Prism EQ > ")) eqParam = true;
+            check (eqParam, "Track View lists plug-in parameters by name");
+            MixCtl::setVolumeDb (*session, *a, -6.0f);
+            check (std::abs (MixCtl::getVolumeDb (*session, *a) + 6.0f) < 0.05f, "Edit window fader sets the track volume");
+        }
+        auto menu = PluginMenu::build (*engine, PluginMenu::effects, true);
+        juce::StringArray tops;
+        for (juce::PopupMenu::MenuItemIterator it (menu); it.next();) tops.add (it.getItem().text);
+        check (tops.contains ("EQ") && tops.contains ("Dynamics") && tops.contains ("Reverb") && tops.contains ("Search plug-ins..."), "plug-in menu is organised by Pro Tools category with search");
+    }
+
+    std::cout << "\n-- 1.6 plug-ins: Moth Tune, Apex Series, colour set, Molt --\n";
+    {
+        // a stereo test tone: 220 Hz with harmonics plus a little noise, -6 dBFS peak, 4 s
+        auto tone = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sqm_selftest_tone.wav");
+        {
+            const double sr = 44100.0; const int len = (int) (sr * 4.0);
+            juce::AudioBuffer<float> buf (2, len);
+            juce::Random rnd (7);
+            for (int i = 0; i < len; ++i)
+            {
+                const double t = i / sr;
+                float v = (float) (0.30 * std::sin (juce::MathConstants<double>::twoPi * 220.0 * t) + 0.12 * std::sin (juce::MathConstants<double>::twoPi * 440.0 * t)
+                                   + 0.06 * std::sin (juce::MathConstants<double>::twoPi * 660.0 * t)) + (rnd.nextFloat() - 0.5f) * 0.02f;
+                buf.setSample (0, i, v); buf.setSample (1, i, v);
+            }
+            tone.deleteFile();
+            juce::WavAudioFormat wav;
+            if (auto os = tone.createOutputStream())
+                if (auto w = std::unique_ptr<juce::AudioFormatWriter> (wav.createWriterFor (os.release(), sr, 2, 24, {}, 0)))
+                    w->writeFromAudioSampleBuffer (buf, 0, len);
+        }
+        const auto tonePath = tone.getFullPathName().replace ("\\", "/");
+        struct Case { const char* track; const char* tool; const char* which; };
+        const Case cases[] = { { "ST Tune", "moth_tune", "" }, { "ST TuneFx", "moth_tune_fx", "" },
+                               { "ST Dyn", "apex", "dynamics" }, { "ST Lim", "apex", "limiter" }, { "ST MB", "apex", "multiband" }, { "ST Sub", "apex", "sub" },
+                               { "ST Aurora", "studio_fx", "aurora" }, { "ST Opto", "studio_fx", "opto" }, { "ST Pulse", "studio_fx", "pulse" }, { "ST OilCan", "studio_fx", "oilcan" },
+                               { "ST Ladder", "studio_fx", "ladder" }, { "ST Ring", "studio_fx", "ring" }, { "ST Phase", "studio_fx", "phaser" }, { "ST BBD", "studio_fx", "bbd" } };
+        for (auto& c : cases)
+        {
+            call ("add_track", juce::String (R"({"kind":"audio","name":")") + c.track + R"("})");
+            call ("import_audio", juce::String (R"({"track":")") + c.track + R"(","path":")" + tonePath + R"(","start_bar":1})");
+            juce::String which = juce::String (c.which).isNotEmpty() ? juce::String (R"(,"which":")") + c.which + "\"" : juce::String();
+            call (c.tool, juce::String (R"({"track":")") + c.track + "\"" + which + R"(,"action":"add"})");
+            if (juce::String (c.which) == "limiter")
+                call ("apex", R"({"track":"ST Lim","which":"limiter","action":"set","settings":{"Input":12,"Ceiling":-1}})");
+            auto an = juce::JSON::parse (call ("analyze_mix", juce::String (R"({"start_bar":1,"end_bar":3,"tracks":[")") + c.track + R"("]})"));
+            const double pk = an["peak_dbfs"].toString().getDoubleValue();
+            check (pk > -40.0 && pk < 3.0, juce::String (c.tool) + " " + c.which + ": audio passes at a sane level (peak " + juce::String (pk, 1) + " dBFS)");
+            if (juce::String (c.which) == "limiter")
+            {
+                const double tp = (double) juce::JSON::parse (call ("apex", R"({"track":"ST Lim","which":"limiter","action":"get"})"))["loudness"]["true_peak_max_dbtp"];
+                check (tp <= -0.95 && tp > -3.0, "Apex Limiter holds the -1 dBTP ceiling with +12 dB of input (true peak " + juce::String (tp, 2) + " dBTP)");
+            }
+        }
+        auto mtGet = call ("moth_tune", R"({"track":"ST Tune","action":"get"})");
+        check (mtGet.contains ("Retune Speed"), "Moth Tune reports its parameters");
+        check (call ("moth_tune", R"({"track":"ST Tune","action":"key","root":"A","scale":"minor"})").contains ("A Natural Minor"), "Moth Tune key: A minor set");
+        auto fxSet = call ("studio_fx", R"({"track":"ST Pulse","which":"pulse","action":"set","settings":{"lowFreq":100,"Low Boost":5}})");
+        check (fxSet.contains ("\"lowFreq\": 3"), "Pulse EQ: a frequency in Hz snaps to the nearest switch position");
+        auto molt = call ("molt", R"({"action":"render","track":"ST Ring","ratio":1.5,"semitones":3})");
+        auto mclips = juce::JSON::parse (call ("list_clips", R"({"track":"ST Ring"})"));
+        const double mlen = (double) mclips[0]["clips"][0]["length_seconds"];
+        check (std::abs (mlen - 6.0) < 0.02, "Molt: a 4 s clip at ratio 1.5 renders to 6 s (" + juce::String (mlen, 3) + " s)");
+        for (auto& c : cases) call ("delete_track", juce::String (R"({"track":")") + c.track + R"("})");
+        tone.deleteFile();
+    }
+
+    std::cout << "\n-- Performance engine and crash protection --\n";
+    {
+        auto pe = juce::JSON::parse (call ("playback_engine", R"({"host_processors":1,"cpu_usage_limit":80,"dynamic_plugin_processing":true,"overload_protection":true,"disk_cache_seconds":15})"));
+        check ((int) pe["host_engine"]["host_processors"] == 1 && (int) pe["host_engine"]["cpu_usage_limit"] == 80 && (int) pe["host_engine"]["disk_cache_seconds"] == 15,
+               "Playback Engine: host processors, CPU usage limit and cache size are set");
+        check (::dynamicPluginProcessingEnabled().load(), "Dynamic Plug-in Processing reaches the engine");
+        call ("playback_engine", R"({"host_processors":0,"cpu_usage_limit":95,"disk_cache_seconds":6})");
+        check (call ("system_usage", "{}").contains ("heaviest_plugins"), "System Usage reports the heaviest plug-ins");
+
+        // crash protection: a crash report naming a plug-in switches that plug-in off; a crash while opening a session with no
+        // culprit opens the next one in Safe Mode
+        auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sqm_crashguard_test");
+        dir.deleteRecursively(); dir.createDirectory();
+        dir.getChildFile ("running.flag").replaceWithText ("running /x.squelch");
+        juce::Thread::sleep (20);
+        dir.getChildFile ("Last crash report.txt").replaceWithText ("Squelchmoth crash report\nPlug-ins running when it crashed: Wobbler 2 (VST3)\n");
+        auto& cg = CrashGuard::begin (dir, false);
+        check (cg.crashedLastTime && cg.culprits.contains ("Wobbler 2 (VST3)") && ! cg.safeMode, "crash report: the plug-in on the crashing stack is found");
+        check (CrashGuard::isPluginDisabled ("VST3-Wobbler 2-1a2b3c") && ! CrashGuard::isPluginDisabled ("VST3-Other-99"), "that plug-in is switched off; others still load");
+        CrashGuard::setPluginSwitchedOff ("Wobbler 2 (VST3)", false);
+        check (! CrashGuard::isPluginDisabled ("VST3-Wobbler 2-1a2b3c"), "a switched-off plug-in can be turned back on");
+        CrashGuard::end();
+        check (! dir.getChildFile ("running.flag").existsAsFile(), "clean quit removes the running marker");
+        dir.getChildFile ("Last crash report.txt").deleteFile();
+        dir.getChildFile ("running.flag").replaceWithText ("loading /x.squelch");
+        CrashGuard::state() = {};
+        auto& cg2 = CrashGuard::begin (dir, false);
+        check (cg2.crashedWhileLoading && cg2.safeMode && CrashGuard::isPluginDisabled ("AudioUnit-Anything"), "crash while opening a session -> next launch is Safe Mode");
+        CrashGuard::state() = {};
+        CrashGuard::end();
+        CrashGuard::folder() = juce::File();
+        dir.deleteRecursively();
+    }
+
+    std::cout << "\n-- 1.7: session setup, tempo map, polarity, snapshots, insert chains, stems, bounces, backups --\n";
+    {
+        auto tone = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sqm_selftest_tone17.wav");
+        {
+            const double sr = 48000.0; const int len = (int) (sr * 2.0);
+            juce::AudioBuffer<float> buf (2, len);
+            for (int i = 0; i < len; ++i)
+            {
+                const float v = (float) (0.3 * std::sin (juce::MathConstants<double>::twoPi * 330.0 * i / sr));
+                buf.setSample (0, i, v); buf.setSample (1, i, v * 0.8f);
+            }
+            tone.deleteFile();
+            juce::WavAudioFormat wav;
+            if (auto os = tone.createOutputStream())
+                if (auto w = std::unique_ptr<juce::AudioFormatWriter> (wav.createWriterFor (os.release(), sr, 2, 24, {}, 0)))
+                    w->writeFromAudioSampleBuffer (buf, 0, len);
+        }
+        const auto tp = tone.getFullPathName().replace ("\\", "/");
+        call ("new_session", R"({"name":"Seventeen","tempo":120})");
+        for (auto n : { "S1", "S2" })
+        {
+            call ("add_track", juce::String (R"({"kind":"audio","name":")") + n + R"("})");
+            call ("import_audio", juce::String (R"({"track":")") + n + R"(","path":")" + tp + R"(","start_bar":1})");
+        }
+
+        auto ss = juce::JSON::parse (call ("session_setup", R"({"timecode_rate":"25","timecode_start":"01:00:00:00","pan_depth":2,"bit_depth":24})"));
+        check (ss["timecode_rate"].toString() == "25" && ss["timecode_start"].toString() == "01:00:00:00" && ss["record_bit_depth"].toString() == "24-bit",
+               "Session Setup: timecode rate / start and record bit depth");
+        call ("session_setup", R"({"timecode_start":"00:00:00:00","bit_depth":32})");
+
+        call ("tempo_map", R"({"action":"set_tempo","bar":3,"bpm":90})");
+        auto tm = juce::JSON::parse (call ("tempo_map", R"({"action":"set_meter","bar":4,"meter":"3/4"})"));
+        check (tm["tempos"].size() == 2 && tm["meters"].size() == 2 && tm["meters"][1]["at"].toString() == "4|1|000",
+               "tempo + meter map: a meter after a tempo change lands on 4|1|000 (" + tm["meters"][1]["at"].toString() + ")");
+        call ("tempo_map", R"({"action":"delete_meter","index":1})");
+        auto tm2 = juce::JSON::parse (call ("tempo_map", R"({"action":"delete_tempo","index":1})"));
+        check (tm2["tempos"].size() == 1 && tm2["meters"].size() == 1, "tempo and meter events delete");
+
+        // polarity: two identical tracks, one inverted, cancel completely
+        auto loudness = [&] { return juce::JSON::parse (call ("analyze_mix", R"({"start_seconds":0,"end_seconds":2})"))["peak_dbfs"].toString().getDoubleValue(); };
+        const double both = loudness();
+        call ("polarity", R"({"tracks":["S2"],"inverted":true})");
+        const double nulled = loudness();   // the renderer's meter floor is -80 dB (0.0001)
+        check (both > -12.0 && nulled <= -79.9, "polarity: identical tracks with one inverted cancel (" + juce::String (both, 1) + " dB -> " + juce::String (nulled, 1) + " dB)");
+
+        // mix snapshots
+        call ("mix_snapshot", R"({"action":"store","slot":"A","name":"Null"})");
+        call ("update_track", R"({"track":"S1","volume_db":-20})");
+        call ("polarity", R"({"tracks":["S2"],"inverted":false})");
+        call ("mix_snapshot", R"({"action":"store","slot":"B"})");
+        const double bLevel = loudness();
+        call ("mix_snapshot", R"({"action":"recall","slot":"A"})");
+        const double aLevel = loudness();
+        check (bLevel > -12.0 && aLevel <= -79.9, "snapshot recall restores fader and polarity (B " + juce::String (bLevel, 1) + " dB, A " + juce::String (aLevel, 1) + " dB)");
+        call ("mix_snapshot", R"({"action":"undo"})");
+        check (loudness() > -12.0, "Undo Recall goes back to the mix before the recall");
+        call ("mix_snapshot", R"({"action":"recall","slot":"B"})");
+
+        // insert chains (and Pro Tools insert order: inserts stay before the dual panner and sends)
+        call ("add_send", R"({"track":"S1","bus":3,"level_db":-10,"pre_fader":true})");
+        call ("insert_plugin", R"({"track":"S1","plugin":"Prism EQ"})");
+        call ("insert_plugin", R"({"track":"S1","plugin":"Cocoon"})");
+        auto saved = call ("insert_chain", R"({"action":"save","track":"S1","name":"Selftest Chain"})");
+        auto loaded = call ("insert_chain", R"({"action":"load","track":"S2","name":"Selftest Chain"})");
+        check (saved.contains ("2 plug-ins") && loaded.contains ("Loaded 2"), "insert chain saves and loads 2 plug-ins");
+        {
+            auto* s1 = session->findTrack (juce::var ("S1"));
+            bool orderOk = s1 != nullptr;
+            if (s1 != nullptr)
+            {
+                auto ins = Session::getInserts (s1->pluginList, s1);
+                const int lastInsert = ins.isEmpty() ? -1 : s1->pluginList.indexOf (ins.getLast());
+                for (auto p : s1->pluginList.getPlugins())
+                    if (dynamic_cast<te::AuxSendPlugin*> (p) != nullptr || dynamic_cast<SqStereoPanPlugin*> (p) != nullptr)
+                        orderOk = orderOk && s1->pluginList.indexOf (p) > lastInsert;
+            }
+            check (orderOk, "new inserts go before the sends and the dual panner (Pro Tools signal flow)");
+        }
+        InsertChains::fileFor ("Selftest Chain").deleteFile();
+
+        // bounces at the session rate, and stems that sum to the mix
+        auto b = call ("bounce", R"({"name":"seventeen mix"})");
+        check (b.contains ("kHz 24-bit dithered"), "bounce defaults: session rate, 24-bit, dithered");
+        call ("bounce", R"({"name":"seventeen float","bit_depth":32,"master_inserts":false,"tail_seconds":1})");
+        auto stemDir = session->sessionsDir.getChildFile ("stems17");
+        auto st = juce::JSON::parse (call ("export_stems", "{\"bit_depth\":32,\"tail_seconds\":1,\"folder\":\"" + stemDir.getFullPathName().replace ("\\", "/") + "\"}"));
+        check ((int) st["written"] == 2, "export_stems writes one file per track with audio (" + st["written"].toString() + ")");
+        {
+            juce::AudioFormatManager fm; fm.registerBasicFormats();
+            auto read = [&] (const juce::File& f) { juce::AudioBuffer<float> buf; if (auto r = std::unique_ptr<juce::AudioFormatReader> (fm.createReaderFor (f))) { buf.setSize ((int) r->numChannels, (int) r->lengthInSamples); r->read (&buf, 0, (int) r->lengthInSamples, 0, true, true); } return buf; };
+            auto mix = read (session->bouncesDir.getChildFile ("seventeen float.wav"));
+            juce::AudioBuffer<float> sum;
+            bool sameLength = true;
+            for (auto& f : stemDir.findChildFiles (juce::File::findFiles, false, "*.wav"))
+            {
+                auto x = read (f);
+                if (sum.getNumSamples() == 0) { sum.makeCopyOf (x); continue; }
+                sameLength = sameLength && x.getNumSamples() == sum.getNumSamples();
+                for (int c = 0; c < juce::jmin (sum.getNumChannels(), x.getNumChannels()); ++c) sum.addFrom (c, 0, x, c, 0, juce::jmin (sum.getNumSamples(), x.getNumSamples()));
+            }
+            float resid = 0.0f;
+            const int n = juce::jmin (mix.getNumSamples(), sum.getNumSamples());
+            for (int c = 0; c < juce::jmin (mix.getNumChannels(), sum.getNumChannels()); ++c)
+                for (int i = 0; i < n; ++i) resid = juce::jmax (resid, std::abs (mix.getSample (c, i) - sum.getSample (c, i)));
+            check (sameLength && n > 48000 && resid < 1.0e-5f && mix.getNumSamples() == sum.getNumSamples(),
+                   "stems line up and sum to the mix (residual " + juce::String (juce::Decibels::gainToDecibels (resid, -200.0f), 1) + " dB)");
+        }
+
+        // Auto-Save / Session File Backups
+        {
+            AutoSaver saver (*session);
+            call ("save_session", "{}");
+            AutoSaver::mirrorFolderFor (session->getFile()).deleteRecursively();   // leftovers from an earlier self-test run
+            auto bk = juce::JSON::parse (call ("backups", R"({"action":"backup_now"})"));
+            check (! (bool) bk["unsaved_changes"], "a backup copy doesn't make the session look unsaved");
+            auto list = juce::JSON::parse (call ("backups", R"({"action":"list"})"));
+            check (list.size() == 1 && list[0]["file"].toString().contains (".bak.001"), "Session File Backups: numbered backup written next to the session");
+            auto mirror = AutoSaver::mirrorFolderFor (session->getFile());
+            check (mirror.getChildFile ("Seventeen.bak.001.squelch").existsAsFile(), "a second copy of each backup is kept on the system drive");
+            auto rs = call ("backups", R"({"action":"restore","index":1})");
+            check (rs.contains ("(restored"), "restore opens the backup as a separate '(restored)' session");
+            mirror.deleteRecursively();
+        }
+        tone.deleteFile();
+    }
+
+    std::cout << "\n-- 1.8 Rack: channel rack, patterns, lanes, channel settings, instruments, chords, 60-second beat --\n";
+    {
+        auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory);
+        auto cents = [] (double hz, double target) { return 1200.0 * std::log2 (hz / target); };
+        // first-sample-above-threshold onsets, one per window of 'win' seconds
+        auto onsetsOf = [] (const juce::File& f, double win, float thresh = 0.05f) -> std::vector<double>
+        {
+            std::vector<double> out;
+            juce::AudioFormatManager fm; fm.registerBasicFormats();
+            std::unique_ptr<juce::AudioFormatReader> r (fm.createReaderFor (f));
+            if (r == nullptr) return out;
+            juce::AudioBuffer<float> b ((int) r->numChannels, (int) r->lengthInSamples);
+            r->read (&b, 0, (int) r->lengthInSamples, 0, true, true);
+            const int w = (int) (win * r->sampleRate);
+            for (int start = 0; start + w <= b.getNumSamples(); start += w)
+                for (int i = start; i < start + w; ++i)
+                    if (std::abs (b.getSample (0, i)) > thresh) { out.push_back (i / r->sampleRate); break; }
+            return out;
+        };
+        auto startedAt = juce::Time::getMillisecondCounterHiRes();
+
+        // 1. the rack IS the session: a channel is a track with Rack Channel at slot 0 and the instrument after it
+        call ("new_session", R"({"name":"Selftest Rack"})");
+        call ("set_tempo", R"({"bpm":120})");
+        call ("rack", R"({"action":"add","type":"instrument","what":"Venom","name":"Lead"})");
+        {
+            auto* lead = session->findTrack ("Lead");
+            juce::StringArray order; if (lead) for (auto p : lead->pluginList.getPlugins()) order.add (p->getName());
+            check (lead != nullptr && order.size() >= 2 && order[0] == "Rack Channel" && order[1] == "Venom", "rack channel = track with Rack Channel at slot 0 then the instrument (" + order.joinIntoString (" > ") + ")");
+            auto tl = call ("get_session", "{}");
+            check (tl.contains ("Lead"), "rack channels appear in the session's track list");
+        }
+
+        // 2. kit channels, steps and step timing (kick on every beat at 120 bpm -> onsets 0.5 s apart within 5 ms)
+        auto kit = juce::JSON::parse (call ("rack", R"({"action":"add","type":"kit","what":"Trap"})"));
+        auto rl = juce::JSON::parse (call ("rack", R"({"action":"list"})"));
+        check (rl["channels"].size() >= 9, "kit adds one channel per sound after the instrument (" + juce::String (rl["channels"].size()) + " channels)");
+        check (rl["channels"][1]["name"].toString() == "Kick" && rl["channels"][2]["name"].toString() == "Snare", "channel order: Kick, Snare, ... (" + rl["channels"][1]["name"].toString() + ", " + rl["channels"][2]["name"].toString() + ")");
+        call ("rack", R"({"action":"write","channel":"Kick","steps":"x...x...x...x..."})");
+        call ("pattern", R"({"action":"place","pattern":1,"bar":1,"repeats":2})");
+        auto fkick = dir.getChildFile ("sqm-rack-kick.wav");
+        call ("bounce", "{\"path\":\"" + fkick.getFullPathName() + "\",\"tracks\":[\"Kick\"],\"start_bar\":1,\"end_bar\":3,\"bit_depth\":32}");
+        {
+            auto on = onsetsOf (fkick, 0.5);
+            double worst = 0; for (size_t i = 0; i < on.size(); ++i) worst = juce::jmax (worst, std::abs (on[i] - i * 0.5));
+            check (on.size() == 8 && worst < 0.005, "step timing: 8 kicks over 2 bars, worst offset " + juce::String (worst * 1000.0, 2) + " ms (" + juce::String ((int) on.size()) + " onsets)");
+        }
+
+        // 3. pattern clips are linked; make_unique breaks one link
+        {
+            auto* kick = session->findTrack ("Kick");
+            int linked = 0; if (kick) for (auto c : kick->getClips()) if (Rack::clipPatternId (*c).isNotEmpty() && ! Rack::isUnique (*c)) ++linked;
+            check (linked == 2, "placing a pattern twice makes 2 linked Pattern Clips on each channel (" + juce::String (linked) + ")");
+            call ("pattern", R"({"action":"make_unique","track":"Kick","clip":2})");
+            int uniq = 0; if (kick) for (auto c : kick->getClips()) if (Rack::isUnique (*c)) ++uniq;
+            check (uniq == 1, "make_unique breaks exactly one clip's link");
+            call ("rack", R"({"action":"write","channel":"Kick","steps":"x.x.x.x.x.x.x.x."})");
+            auto ln = juce::JSON::parse (call ("rack", R"({"action":"list"})"));
+            check (ln["channels"][1]["steps"].toString().removeCharacters (" ") == "x.x.x.x.x.x.x.x.", "editing the pattern updates the rack row");
+        }
+
+        // 4. Graph Editor lanes round-trip in natural units (pitch in cents, pan -1..1, velocity 1-127)
+        {
+            call ("rack", R"({"action":"lane","channel":"Kick","lane":"pitch","values":[100,-100,50,-50]})");
+            auto p = juce::JSON::parse (call ("rack", R"({"action":"lane","channel":"Kick","lane":"pitch"})"))["values"];
+            check (p.size() >= 4 && std::abs (p[0].toString().getDoubleValue() - 100) < 0.01 && std::abs (p[1].toString().getDoubleValue() + 100) < 0.01 && std::abs (p[3].toString().getDoubleValue() + 50) < 0.01, "pitch lane round-trips +-100 cents");
+            call ("rack", R"({"action":"lane","channel":"Kick","lane":"pan","values":[-1,1,0,0.5]})");
+            auto pn = juce::JSON::parse (call ("rack", R"({"action":"lane","channel":"Kick","lane":"pan"})"))["values"];
+            check (pn.size() >= 4 && std::abs (pn[0].toString().getDoubleValue() + 1) < 0.01 && std::abs (pn[1].toString().getDoubleValue() - 1) < 0.01 && std::abs (pn[3].toString().getDoubleValue() - 0.5) < 0.01, "pan lane round-trips -1..1");
+            call ("rack", R"({"action":"lane","channel":"Kick","lane":"velocity","value":64})");
+            auto v = juce::JSON::parse (call ("rack", R"({"action":"lane","channel":"Kick","lane":"velocity"})"))["values"];
+            check (v.size() >= 1 && std::abs (v[0].toString().getDoubleValue() - 64) < 1.01, "velocity lane set for every step");
+        }
+
+        // 5. Channel Settings (Rack Channel): arpeggiator turns a held chord into 1/16 notes; settings round-trip
+        {
+            call ("rack", R"({"action":"to_piano_roll","channel":"Lead"})");
+            call ("rack", R"({"action":"notes","channel":"Lead","replace":true,"notes":[{"pitch":60,"start_beat":0,"length_beats":4,"velocity":100},{"pitch":64,"start_beat":0,"length_beats":4,"velocity":100},{"pitch":67,"start_beat":0,"length_beats":4,"velocity":100}]})");
+            call ("instrument", R"({"action":"preset","track":"Lead","name":"Init Venom"})");
+            call ("channel_settings", R"({"action":"set","channel":"Lead","arp":{"mode":"up","time":0.25,"gate":0.5},"polyphony":{"max_poly":4},"echo":{"count":0}})");
+            auto cs = juce::JSON::parse (call ("channel_settings", R"({"action":"get","channel":"Lead"})"));
+            check (cs["arp"]["mode"].toString() == "up" && (int) cs["polyphony"]["max_poly"] == 4, "channel_settings round-trip (arp " + cs["arp"]["mode"].toString() + ", max poly " + cs["polyphony"]["max_poly"].toString() + ")");
+            call ("pattern", R"({"action":"sync","pattern":1})");
+            auto farp = dir.getChildFile ("sqm-rack-arp.wav");
+            call ("bounce", "{\"path\":\"" + farp.getFullPathName() + "\",\"tracks\":[\"Lead\"],\"start_bar\":1,\"end_bar\":2,\"bit_depth\":32}");
+            auto on = onsetsOf (farp, 0.125, 0.02);
+            check (on.size() >= 12, "arpeggiator on a held triad gives a note every 1/16 (" + juce::String ((int) on.size()) + " of 16 windows have an onset)");
+            call ("channel_settings", R"({"action":"set","channel":"Lead","arp":{"mode":"off"},"polyphony":{"mono":true,"porta":true,"slide_time":0.2}})");
+            cs = juce::JSON::parse (call ("channel_settings", R"({"action":"get","channel":"Lead"})"));
+            check ((bool) cs["polyphony"]["mono"] && (bool) cs["polyphony"]["porta"], "mono + porta set through channel_settings");
+            call ("channel_settings", R"({"action":"reset","channel":"Lead"})");
+        }
+
+        // 6. every 1.8 instrument: 40+ presets, parameters reachable, sounds, A4 = 440 Hz on the pitched ones
+        {
+            struct Inst { const char* name; bool pitched; int minPresets; };
+            const Inst insts[] = { { "Mothsynth 2", true, 40 }, { "Venom", true, 40 }, { "Sim Moth", true, 40 }, { "Mini Moth", true, 40 }, { "Thump", false, 40 }, { "Dial 10", true, 40 }, { "Blossom 2", true, 40 }, { "Hive Pads", false, 40 } };
+            for (auto& in : insts)
+            {
+                juce::String nm (in.name);
+                call ("add_track", "{\"kind\":\"instrument\",\"name\":\"T " + nm + "\",\"instrument\":\"" + nm + "\"}");
+                auto pl = juce::JSON::parse (call ("instrument", "{\"action\":\"preset\",\"track\":\"T " + nm + "\",\"list\":true}"));
+                const int np = pl["presets"].size();
+                check (np >= in.minPresets, nm + ": " + juce::String (np) + " presets");
+                if (nm == "Hive Pads") call ("instrument", "{\"action\":\"preset\",\"track\":\"T " + nm + "\",\"index\":1}");
+                auto pr = juce::JSON::parse (call ("instrument", "{\"action\":\"parameters\",\"track\":\"T " + nm + "\"}"));
+                check (pr["parameters"].size() >= 7, nm + ": " + juce::String (pr["parameters"].size()) + " parameters reachable");
+                if (nm == "Venom") call ("instrument", R"({"action":"set","track":"T Venom","params":[{"param":"Sub Level","real":0}]})");   // the sub oscillator sits an octave under A4 by design
+                if (nm == "Sim Moth") call ("instrument", R"({"action":"set","track":"T Sim Moth","params":[{"param":"Osc 3 Level","real":0}]})");   // Osc 3 sits at -12 st by design
+                const int note = nm == "Hive Pads" ? 36 : nm == "Thump" ? 36 : 69;
+                call ("create_midi_clip", "{\"track\":\"T " + nm + "\",\"length_bars\":1,\"notes\":[{\"pitch\":" + juce::String (note) + ",\"start_beat\":0,\"length_beats\":3}]}");
+                auto f = dir.getChildFile ("sqm-inst-" + nm.removeCharacters (" ") + ".wav");
+                call ("bounce", "{\"path\":\"" + f.getFullPathName() + "\",\"tracks\":[\"T " + nm + "\"],\"start_bar\":1,\"end_bar\":2,\"bit_depth\":32}");
+                const float pk = peakOf (f);
+                if (in.pitched)
+                {
+                    const double hz = pitchAt (f, 0.6, 0.15);
+                    check (pk > 0.02f && pk < 1.01f && std::abs (cents (hz, 440.0)) < 10.0, nm + " sounds and A4 = " + juce::String (hz, 1) + " Hz (" + juce::String (cents (hz, 440.0), 1) + " ct), peak " + juce::String (juce::Decibels::gainToDecibels (pk), 1) + " dBFS");
+                }
+                else check (pk > 0.02f && pk < 1.01f, nm + " sounds, peak " + juce::String (juce::Decibels::gainToDecibels (pk), 1) + " dBFS");
+                call ("delete_track", "{\"track\":\"T " + nm + "\"}");
+            }
+            auto il = juce::JSON::parse (call ("instrument", R"({"action":"list"})"));
+            int covered = 0; for (auto& e : *il["instruments"].getArray()) if (e["what"].toString().isNotEmpty()) ++covered;
+            check (il["instruments"].size() >= 12 && covered >= 10, "instrument shelf: " + juce::String (il["instruments"].size()) + " instruments, " + juce::String (covered) + " described");
+        }
+
+        // 7. chord tools: I-V-vi-IV correct in every key; top-down stamp keeps the clicked note on top
+        {
+            static const int maj[] = { 0, 4, 7 }, mnr[] = { 0, 3, 7 };
+            bool allKeys = true; juce::String bad;
+            for (int key = 0; key < 12; ++key)
+            {
+                auto pv = juce::JSON::parse (call ("chords", "{\"action\":\"preview\",\"degrees\":\"I - V - vi - IV\",\"key\":" + juce::String (key) + "}"));
+                const int offs[] = { 0, 7, 9, 5 }; const bool minor[] = { false, false, true, false };
+                for (int c = 0; c < 4; ++c)
+                {
+                    std::set<int> got, want;
+                    for (auto& n : *pv["chords"][c]["notes"].getArray()) got.insert (((int) n % 12 + 12) % 12);
+                    for (auto iv : (minor[c] ? mnr : maj)) want.insert ((key + offs[c] + iv) % 12);
+                    if (got != want) { allKeys = false; bad << " " << MidiTools::pitchClassName (key, false) << ":" << pv["chords"][c]["name"].toString(); }
+                }
+            }
+            check (allKeys, "progression tool: I - V - vi - IV spells the right chords in all 12 keys" + bad);
+            call ("add_track", R"({"kind":"instrument","name":"Chords","instrument":"Mothsynth 2"})");
+            auto g = juce::JSON::parse (call ("chords", R"({"action":"generate","track":"Chords","progression":"Gospel Lift","key":"Eb","bars":4,"bars_per_chord":1})"));
+            check (g["wrote"].toString().startsWith ("Abmaj7 - Bb7 - Gm7 - Cm7") && (int) g["notes_written"] >= 16, "library progression written with sevenths, flats in Eb, bass line (" + g["wrote"].toString() + ", " + g["notes_written"].toString() + " notes)");
+            auto st = juce::JSON::parse (call ("chords", R"({"action":"stamp","track":"Chords","note":"E5","type":"Minor 7","mode":"top_down","start_beat":0,"length_beats":2})"));
+            int top = -1; for (auto& n : *st["notes"].getArray()) top = juce::jmax (top, (int) n);
+            check (top == 76 && st["chord"].toString().startsWith ("F#m7"), "chord stamp top-down keeps E5 on top and builds F#m7 under it (" + st["chord"].toString() + ")");
+            auto st2 = juce::JSON::parse (call ("chords", R"({"action":"stamp","track":"Chords","note":"E4","type":"Minor 7","mode":"bottom_up","start_beat":2,"length_beats":2})"));
+            int low = 999; for (auto& n : *st2["notes"].getArray()) low = juce::jmin (low, (int) n);
+            check (low == 64 && st2["chord"].toString().startsWith ("Em7"), "chord stamp bottom-up puts the root on the clicked key");
+            auto lb = juce::JSON::parse (call ("chords", R"({"action":"labels","channel":"Kick"})"));
+            check (lb.size() >= 1 && lb[0]["label"].toString() == "Kick", "key labels: a kit channel labels its root key with the sound name");
+        }
+
+        // 8. the 60-second beat flow, measured: kit + starter groove + bass + place + bounce
+        {
+            auto t0 = juce::Time::getMillisecondCounterHiRes();
+            call ("new_session", R"({"name":"Sixty"})");
+            call ("set_tempo", R"({"bpm":140})");
+            call ("rack", R"({"action":"add","type":"kit","what":"Trap"})");
+            call ("rack", R"({"action":"starter","genre":"Trap","seed":7})");
+            call ("rack", R"({"action":"add","type":"instrument","what":"Moth 808","name":"808"})");
+            call ("rack", R"({"action":"write","channel":"808","steps":"x.......x..x...."})");
+            call ("pattern", R"({"action":"place","pattern":1,"bar":1,"repeats":4})");
+            auto f60 = dir.getChildFile ("sqm-sixty.wav");
+            call ("bounce", "{\"path\":\"" + f60.getFullPathName() + "\",\"start_bar\":1,\"end_bar\":5,\"bit_depth\":24}");
+            const double secs = (juce::Time::getMillisecondCounterHiRes() - t0) / 1000.0;
+            const float pk = peakOf (f60);
+            check (pk > 0.05f && pk < 1.01f && secs < 60.0, "60-second beat: kit + groove + 808 + 4 bars placed + bounced in " + juce::String (secs, 1) + " s, peak " + juce::String (juce::Decibels::gainToDecibels (pk), 1) + " dBFS");
+            auto pm = call ("pattern", R"({"action":"mode","mode":"pattern"})");
+            auto pl = juce::JSON::parse (call ("pattern", R"({"action":"list"})"));
+            check (pl["mode"].toString() == "pattern", "Pattern mode engages (" + pl["mode"].toString() + ")");
+            call ("pattern", R"({"action":"mode","mode":"song"})");
+        }
+        std::cout << "  (1.8 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)\n";
+    }
+
+    std::cout << "\n-- 1.8.1: instruments, factory content, effects, kits, Cut Lab --\n";
+    {
+        auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sqm181"); dir.createDirectory();
+        auto cents = [] (double hz, double target) { return 1200.0 * std::log2 (hz / target); };
+        auto readBuf = [] (const juce::File& f, double& sr) { juce::AudioBuffer<float> b; juce::AudioFormatManager fm; fm.registerBasicFormats();
+                                                             if (auto r = std::unique_ptr<juce::AudioFormatReader> (fm.createReaderFor (f))) { b.setSize ((int) r->numChannels, (int) r->lengthInSamples); r->read (&b, 0, (int) r->lengthInSamples, 0, true, true); sr = r->sampleRate; } return b; };
+        auto rmsDb = [] (const juce::AudioBuffer<float>& b, int n) { double s = 0; for (int c = 0; c < b.getNumChannels(); ++c) { auto* p = b.getReadPointer (c); for (int i = 0; i < n; ++i) s += (double) p[i] * p[i]; } return juce::Decibels::gainToDecibels ((float) std::sqrt (s / juce::jmax (1.0, (double) n * b.getNumChannels())), -200.0f); };
+        auto diffDb = [] (const juce::AudioBuffer<float>& a, const juce::AudioBuffer<float>& b, int n) { double s = 0, r = 0; for (int c = 0; c < juce::jmin (a.getNumChannels(), b.getNumChannels()); ++c) { auto* p = a.getReadPointer (c); auto* q = b.getReadPointer (c); for (int i = 0; i < n; ++i) { s += (double) (p[i] - q[i]) * (p[i] - q[i]); r += (double) q[i] * q[i]; } } return 10.0 * std::log10 (juce::jmax (1.0e-30, s) / juce::jmax (1.0e-30, r)); };
+        auto startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest 181"})");
+        call ("set_tempo", R"({"bpm":120})");
+
+        // 1. every 1.8.1 instrument: 40+ presets, parameters reachable, sounds; the pitched ones play A4 = 440 Hz
+        {
+            struct Inst { const char* name; bool pitched; int note; const char* preset; };
+            const Inst insts[] = { { "Hexwing", true, 69, nullptr }, { "Toxin FM", true, 69, nullptr }, { "Lantern", true, 69, nullptr }, { "Lantern Exo", true, 69, nullptr },
+                                   { "Larva Bass", true, 69, nullptr }, { "Thorn Bass", true, 57, nullptr }, { "Carapace", false, 36, nullptr }, { "Live Drum Synth", false, 36, nullptr },
+                                   { "Drum Pad Model", false, 48, nullptr }, { "Thump Live", false, 36, nullptr }, { "Chrysalis 2", false, 38, nullptr }, { "Chrysalis SF", false, 38, nullptr },
+                                   { "Mandible", false, 36, nullptr }, { "Mandible Lite", false, 36, nullptr }, { "Pollen", true, 69, nullptr } };
+            for (auto& in : insts)
+            {
+                juce::String nm (in.name), tr ("T " + nm);
+                call ("add_track", "{\"kind\":\"instrument\",\"name\":\"" + tr + "\",\"instrument\":\"" + nm + "\"}");
+                auto pl = juce::JSON::parse (call ("instrument", "{\"action\":\"preset\",\"track\":\"" + tr + "\",\"list\":true}"));
+                const int np = pl["presets"].size();
+                check (np >= 40, nm + ": " + juce::String (np) + " factory presets");
+                auto pr = juce::JSON::parse (call ("instrument", "{\"action\":\"parameters\",\"track\":\"" + tr + "\"}"));
+                check (pr["parameters"].size() >= 7, nm + ": " + juce::String (pr["parameters"].size()) + " parameters reachable");
+                if (nm == "Lantern Exo" || nm == "Pollen") call ("instrument", "{\"action\":\"set\",\"track\":\"" + tr + "\",\"params\":[{\"param\":\"Sub Level\",\"real\":0}]}");   // the sub oscillator sits an octave under by design
+                call ("create_midi_clip", "{\"track\":\"" + tr + "\",\"length_bars\":1,\"notes\":[{\"pitch\":" + juce::String (in.note) + ",\"start_beat\":0,\"length_beats\":3}]}");
+                auto f = dir.getChildFile ("i181-" + nm.removeCharacters (" ") + ".wav");
+                call ("bounce", "{\"path\":\"" + f.getFullPathName() + "\",\"tracks\":[\"" + tr + "\"],\"start_bar\":1,\"end_bar\":2,\"bit_depth\":32}");
+                const float pk = peakOf (f);
+                if (in.pitched)
+                {
+                    const double target = 440.0 * std::pow (2.0, (in.note - 69) / 12.0), hz = pitchAt (f, 0.6, 0.15);
+                    check (pk > 0.02f && pk < 1.01f && std::abs (nm == "Lantern" ? std::remainder (cents (hz, target), 1200.0) : cents (hz, target)) < (nm == "Lantern" ? 20.0 : 12.0), nm + " sounds and plays "   /* Lantern: two drifting vintage oscillators - allow drift, and fold the detector's octave lock */ + juce::String (hz, 1) + " Hz for " + juce::String (target, 1) + " (" + juce::String (cents (hz, target), 1) + " ct), peak " + juce::String (juce::Decibels::gainToDecibels (pk), 1) + " dBFS");
+                }
+                else check (pk > 0.02f && pk < 1.01f, nm + " sounds, peak " + juce::String (juce::Decibels::gainToDecibels (pk), 1) + " dBFS");
+                call ("delete_track", "{\"track\":\"" + tr + "\"}");
+            }
+        }
+
+        // 2. the samplers' factory content: kit 808s in tune, the SoundFont bank plays the same as the zones, SFZ import maps and tunes
+        {
+            call ("add_track", R"({"kind":"instrument","name":"C2","instrument":"Chrysalis 2"})");
+            call ("instrument", R"({"action":"preset","track":"C2","name":"808 | Neon Trap 808"})");
+            call ("create_midi_clip", R"({"track":"C2","length_bars":1,"notes":[{"pitch":45,"start_beat":0,"length_beats":3}]})");
+            auto f1 = dir.getChildFile ("c2-808.wav"); call ("bounce", "{\"path\":\"" + f1.getFullPathName() + "\",\"tracks\":[\"C2\"],\"start_bar\":1,\"end_bar\":2,\"bit_depth\":32}");
+            const double hz = pitchAt (f1, 0.5, 0.2);
+            check (std::abs (cents (hz, 110.0)) < 10.0, "Chrysalis 2: the kit 808 is pitch-detected and plays A2 = " + juce::String (hz, 1) + " Hz (" + juce::String (cents (hz, 110.0), 1) + " ct)");
+            call ("add_track", R"({"kind":"instrument","name":"CSF","instrument":"Chrysalis SF"})");
+            call ("instrument", R"({"action":"preset","track":"CSF","name":"808 | Neon Trap 808"})");
+            call ("create_midi_clip", R"({"track":"CSF","length_bars":1,"notes":[{"pitch":45,"start_beat":0,"length_beats":3}]})");
+            auto f2 = dir.getChildFile ("csf-808.wav"); call ("bounce", "{\"path\":\"" + f2.getFullPathName() + "\",\"tracks\":[\"CSF\"],\"start_bar\":1,\"end_bar\":2,\"bit_depth\":32}");
+            double sr1 = 0, sr2 = 0; auto b1 = readBuf (f1, sr1), b2 = readBuf (f2, sr2); const int n = juce::jmin (b1.getNumSamples(), b2.getNumSamples());
+            const double d = diffDb (b2, b1, n);
+            check (n > 0 && d < -40.0, "Chrysalis SF: the factory SoundFont (written by Squelchmoth, read back) plays the same 808 as the zones (difference " + juce::String (d, 1) + " dB - 16-bit bank)");
+            auto bank = SqFactory::kitBank (5); auto ps = SqSynth::SqChrysalis2Plugin::sf2Presets (bank);
+            check (ps.size() == 2 && ps[0].name == "Neon Trap" && ps[1].name == "Neon Trap 808", "factory SF2 bank: " + juce::String (ps.size()) + " presets (" + (ps.size() > 0 ? ps[0].name : juce::String()) + ")");
+            // SFZ: a 220 Hz tone keyed at A3 plays A4 from note 69
+            auto tone = dir.getChildFile ("sfz tone.wav");
+            {
+                juce::AudioBuffer<float> t (1, 44100 * 2); for (int i = 0; i < t.getNumSamples(); ++i) t.setSample (0, i, 0.5f * (float) std::sin (2.0 * juce::MathConstants<double>::pi * 220.0 * i / 44100.0));
+                juce::WavAudioFormat wav; tone.deleteFile();
+                if (auto st = std::unique_ptr<juce::FileOutputStream> (tone.createOutputStream())) if (auto w = std::unique_ptr<juce::AudioFormatWriter> (wav.createWriterFor (st.release(), 44100.0, 1, 24, {}, 0))) w->writeFromAudioSampleBuffer (t, 0, t.getNumSamples());
+            }
+            auto sfz = dir.getChildFile ("tone.sfz"); sfz.replaceWithText ("<group> ampeg_release=0.2\n<region> sample=sfz tone.wav pitch_keycenter=57 lokey=0 hikey=127\n");
+            auto imp = juce::JSON::parse (call ("sampler", "{\"action\":\"import\",\"track\":\"C2\",\"file\":\"" + sfz.getFullPathName() + "\"}"));
+            call ("create_midi_clip", R"({"track":"C2","start_bar":3,"length_bars":1,"notes":[{"pitch":69,"start_beat":0,"length_beats":3}]})");
+            auto f3 = dir.getChildFile ("c2-sfz.wav"); call ("bounce", "{\"path\":\"" + f3.getFullPathName() + "\",\"tracks\":[\"C2\"],\"start_bar\":3,\"end_bar\":4,\"bit_depth\":32}");
+            const double hz3 = pitchAt (f3, 0.5, 0.2);
+            check (std::abs (cents (hz3, 440.0)) < 5.0, "SFZ import: a tone keyed at A3 plays A4 = " + juce::String (hz3, 1) + " Hz (" + juce::String (cents (hz3, 440.0), 1) + " ct)");
+            call ("delete_track", R"({"track":"C2"})"); call ("delete_track", R"({"track":"CSF"})");
+        }
+
+        // 3. Mandible: a factory genre loop slices at its hits and the slice dump plays the loop back
+        {
+            call ("set_tempo", R"({"bpm":140})");
+            call ("add_track", R"({"kind":"instrument","name":"MB","instrument":"Mandible"})");
+            call ("instrument", R"({"action":"preset","track":"MB","name":"Trap | Neon Trap Loop"})");
+            auto sl = juce::JSON::parse (call ("slicer", R"({"action":"slices","track":"MB"})"));
+            const int ns = sl["slices"].size();
+            check (ns >= 12 && (double) sl["bpm"] == 140.0, "Mandible: the factory Trap loop (140 BPM) slices into " + juce::String (ns) + " hits");
+            call ("slicer", R"({"action":"dump","track":"MB"})");
+            auto fm = dir.getChildFile ("mand-dump.wav"); call ("bounce", "{\"path\":\"" + fm.getFullPathName() + "\",\"tracks\":[\"MB\"],\"start_bar\":1,\"end_bar\":3,\"bit_depth\":32}");
+            double srA = 0, srB = 0; auto y = readBuf (fm, srA); auto x = readBuf (juce::File (sl["file"].toString()), srB);
+            if (srA == srB)
+            {
+                const double d = diffDb (y, x, juce::jmin (x.getNumSamples(), y.getNumSamples()) - 64);
+                check (d < -60.0, "Mandible: the slice dump plays the loop back sample-exact (difference " + juce::String (d, 1) + " dB)");
+            }
+            else
+            {
+                const double lx = rmsDb (x, x.getNumSamples()), ly = rmsDb (y, y.getNumSamples());
+                check (std::abs (lx - ly) < 0.5, "Mandible: the slice dump plays the loop back at the session rate (" + juce::String (srB, 0) + " -> " + juce::String (srA, 0) + " Hz, level " + juce::String (ly - lx, 2) + " dB)");
+            }
+            call ("delete_track", R"({"track":"MB"})");
+            int loops = 0; for (auto& m : SqFactory::mandibleTable()) if (auto lf = FactoryLoops::render (m.genre, SqFactory::kitIndex (m.kits[0]), 0); lf.existsAsFile() && peakOf (lf) > 0.1f) ++loops;
+            check (loops == (int) SqFactory::mandibleTable().size(), "factory loops: " + juce::String (loops) + " genres render from the kits");
+            call ("set_tempo", R"({"bpm":120})");
+        }
+
+        // 4. the 1.8.1 effects on a drum loop
+        {
+            auto loopFile = FactoryLoops::render ("House", 13, 0);
+            call ("set_tempo", R"({"bpm":124})");
+            call ("add_track", R"({"kind":"audio","name":"FX"})");
+            call ("import_audio", "{\"track\":\"FX\",\"path\":\"" + loopFile.getFullPathName() + "\",\"start_bar\":1}");
+            auto fd = dir.getChildFile ("fx-dry.wav"); call ("bounce", "{\"path\":\"" + fd.getFullPathName() + "\",\"tracks\":[\"FX\"],\"start_bar\":1,\"end_bar\":3,\"bit_depth\":32}");
+            double sr = 0; auto dry = readBuf (fd, sr);
+            auto render = [&] (const juce::String& name) { auto f = dir.getChildFile ("fx-" + name + ".wav"); call ("bounce", "{\"path\":\"" + f.getFullPathName() + "\",\"tracks\":[\"FX\"],\"start_bar\":1,\"end_bar\":3,\"bit_depth\":32}"); double s2 = 0; return readBuf (f, s2); };
+            const int n = dry.getNumSamples() - 256;
+            call ("insert_plugin", R"({"track":"FX","plugin":"Time Weaver"})");
+            call ("set_plugin_parameters", R"({"track":"FX","slot":1,"params":[{"param":"timeSlot","real":1},{"param":"volSlot","real":1}]})");
+            auto live = render ("tw-live");
+            check (diffDb (live, dry, n) < -120.0, "Time Weaver: the Live slot passes the audio through untouched (" + juce::String (diffDb (live, dry, n), 1) + " dB)");
+            call ("plugin_presets", R"({"track":"FX","slot":1,"action":"load","index":0})");
+            auto ht = render ("tw-half");
+            check (diffDb (ht, dry, n) > -6.0 && std::abs (rmsDb (ht, n) - rmsDb (dry, n)) < 3.0, "Time Weaver: Half Time Drop rewrites the loop at the same level (" + juce::String (rmsDb (ht, n) - rmsDb (dry, n), 1) + " dB)");
+            call ("remove_plugin", R"({"track":"FX","slot":1})");
+            call ("insert_plugin", R"({"track":"FX","plugin":"Larva Filter"})");
+            auto lf = render ("larva");
+            check (diffDb (lf, dry, n) > -20.0 && std::abs (rmsDb (lf, n) - rmsDb (dry, n)) < 4.0, "Larva Filter: the stepped filter moves the sound and keeps the level (" + juce::String (rmsDb (lf, n) - rmsDb (dry, n), 1) + " dB)");
+            call ("remove_plugin", R"({"track":"FX","slot":1})");
+            call ("insert_plugin", R"({"track":"FX","plugin":"Apex Triad"})");
+            call ("set_plugin_parameters", R"({"track":"FX","slot":1,"params":[{"param":"inputGain","real":12},{"param":"ceiling","real":-1}]})");
+            auto ax = render ("triad");
+            const float pk = ax.getMagnitude (0, ax.getNumSamples());
+            check (juce::Decibels::gainToDecibels (pk) <= -0.95f && rmsDb (ax, n) > rmsDb (dry, n) + 3.0, "Apex Triad: +12 dB into a -1 dB ceiling: peak " + juce::String (juce::Decibels::gainToDecibels (pk), 2) + " dBFS, " + juce::String (rmsDb (ax, n) - rmsDb (dry, n), 1) + " dB louder");
+            call ("delete_track", R"({"track":"FX"})");
+            call ("set_tempo", R"({"bpm":120})");
+        }
+
+        // 5. the 27 kits: every new kit renders all twelve sounds
+        {
+            int good = 0;
+            for (int k = 17; k < DrumKit::numKits; ++k) { auto files = DrumKit::ensureKit (*session, k); int ok = 0; for (auto& f : files) if (peakOf (f) > 0.05f) ++ok; if (ok == DrumKit::numSounds) ++good; }
+            check (DrumKit::numKits == 27 && good == 10, "kits: " + juce::String (DrumKit::numKits) + " kits, the ten new ones render all twelve sounds (" + juce::String (good) + "/10)");
+        }
+
+        // 5b. Burn to MIDI: an arpeggiated chord becomes real notes that sound exactly the same with the arpeggiator off
+        {
+            call ("new_session", R"({"name":"Selftest Burn"})");
+            call ("set_tempo", R"({"bpm":120})");
+            call ("rack", R"({"action":"add","type":"instrument","what":"Mini Moth","name":"Arp"})");
+            call ("channel_settings", R"({"action":"set","channel":"Arp","arp":{"mode":"up","time":0.25,"range":2}})");
+            call ("rack", R"({"action":"notes","channel":"Arp","notes":[{"pitch":60,"start_beat":0,"length_beats":3},{"pitch":64,"start_beat":0,"length_beats":3},{"pitch":67,"start_beat":0,"length_beats":3}]})");
+            call ("pattern", R"({"action":"place","pattern":1,"bar":1,"repeats":1})");
+            auto fa = dir.getChildFile ("burn-before.wav"), fb = dir.getChildFile ("burn-after.wav");
+            call ("bounce", "{\"path\":\"" + fa.getFullPathName() + "\",\"tracks\":[\"Arp\"],\"start_bar\":1,\"end_bar\":3,\"bit_depth\":32}");
+            auto br = juce::JSON::parse (call ("rack", R"({"action":"burn_to_midi","channel":"Arp"})"));
+            call ("bounce", "{\"path\":\"" + fb.getFullPathName() + "\",\"tracks\":[\"Arp\"],\"start_bar\":1,\"end_bar\":3,\"bit_depth\":32}");
+            double s1 = 0, s2 = 0; auto ba = readBuf (fa, s1), bb = readBuf (fb, s2); const int n = juce::jmin (ba.getNumSamples(), bb.getNumSamples());
+            const double d = diffDb (bb, ba, n);
+            check ((int) br["notes_in"] == 3 && (int) br["notes_out"] > 6 && rmsDb (ba, n) > -60.0 && d < -60.0, "Burn to MIDI: 3 held notes -> " + br["notes_out"].toString() + " arpeggiated notes that play the same with the arpeggiator off (" + juce::String (d, 1) + " dB)");
+        }
+
+        // 6. Cut Lab from Claude: info, normalise, reverse twice, cut, stretch
+        {
+            auto src = FactoryLoops::render ("Boom Bap", 12, 0);
+            auto work = dir.getChildFile ("cutlab work.wav"); src.copyFileTo (work);
+            auto info = juce::JSON::parse (call ("cut_lab", "{\"action\":\"info\",\"file\":\"" + work.getFullPathName() + "\"}"));
+            const double secs = (double) info["seconds"];
+            auto nrm = juce::JSON::parse (call ("cut_lab", "{\"action\":\"edit\",\"file\":\"" + work.getFullPathName() + "\",\"in_place\":true,\"ops\":[{\"op\":\"normalise\",\"peak_db\":-1}]}"));
+            check (std::abs ((double) nrm["peak_db"] + 1.0) < 0.05, "Cut Lab: normalise to -1 dBFS -> " + nrm["peak_db"].toString().substring (0, 6) + " dBFS");
+            double s0 = 0, s1 = 0; auto before = readBuf (work, s0);
+            call ("cut_lab", "{\"action\":\"edit\",\"file\":\"" + work.getFullPathName() + "\",\"in_place\":true,\"ops\":[{\"op\":\"reverse\"},{\"op\":\"reverse\"}]}");
+            auto after = readBuf (work, s1);
+            check (diffDb (after, before, before.getNumSamples()) < -120.0, "Cut Lab: reverse twice gives back the original exactly");
+            auto cut = juce::JSON::parse (call ("cut_lab", "{\"action\":\"edit\",\"file\":\"" + work.getFullPathName() + "\",\"output\":\"cutlab cut.wav\",\"ops\":[{\"op\":\"cut\",\"start_seconds\":0.5,\"end_seconds\":1.0}]}"));
+            check (std::abs ((double) cut["seconds"] - (secs - 0.5)) < 0.001, "Cut Lab: cut half a second -> " + juce::String ((double) cut["seconds"], 3) + " s of " + juce::String (secs, 3));
+            auto st = juce::JSON::parse (call ("cut_lab", "{\"action\":\"edit\",\"file\":\"" + work.getFullPathName() + "\",\"output\":\"cutlab stretch.wav\",\"ops\":[{\"op\":\"stretch\",\"ratio\":2.0}]}"));
+            check (std::abs ((double) st["seconds"] / secs - 2.0) < 0.02, "Cut Lab: stretch x2 -> " + juce::String ((double) st["seconds"], 3) + " s (pitch kept)");
+        }
+        // 7. Editions (1.9): the Demo cannot reach anything locked - menus, Claude, sessions, kits, windows, exports, tracks
+        {
+            std::cout << "  -- editions --\n";
+            call ("new_session", R"({"name":"Selftest Editions"})");
+            call ("add_track", R"({"kind":"instrument","name":"Hex","instrument":"Hexwing"})");
+            call ("insert_plugin", R"({"track":"Hex","plugin":"Moth Tune"})");
+            auto saved = session->getFile();
+            call ("save_session", "{}");
+            const auto complete = Edition::owned();
+            Edition::owned() = Edition::Owned {};   // Demo
+            auto r1 = call ("insert_plugin", R"({"track":"Hex","plugin":"Apex Limiter"})", false);
+            check (r1.contains ("locked") && r1.contains ("Mastering Suite"), "Demo: a pack plug-in is refused with the pack that unlocks it");
+            auto r2 = call ("insert_plugin", R"({"track":"Hex","plugin":"Aurora Verb"})", false);
+            check (r2.contains ("locked") && r2.contains ("Squelchmoth"), "Demo: a core plug-in is refused");
+            auto r3 = call ("insert_plugin", R"({"track":"Hex","plugin":"AW Tape Delay"})", false);
+            check (r3.contains ("locked"), "Demo: the AirWindows collection is locked");
+            call ("insert_plugin", R"({"track":"Hex","plugin":"Prism EQ"})");
+            auto r4 = call ("add_track", R"({"kind":"instrument","name":"Lan","instrument":"Lantern"})", false);
+            check (r4.contains ("locked") || r4.contains ("Instrument Collection"), "Demo: a locked instrument can't be added");
+            auto r5 = call ("mastering_status", "{}", false);
+            check (r5.contains ("Squelchmoth"), "Demo: the Mastering window's tools are locked");
+            call ("cut_lab", R"({"action":"info","file":"/nonexistent.wav"})", false);
+            auto r6 = call ("export_stems", "{}", false);
+            check (r6.contains ("locked") || r6.contains ("part of Squelchmoth"), "Demo: stem export is locked");
+            check (! Edition::isKitAllowed (6) && Edition::isKitAllowed (2) && ! Edition::isKitAllowed (20), "Demo: kits 1-5 only; kits 18-27 need the Beat Lab Expansion");
+            // a session made with locked plug-ins opens with placeholders that keep every setting
+            call ("open_session", "{\"path\":\"" + saved.getFullPathName() + "\"}");
+            auto* hex = session->findTrack ("Hex");
+            juce::StringArray kinds; bool sawLocked = false, typesKept = true;
+            if (hex) for (auto p : hex->pluginList.getPlugins()) { kinds.add (p->getName()); if (dynamic_cast<SqLockedPlugin*> (p)) sawLocked = true; }
+            if (hex) for (auto p : hex->pluginList.getPlugins()) if (dynamic_cast<SqLockedPlugin*> (p) && p->getPluginType() != "sqmHexwing" && p->getPluginType() != "sqmTune") typesKept = false;
+            check (sawLocked && typesKept, "Demo: a session with locked plug-ins loads them as Locked placeholders that keep their type (" + kinds.joinIntoString (", ") + ")");
+            call ("create_midi_clip", R"({"track":"Hex","length_bars":1,"notes":[{"pitch":60,"start_beat":0,"length_beats":2}]})");
+            auto fz = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sqm-locked.wav"); fz.deleteFile();
+            call ("bounce", "{\"path\":\"" + fz.getFullPathName() + "\",\"tracks\":[\"Hex\"],\"start_bar\":1,\"end_bar\":2,\"bit_depth\":32}", false);   // a silent render may be refused as "no audio"
+            check (! fz.existsAsFile() || peakOf (fz) < 1.0e-6f, "Demo: a locked instrument renders silence");
+            call ("save_session", "{}");
+            // 16 tracks
+            call ("new_session", R"({"name":"Selftest Demo Tracks"})");
+            int made = 0; for (int i = 0; i < 18; ++i) if (! call ("add_track", R"({"kind":"audio"})", session->getTracks().size() < Edition::demoMaxTracks).contains ("Demo")) ++made;
+            check (session->getTracks().size() == Edition::demoMaxTracks, "Demo: 16 tracks, the 17th is refused (" + juce::String (session->getTracks().size()) + ")");
+            // unlocking brings the real plug-ins back with their settings
+            Edition::owned() = complete;
+            call ("open_session", "{\"path\":\"" + saved.getFullPathName() + "\"}");
+            hex = session->findTrack ("Hex"); bool real = hex != nullptr;
+            if (hex) for (auto p : hex->pluginList.getPlugins()) if (dynamic_cast<SqLockedPlugin*> (p)) real = false;
+            check (real && hex != nullptr && dynamic_cast<SqSynth::SqHexwingPlugin*> (Rack::instrumentOf (*hex)) != nullptr, "after unlocking, the saved session reopens with the real Hexwing and Moth Tune");
+            Edition::Owned vocalOnly; vocalOnly.core = true; vocalOnly.vocal = true; Edition::owned() = vocalOnly;
+            check (Edition::isTypeAllowed ("sqmTune") && ! Edition::isTypeAllowed ("sqmApexLim") && Edition::isTypeAllowed ("sqmAurora") && Edition::isTypeAllowed ("airwindows_tapedelay"), "Squelchmoth + Vocal Suite: core and the vocal pack, not the mastering pack");
+            Edition::owned() = complete;
+        }
+
+        std::cout << "  (1.8.1 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)\n";
+    }
+
+    auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));
+    check ((bool) unknown["result"]["isError"], "unknown tool reports isError");
+    auto badMethod = rpc ("foo/bar", juce::var());
+    check (badMethod["error"]["code"].toString() == "-32601", "unknown method -> -32601");
+
+    std::cout << "\n== " << passes << " passed, " << failures << " failed ==\n";
+
+    scannerOwner.reset();   // the scanner saves the plug-in list and must go before the engine
+    session.reset();
+    engine.reset();
+    return failures == 0 ? 0 : 1;
+}

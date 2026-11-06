@@ -1,0 +1,79 @@
+SQUELCHMOTH END USER LICENCE AGREEMENT
+Version 1.9 - 2026
+
+Squelchmoth is created and owned by Jamar Stewart ("the Licensor").
+Copyright (c) 2026 Jamar Stewart. All rights reserved.
+
+Please read this agreement before installing or using Squelchmoth ("the Software"). By clicking "Agree", installing,
+or using the Software you accept this agreement. If you do not accept it, click "Disagree" and do not use the Software.
+
+1. THE FREE DEMO
+Without a licence key the Software runs as Squelchmoth Demo, free of charge and with no time limit. The Demo includes
+a basic set of features: up to 16 tracks, the basic built-in instruments and effects, the first five sound kits,
+saving sessions and bouncing a stereo mix. Everything else - the full program and the add-on packs - is locked until
+the matching licence key is entered. Sessions that use locked plug-ins open with those plug-ins kept as "Locked"
+placeholders that keep their settings, so nothing in your work is lost.
+
+2. LICENCE GRANT
+Squelchmoth is sold as products: Squelchmoth (the full program), add-on packs (Vocal Suite, Mastering Suite,
+Instrument Collection, Beat Lab Expansion, Creative FX) and Squelchmoth Complete (the program and every pack). When
+you buy a product you receive a licence key for it. The Licensor grants you a personal, non-exclusive,
+non-transferable, worldwide licence to use the features that key unlocks, on up to two (2) computers that you own or
+control, used by one person at a time. Add-on packs work in every edition, including the Demo.
+Music, recordings, mixes, stems, MIDI and sessions you make with the Software are yours: the Licensor claims no
+ownership of them and you may use them commercially without any royalty or credit.
+
+3. RESTRICTIONS
+You may not: (a) share, publish, sell or give away your licence key; (b) rent, lease, sub-license or resell the
+Software; (c) remove or alter copyright notices, the "Powered by Tracktion Engine" credit or the Licensor's name;
+(d) circumvent, disable or tamper with the licence check, or use the Software's paid features without a valid key; or (e) reverse engineer, decompile or disassemble the Software except to
+the extent applicable law expressly permits this despite this limitation.
+
+4. BUILT-IN CONTENT
+The instruments, effects, sound kits, presets and artwork included with the Software may be used in your music,
+including commercial releases, without further permission. You may not redistribute them on their own (for example as
+a sample pack, preset bank or plug-in) or use them to build a competing product.
+
+5. THIRD-PARTY COMPONENTS
+The Software is powered by Tracktion Engine and made with JUCE, used under licence from their owners, and includes
+open-source components listed in "Third-Party Notices" (in the app: Help > Third-Party Notices). Those components
+remain under their own licences, which this agreement does not change. Third-party plug-ins you load are governed by
+their own licences.
+
+6. CLAUDE CONNECTION
+The Software can optionally be connected to Claude (an AI assistant made by Anthropic) so that Claude can operate it
+for you. The connection is off until you turn it on, uses a private link you control, and can be turned off at any
+time. Your use of Claude is governed by Anthropic's own terms. See the Privacy Policy for what is sent.
+
+7. UPDATES AND SUPPORT
+Updates within the same major version are included with your licence. The Licensor is not obliged to provide updates
+or support but intends to fix reported problems.
+
+8. PURCHASES AND REFUNDS
+Purchases are processed by the Licensor's online store provider (Payhip), which collects payment and any sales tax or
+VAT and emails your key. Try the free Demo before you buy: it runs the same program on your computer. If a product
+you bought does not work on your computer, contact the Licensor within 30 days of purchase for a refund. A refund
+cancels the licence key, and cancelled or publicly shared keys stop working in later updates.
+
+9. TERMINATION
+This licence ends automatically if you break this agreement. When it ends you must stop using the Software and delete
+all copies. Sections 2 (ownership of your work), 9, 10, 11 and 12 survive termination.
+
+10. NO WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. Keep backups of your work: Squelchmoth's
+Auto-Save and Session File Backups help, but no software can guarantee against data loss.
+
+11. LIMITATION OF LIABILITY
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE LICENSOR IS NOT LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL OR
+CONSEQUENTIAL DAMAGES, OR LOSS OF DATA, PROFITS OR BUSINESS, ARISING FROM THE USE OF OR INABILITY TO USE THE SOFTWARE.
+THE LICENSOR'S TOTAL LIABILITY IS LIMITED TO THE AMOUNT YOU PAID FOR THE LICENCE. Some places do not allow these
+limits; in those places they apply only as far as the law allows. Nothing here limits rights you have as a consumer
+that cannot be waived.
+
+12. GENERAL
+This agreement is the whole agreement between you and the Licensor about the Software. If any part is found
+unenforceable, the rest stays in force. This agreement is governed by the laws of the United States and of the state
+in which the Licensor resides, without regard to conflict-of-law rules.
+
+Contact: Jamar Stewart, support@squelchmoth.com, https://squelchmoth.com/support.html (in the app: Help > Licences and Upgrades).

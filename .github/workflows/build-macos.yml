@@ -1,0 +1,133 @@
+name: Build Squelchmoth (macOS + Windows)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  TRACKTION_COMMIT: 66417a3cd4aeb206d42056daecc73a1b20684bdc
+
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Tracktion Engine + JUCE (pinned)
+        run: |
+          git clone https://github.com/Tracktion/tracktion_engine.git tracktion_engine
+          cd tracktion_engine
+          git checkout "$TRACKTION_COMMIT"
+          git submodule update --init --depth 1 modules/juce
+          git apply ../patches-tracktion.diff
+
+      - name: Install Ninja
+        run: brew install ninja
+
+      - name: Configure (universal binary, runs on macOS 11 Big Sur and newer)
+        run: |
+          cmake -G Ninja -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Verify it targets Big Sur (minos 11.0) on Intel and Apple Silicon
+        run: |
+          APP=build/Squelchmoth_artefacts/Release/Squelchmoth.app
+          BIN="$APP/Contents/MacOS/Squelchmoth"
+          lipo -info "$BIN"
+          lipo -info "$BIN" | grep -q x86_64
+          for arch in x86_64 arm64; do
+            MINOS=$(vtool -arch $arch -show-build "$BIN" | awk '/minos/ {print $2}')
+            echo "$arch minos=$MINOS"
+            test "$MINOS" = "11.0"
+          done
+
+      - name: Self-test (drives the DAW through its Claude/MCP layer)
+        run: build/Squelchmoth_artefacts/Release/Squelchmoth.app/Contents/MacOS/Squelchmoth --selftest
+
+      - name: Bundle cloudflared (universal) for the Claude link
+        run: |
+          APP=build/Squelchmoth_artefacts/Release/Squelchmoth.app
+          V=2025.6.0
+          curl -fsSL -o amd.tgz https://github.com/cloudflare/cloudflared/releases/download/$V/cloudflared-darwin-amd64.tgz
+          curl -fsSL -o arm.tgz https://github.com/cloudflare/cloudflared/releases/download/$V/cloudflared-darwin-arm64.tgz
+          mkdir a b && tar -xzf amd.tgz -C a && tar -xzf arm.tgz -C b
+          lipo -create a/cloudflared b/cloudflared -output "$APP/Contents/Resources/cloudflared"
+          chmod +x "$APP/Contents/Resources/cloudflared"
+          cp docs/SETUP.md docs/PLUGINS.md docs/BUSINESS.md docs/PARITY.md "docs/START HERE.txt" "$APP/Contents/Resources/"
+
+      - name: Sign (ad-hoc) and package DMG
+        run: |
+          APP=build/Squelchmoth_artefacts/Release/Squelchmoth.app
+          codesign --force --deep --sign - "$APP"
+          mkdir dmg && cp -R "$APP" dmg/ && ln -s /Applications dmg/Applications
+          cp "docs/START HERE.txt" dmg/
+          hdiutil create -volname Squelchmoth -srcfolder dmg -ov -format UDZO Squelchmoth.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Squelchmoth-macOS
+          path: Squelchmoth.dmg
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Tracktion Engine + JUCE (pinned)
+        shell: bash
+        run: |
+          git clone https://github.com/Tracktion/tracktion_engine.git tracktion_engine
+          cd tracktion_engine
+          git checkout "$TRACKTION_COMMIT"
+          git submodule update --init --depth 1 modules/juce
+          git apply ../patches-tracktion.diff
+
+      - name: Configure (Visual Studio, x64)
+        run: cmake -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Self-test
+        shell: bash
+        run: build/Squelchmoth_artefacts/Release/Squelchmoth.exe --selftest
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir pkg && cp build/Squelchmoth_artefacts/Release/Squelchmoth.exe pkg/
+          curl -fsSL -o pkg/cloudflared.exe https://github.com/cloudflare/cloudflared/releases/download/2025.6.0/cloudflared-windows-amd64.exe
+          cp "docs/START HERE.txt" docs/SETUP.md docs/PLUGINS.md pkg/
+          cd pkg && 7z a ../Squelchmoth-Windows.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Squelchmoth-Windows
+          path: Squelchmoth-Windows.zip
+
+  release:
+    needs: [mac, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Publish as the "latest" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Squelchmoth (latest build)
+          prerelease: false
+          make_latest: true
+          files: |
+            out/Squelchmoth-macOS/Squelchmoth.dmg
+            out/Squelchmoth-Windows/Squelchmoth-Windows.zip

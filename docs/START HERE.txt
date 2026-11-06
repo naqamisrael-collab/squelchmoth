@@ -1,0 +1,314 @@
+SQUELCHMOTH - quick start
+=========================
+Created and owned by Jamar Stewart.
+
+INSTALL ON WINDOWS (Windows 10 or 11, 64-bit)
+1. Unzip Squelchmoth-Windows.zip and double-click "Squelchmoth-Setup".
+2. If Windows shows "Windows protected your PC", click "More info", then "Run anyway". (Windows asks this
+   because the installer is new and not yet widely downloaded.)
+3. Click Yes to allow the installer, then Next > I Agree > Install > Finish. Squelchmoth opens, and it is in
+   the Start menu and on the desktop.
+4. If Windows Firewall asks about Squelchmoth or cloudflared, click Allow (only needed for the Claude link).
+5. Audio: Setup > Playback Engine. Pick your interface under "Windows Audio" (WASAPI). Your VST3 plug-ins in
+   C:\Program Files\Common Files\VST3 are found automatically.
+6. Uninstall any time from Windows Settings > Apps > Installed apps > Squelchmoth. Your sessions stay.
+
+INSTALL ON MAC
+0. Intel Mac: use Squelchmoth-Mac-Intel.zip. M1/M2/M3/M4 Mac: Squelchmoth-Mac-AppleSilicon.zip.
+   Works on macOS 11 Big Sur and newer.
+1. Double-click the zip. Inside: Squelchmoth.app, "Install Squelchmoth", "Uninstall Squelchmoth" and the guides.
+2. RIGHT-click (or Control-click) "Install Squelchmoth" and choose Open, then click Open again.
+   (macOS asks this once because the app is not from the App Store. If there is no Open button:
+   click OK, open System Preferences > Security & Privacy > General and click "Open Anyway".)
+   It copies Squelchmoth into Applications and offers to open it. Or simply drag Squelchmoth.app into
+   Applications yourself and right-click > Open it the first time.
+3. An older version is replaced; your sessions, settings and licence key are kept.
+4. Open Squelchmoth from Applications or Launchpad.
+5. If macOS asks for microphone access, click OK (needed to record).
+Squelchmoth works completely offline: recording, editing, mixing, plugins, kits, mastering, the
+Demo and your licence keys never need the internet. Only the Claude connection needs a connection, and
+it simply waits (status bar: "Offline") until you are online again.
+
+UNINSTALL
+- Open "Uninstall Squelchmoth" in Applications (or Help > Uninstall Squelchmoth...). It asks for your Mac
+  password once and removes the app, its settings, caches and logs. Your sessions are kept unless you choose
+  "Remove Everything" (then they go to the Trash, so you can still get them back).
+
+LICENCE
+- Without a key Squelchmoth is the free Demo, with no time limit: 16 tracks, the basic instruments and
+  effects, kits 1-5, save and bounce your mix.
+- To unlock what you bought: Help > Licences and Upgrades... > paste the key from your purchase email (starts
+  with SQM2-; spaces and line breaks are ignored) > Activate. Enter one key per product; they stack.
+- Sessions that use plug-ins you don't own yet open with "Locked" panels that keep every setting. After
+  unlocking, click "Reopen session to unlock".
+- Buy at https://squelchmoth.com: Squelchmoth $189.99 (list $299.99), Squelchmoth Complete $349.99, or the
+  add-on packs (Vocal Suite, Mastering Suite, Instrument Collection, Beat Lab Expansion, Creative FX).
+
+FIRST LAUNCH
+- The Quick Start window offers New Session / Template / Open / Connect Claude / a 5-tip tour.
+- Your VST3 and Audio Unit plugins are found automatically on every launch (status bar shows
+  progress; Setup > Plugins Window for details and extra folders).
+- Pick your audio interface: Setup > Playback Engine.
+- Change the look (Edit/Mix window backgrounds, track colours, text size):
+  Setup > Preferences > Display.  Window > Color Palette recolours selected tracks and clips.
+
+CONNECT CLAUDE
+1. Click CLAUDE (top right). Five status lights show each step.
+2. Click CONNECT CLAUDE. Wait until the fourth light is green ("verified: the internet can
+   reach Squelchmoth").
+3. Click COPY LINK.
+4. Click OPEN CLAUDE CONNECTORS (claude.ai > Settings > Connectors). Click "Add custom connector".
+   Name: Squelchmoth. Paste the link. Leave sign-in / OAuth empty. Click Add.
+5. In a Claude chat click the + (tools) button > Connectors and turn Squelchmoth on. Ask away.
+
+IF IT DOES NOT CONNECT
+- Claude menu > Run connection self-test tells you which stage failed.
+- If the public link never verifies, your network blocks Cloudflare (port 7844): change the
+  "Link provider" menu in the CLAUDE panel to ngrok (free account, works everywhere, fixed
+  address) or Pinggy (no account). Then press CONNECT CLAUDE again and copy the new link.
+- Claude menu > Copy diagnostics for support, then paste into your Claude chat for exact help.
+- Custom connectors need a Claude Pro, Max, Team or Enterprise plan.
+
+The Cloudflare / Pinggy link changes every time you connect. After restarting Squelchmoth, edit
+the Squelchmoth connector on claude.ai and paste the new link (ngrok with a static domain never changes).
+
+MAKE A BEAT IN 60 SECONDS (the FL Studio way, 1.8)
+1. File > Make a Beat (or the Quick Start window's "Make a Beat" button). You get a new session, a kit in the
+   Channel Rack, the Beat page (EDIT - MIX - BEAT - CLAUDE on the transport; Cmd+Shift+B) and the rack open
+   on top as its own window (Cmd+6 brings it back any time).
+2. Click steps in the rack: Kick on 1, 5, 9, 13; Snare on 5 and 13; hats on every other step. Or press
+   BEAT STARTER, pick a genre, and it writes the groove for you. Press Space.
+3. Press + at the bottom of the rack, pick an instrument (Mothsynth 2, Venom, Mini Moth, Dial 10, Blossom 2,
+   Moth 808...). Click its channel button to open it and pick a preset.
+4. Press PIANO ROLL on the new channel, then Progression Tool: pick a key, a genre, click a progression,
+   Preview, Insert. (Or Chord stamp: pick a chord type, click a key.)
+5. In the Playlist (centre of the Beat page), click where you want the pattern - every channel gets a linked
+   Pattern Clip. Press + in the rack's pattern selector for Pattern 2, change it, place it after the first.
+   PAT loops the pattern you're editing; SONG plays the arrangement.
+6. File > Bounce Mix. Done. The same session is right there in the EDIT and MIX pages - every rack channel is a
+   track - and View > Layout > Edit + Mix shows both at once.
+Say it to Claude instead: "make me a 140 BPM drill beat with an 808 and a dark piano progression in F minor"
+- it uses rack, pattern, chords, instrument and bounce.
+
+NEW IN THIS BUILD (1.8.1)
+- Fifteen more instruments, each with its own faceplate and 40+ presets: Hexwing (six-operator FM / RM /
+  subtractive), Toxin FM (sequenced FM), Lantern and Lantern Exo (vintage polysynth / wavetable), Larva Bass (acid
+  bass + sequencer), Thorn Bass (electric bass model), Carapace, Live Drum Synth, Drum Pad Model and Thump Live (drum
+  synths), Chrysalis 2 and Chrysalis SF (multi-zone sampler, SFZ / SF2), Mandible and Mandible Lite (slicers) and
+  Pollen (11 preset packs). 27 instruments in all.
+- Factory sounds made by Squelchmoth itself: the kits and their in-tune 808s for the samplers (and as SoundFont
+  banks), 51 genre loops for the slicers.
+- Three effects: Time Weaver (time and volume slicer), Larva Filter (eight-stage stepped filter), Apex Triad
+  (three-band maximiser).
+- Cut Lab, the audio editor (Window > Cut Lab, or a clip's menu > Open in Cut Lab): edit, denoise, convolve, blur,
+  stretch, loop points and markers, Send to Timeline. Claude drives it with the cut_lab tool.
+- Ten new kits (27 in all): Memphis Tape, Plugg Pillow, Rage Red, Hyperpop Pink, Garage Swing, Grime Concrete,
+  Baile Funk, Bossa Brush, Gospel Live, Neo-Soul Dust.
+
+IN 1.8 ("Rack" - FL Studio's Channel Rack, Beat page, instruments and chords, Studio One pages)
+- The Beat page (Cmd+Shift+B): Browser (instruments, your plug-ins, kits, presets, your sample folders), the
+  Playlist, the selected instrument's panel, the Beat Mixer - and the Channel Rack opens automatically on top
+  as its own window (FL Studio's layout in Squelchmoth's theme). Every channel is a track in Edit and Mix.
+- Channel Rack (Window > Channel Rack, Cmd+6): pattern selector, SWING, STEPS, DIV, PAT / SONG, Graph Editor
+  (Cmd+K: Note, Velocity, Release, Fine Pitch, Pan, Mod X, Mod Y, Shift, Repeat, Chance, Gate), Keyboard Editor,
+  Beat Starter, channel menu (Fill, Euclid, rotate, dice, humanise, cut groups, zip, groups), 16 steps per bar.
+- Patterns are scenes of the whole rack; placing one puts linked Pattern Clips on every track (Make Unique
+  breaks one). Pattern mode loops, Song mode plays the timeline.
+- Channel Settings = the Rack Channel plug-in at slot 0 of each channel: levels, polyphony (mono / legato /
+  porta), time, tracking, cut groups, arpeggiator, echo, layer. Automatable, in the mixer, Claude-editable.
+- Eight new instruments, each with its own faceplate and 40+ presets: Mothsynth 2 (the flagship), Venom
+  (trap / drill, trance gate), Sim Moth, Mini Moth (under 1% CPU per voice), Thump (kick synth), Dial 10 (FM),
+  Blossom 2 (physical-model strings: koto, harp, sitar, bowed pads), Hive Pads (64-pad layered sampler, Load Kit,
+  slice to pads). All with mod matrix, macros, Eco / HD, voice modes. 331 presets, all in tune.
+- Piano roll: Chord Progression Tool (50+ progressions by genre, edit / nudge / reorder, preview, strum,
+  humanise, voice-leading, bass line), Chord stamp top-down and bottom-up, key labels (drum names from the kit;
+  right-click a key to rename).
+- Edit + Mix at the same time (View > Layout: stacked or side by side), tear-off windows for a second display,
+  Layouts 1-5 (Cmd+Opt+1-5) and presets. Cmd+= cycles the pages.
+- Claude: rack, pattern, channel_settings, instrument, chords and kits tools.
+
+IN 1.7 ("Session" - playback, the Edit window, autosave, and sale-ready)
+- Playback and gain staging fixed: a stereo file on a stereo track at 0 dB plays bit-exact (before, the Master
+  and stereo faders were 3-6 dB quiet). Mono tracks are really mono; an empty mono track that gets a stereo file
+  turns stereo by itself. Old sessions are corrected when you open them.
+- One clip sounds at a time on a track, like Pro Tools: a clip dropped, moved or recorded over another covers it.
+- Edit modes rebuilt to Pro Tools behaviour: Shuffle re-orders clips like tiles and ripples trims and deletes;
+  Shuffle Lock (Cmd-click Shuffle); Slip is free (Cmd-drag snaps); Spot opens the Spot dialog with Original and User
+  Time Stamps; Grid is Absolute or Relative (REL) and follows tempo and meter changes; Shift-click Grid combines it
+  with Shuffle or Slip (+GRID).
+- Rulers: Bars|Beats, Min:Secs, Timecode (23.976-30 fps, drop-frame), Samples, Tempo, Meter and Markers - click the
+  ruler names to show or hide them. Drag a tempo up or down, double-click to add tempos and meters.
+  Main and sub counters in any time format.
+- Transport: Stop goes back to where you started (INS FOLLOW turns that off); playing a selection stops at its
+  end; the playhead moves at screen refresh rate with Page, Continuous or No scrolling.
+- Tracks: Micro to Extreme heights and Fit to Window (Ctrl+Up / Ctrl+Down), a polarity (phase) button on every
+  track and mixer strip, Peak / Rectified / Power waveforms, and the Smart Tool crossfade zone (bottom corner where
+  two clips meet - drag for an equal-power crossfade that uses the hidden audio past the clip edges).
+- Auto-Save every 2 minutes (written safely, never while playing or recording) and Session File Backups every
+  3 minutes (keeps 20, plus a second copy on the system drive). File > Restore from Backup... and Back Up Now.
+- Mix Snapshots A-H (Window menu): store and recall whole mixes, Compare, Undo Recall, and glide between them.
+- Insert chains: save every plug-in on a track as one chain and load it on any track (click an insert slot).
+- File > Export Stems...: every track, the selected tracks or each folder as its own file, lined up, offline,
+  named your way ({n} {track} {session} {bpm} {date}). File > Bounce Mix... now has a full dialog.
+- Session Setup: session sample rate 44.1-192 kHz (the interface follows it), record bit depth (32-bit float
+  default), timecode rate and start, pan depth. New Session asks for the sample rate and bit depth
+  (16-bit, 24-bit or 32-bit float), and the status bar always shows them (e.g. "48.0 kHz / 32-bit float").
+- Help menu: Licence Agreement, Privacy Policy, Third-Party Notices and Uninstall Squelchmoth. The installer shows
+  the licence agreement and a Read Me, and puts "Uninstall Squelchmoth" next to the app in Applications.
+- Claude: new session_setup, tempo_map, rulers, track_height, polarity, backups, mix_snapshot, insert_chain,
+  export_stems and uninstall_info tools (114 tools in all). Claude can never uninstall the app.
+
+IN 1.6 (Moth Tune, the Apex Series, Molt and eight colour plug-ins)
+- Moth Tune (Signature > Pitch & Vocal): the flagship vocal tuner.
+  * Live engine (under 1 ms, for tracking and live use) or Studio engine (exact formants, for the mix).
+  * Retune Speed, Humanize, Flex Tune, Classic or Modern transitions, Vibrato Keep (natural vibrato is never
+    flattened), Natural Vibrato, Create Vibrato, Formant and Throat, Transpose, Detune.
+  * Key and scale (16 scales), click notes on the keyboard to remove or bypass them, Auto-Key follows the session key,
+    Detect Key, MIDI target notes from another track, and four harmony voices (interval, scale or MIDI).
+  * Graph mode: the Graph Mode button in Moth Tune opens the Graph window, finds the notes in the vocal, and lets you drag,
+    split, join and correct them one by one.
+- Moth Tune FX: 12 editable Motion patterns (step, glide, scale steps, latch, hold) plus a six-slot X/Y effects rack.
+- Molt (AudioSuite > Molt): the highest-quality offline time and pitch tool. Any length to the decimal (100.1 % for a
+  pull-down), any pitch to the cent, formant correction, Polyphonic / Monophonic / Fast, phase-coherent multi-track renders,
+  15 presets, audition first. The result replaces the clip as a new file - Undo brings the original back.
+- The Apex Series: Apex Dynamics (compress, expand, gate, duck, upward - with lookahead and a key input), Apex Limiter
+  (true-peak limiting with a full loudness meter and one-click streaming, Apple Music, podcast, broadcast, club and CD targets), Apex Multiband
+  (up to six bands, minimum or linear phase) and Apex Sub (pitch-tracked sub-octave).
+- Eight colour plug-ins: Aurora Verb (8 room types, freeze, ducking), Opto Leveler (with a real VU meter), Pulse EQ
+  (the classic boost-and-cut low end plus a mid section), Oil Can Delay, Silk Ladder, Halo Ring, Twelve Phase and
+  Bucket Brigade. 61 Signature plug-ins in all.
+- Every Signature plug-in window is more vivid: brighter, colour-graded artwork, glowing knobs and coloured panels.
+  (The Edit and Mix windows keep their look.)
+- Fixed: some readouts printed long decimals (for example "79.5298 Hz"); 0-10 dials at zero showed "0 %".
+- Claude: new moth_tune, moth_tune_fx, apex, studio_fx and molt tools.
+
+NEW IN 1.5 (Beat Lab: FL Studio-speed beats inside the Pro Tools workflow)
+- Beat Maker rebuilt as a full channel rack (Track > New > Drum Track, or double-click a drum clip):
+  * Beat Starter: pick one of 17 genres (trap, drill, boom bap, lo-fi, R&B, afrobeats, amapiano, reggaeton,
+    jersey club, house, techno, phonk, pop, drum & bass, dancehall, rock, funk / neo-soul) and click Roll beat.
+    Lock rows (L) you like and roll again. "Set tempo" also sets the genre's BPM.
+  * Per-step lanes: velocity, gate, chance (probability), shift (micro-timing) and repeat (rolls).
+    Double-click a step for a roll - 2, 3, 4, 6 or 8 hits - for trap and drill hats.
+  * Patterns A-H, a chain ("A A B A") that fills the clip, or loop the pattern you are editing.
+  * Fill every N, Euclidean rhythms, rotate, dice, humanise, per-row length (polyrhythm), swing (whole pattern
+    and per row), steps 4-128, 1/8 - 1/32 and triplet steps, mute / solo / lock, level and pan per sound.
+  * To Piano Roll turns the beat into a MIDI clip.
+- 12 new sound kits (17 in all): Neon Trap, Drill Smoke, Afro Sun, Amapiano Log (with the log drum), Dembow Heat,
+  Jersey Bounce, Phonk Cowbell, Boom Bap Crates, House Silk, Techno Steel, R&B Velvet, Rock Room.
+- MIDI Editor rebuilt: Draw / Select / Erase / Slice tools, key and scale highlighting with scale snap, chord stamps
+  (21 chords, inversions), chord progressions by mood with a bass / 808 line, quantise with swing, humanise, strum,
+  arpeggiate, flam, legato, 808 slides, chop, ghost notes, velocity lane, copy / paste / duplicate.
+- New instruments: Moth 808 (808 bass with real glides on overlapping notes, punch, click, sub, 4x-oversampled
+  drive) and Blossom (physical-model strings: pluck, hammer or bow; nylon to glass; guitar, violin, cello, koto,
+  kalimba, piano and glass bodies; 32 voices). Track > New > 808 Track / Strings Track.
+- Fixed: bouncing to a file name that already existed left the old audio inside the new file.
+- Claude: new beat_lab and midi_tools tools (99 tools in all).
+- About the Logic and FL Studio sounds: their instruments, loops and kits belong to Apple and Image-Line and can't
+  legally be shipped inside another program, so Squelchmoth's are its own, built from scratch.
+
+NEW IN 1.4.1 (a far more detailed EQ Frequency Chart)
+- Options > EQ Frequency Chart was rebuilt as a precise mixing reference (same look and colours):
+  * 40 instruments and voices in 8 families (drums & percussion, bass, guitars, keys & synths, strings &
+    orchestral, brass & woodwinds, vocals, mix & effects) - each with its note range (e.g. E1-G4, 41.2-392 Hz),
+    how far its harmonics reach, the usual high-pass / low-pass point (red shading), and colour-coded bands
+    for fundamentals, sweet spots (boost), problem zones (cut) and air / presence, every one labelled with its
+    exact range ("boxy 200-450 Hz", "click 2.5-5 kHz").
+  * A precise scale: all 31 ISO 1/3-octave centres (the bands of a graphic EQ: 20, 25, 31.5 ... 16k, 20k),
+    octave and decade lines stronger, the seven regions (Sub 20-60 Hz ... Brilliance / Air 6-20 kHz), and a
+    piano keyboard A0-C8 lined up with the frequencies (middle C 261.6 Hz, A4 = 440 Hz marked).
+  * Hover anywhere: exact frequency (312.4 Hz, 3.152 kHz), nearest note and cents, MIDI note, 1/3-octave
+    band, region, wavelength in metres / centimetres and feet / inches, period in ms, and the list of every
+    instrument band that lives at that frequency.
+  * Find: type an instrument (snare), a problem (mud, sibilance), a frequency (300, 4k, 3.15 kHz) or a note
+    (A4). Family filter, click a row to pin its notes, click the scale to pin a frequency, Esc / Clear resets.
+  * Save as PNG writes the whole chart - every row - at high resolution, ready to print.
+  * Claude: the new eq_reference tool answers the same questions ("what lives at 300 Hz?", "how do I EQ a
+    cello?") and can open the chart with the answer in Find.
+
+NEW IN 1.4 (Edit window faders, plug-in organising, plug-ins that stay)
+- Edit window volume like Pro Tools: every track header has a real fader (drag, double-click = 0 dB, click the
+  number to type) and a pan button. In the I/O column (View > Edit Window Views > I/O) each track shows its
+  volume and pan - click them for a pop-up fader or pan slider(s), Opt-click resets - and the small fader
+  button opens that track's Output window (fader, meter, pan, mute, solo, I/O; switch tracks at the top).
+- Track View selector (the "waveform" button on each track): show volume, pan, send levels or any plug-in
+  parameter as an automation line and draw it with the Pencil (F10).
+- The I (input monitor) button now works per track: turning it on for one track no longer lights it on every
+  other track. MIDI Thru plays the first selected instrument track, like Pro Tools.
+- Plug-in menus are organised like Pro Tools: EQ, Dynamics, Pitch Shift, Reverb, Delay, Modulation, Harmonic,
+  Dither, Sound Field, Noise Reduction, Channel Strip, Instrument... Waves and other shell plug-ins appear once
+  (no more Mono / Stereo / Mono-Stereo copies - the right one is used for the track), and a plug-in installed
+  as both VST3 and Audio Unit appears once. "Search plug-ins..." at the top of every plug-in menu finds any
+  plug-in by name, maker or category. Setup > Preferences > Plugins: organise by Category, Manufacturer,
+  Category and Manufacturer, or a flat list; choose VST3, Audio Unit or both.
+- Your plug-ins stay installed: the plug-in list is saved after every change (plus a backup that is restored
+  at launch), quitting during a scan no longer hides plug-ins, and a session that uses a plug-in not on the
+  list yet finds and loads it by itself - no manual rescan.
+
+EARLIER IN 1.3 - New Tracks, performance engine, crash protection
+- New Tracks window (Track > New..., Cmd+Shift+N, the + TRACK button in the Edit AND Mix windows, or right-click a
+  track name > New...): each row reads "Create [2] new [Stereo] [Audio Track] in [Samples] named [Vox]".
+  Mono or Stereo for Audio, Aux Input, Instrument, Master Fader and Routing Folder tracks - mono tracks are
+  truly mono. Track Presets are in the type list too. + adds a row, - removes it, drag the handle to re-order.
+  Keys: Cmd+Up/Down type, Cmd+Left/Right mono/stereo, Cmd+Opt+Up/Down timebase, Cmd+N add row. It remembers
+  the rows you used last time.
+- Quick New menu everywhere (right-click + TRACK, right-click empty space in the Edit or Mix window, Track >
+  Quick New): Mono / Stereo Audio, Mono / Stereo Aux, Mono / Stereo Instrument, MIDI, Drum, Master Fader,
+  VCA, Routing / Basic Folder.
+- Performance engine (Setup > Playback Engine), the Pro Tools Host Engine settings:
+  Host Processors (CPU cores used), CPU Usage Limit, Ignore Errors During Playback/Record, Dynamic Plug-in
+  Processing (effects fed silence stop using CPU once their tails finish), Optimize Performance at Low
+  Buffer Sizes, Disk Playback Cache Size, and Squelchmoth's Overload Protection: when the Mac can't keep up,
+  the H/W buffer is raised one step instead of stopping (never while you record).
+  Heavy session tips: 128 samples or lower to record, 512-1024 to mix; freeze finished tracks.
+- Window > System Usage (or click the CPU % at the top): live CPU, peaks, dropouts, memory and the heaviest
+  plug-ins, each with Freeze track and Bypass buttons.
+- Crash protection: if Squelchmoth ever closes unexpectedly it tells you on the next launch, reopens your
+  auto-saved session (saved every minute) and switches off the plug-in that caused it (its settings are
+  kept; Setup > Plug-ins Switched Off turns it back on). Hold Shift while starting Squelchmoth for Safe Mode
+  (third-party plug-ins not loaded) - like Pro Tools.
+- Claude has 99 tools now, including beat_lab, midi_tools, eq_reference, system_usage and crash_recovery.
+
+EARLIER IN 1.2
+- Real installer: "Install Squelchmoth.pkg" puts the app in Applications for you.
+- Inputs and outputs are named like Pro Tools: In 1, In 2 ... (mono) and In 1-2, In 3-4 ... (stereo),
+  Out 1-2, Out 3-4 ..., and busses by name. Setup > I/O Setup has Input / Output / Bus / MIDI tabs:
+  click a name to rename it ("Vocal Mic", "Guitar DI"), switch paths between mono and stereo, add,
+  rename or delete busses. Default names puts everything back. Names show everywhere straight away.
+- Click a track's input or output button (Edit window I/O column or Mix window) for the Pro Tools menu:
+  no input / interface / bus / MIDI, and no output / interface / bus / track / new track... New
+  tracks get the next free input automatically (mono tracks In 1, In 2...; stereo tracks In 1-2...).
+- Track > New... (Cmd+Shift+N) is the Pro Tools New Tracks dialog: several rows, count, Mono/Stereo,
+  Audio / Aux Input / Master Fader / VCA Master / MIDI / Instrument / Basic Folder / Routing Folder,
+  Samples or Ticks, names, + to add rows.
+- Master Fader track: Track > New Master Fader (or New Tracks > Master Fader). It shows in the Edit
+  and Mix windows, can be renamed, gets inserts A-J, volume automation and its own output path.
+- 5 more inserts and 5 more sends: Inserts F-J and Sends F-J. In the Mix window click the small "A-J"
+  box beside INSERTS or SENDS (or View > Mix Window Views). In the Edit window: View > Edit Window
+  Views > I/O, Inserts A-E, Inserts F-J, Sends A-E, Sends F-J, Comments, All / None.
+- Track menu and the right-click track menu now match Pro Tools: Duplicate... (playlists, automation,
+  inserts, sends, group, number of copies), Split into Mono, Make Active / Inactive, Hide (and Make
+  Inactive), Show All Tracks, Scroll to Track..., Input Only / Auto Input Monitoring, Record Safe,
+  Solo Safe, Freeze, Commit..., Bounce..., Clear All Clip Indicators, Timebase (Samples / Ticks),
+  Comments, Delete... with confirmation, Move to New Routing / Basic Folder.
+- The Mix window scrolls up and down when all 10 inserts and 10 sends are showing, so faders stay
+  full size on a laptop screen.
+- Claude can do all of this too: new_tracks, track_options, set_input, set_output,
+  io_setup, edit_window_views, master_fader, playback_engine.
+
+EARLIER IN 1.1.1
+- Every menu command works (all run and checked one by one); commands that need a selection are greyed
+  out until you select something; floating windows stay in front like Pro Tools; message boxes no
+  longer freeze the app; Clip > Lock really locks; View > Menu Bar inside the window.
+
+EARLIER IN 1.1
+- Mix window: Pro Tools-style insert slots - click an empty slot to add a
+  plugin, click the arrow on a filled slot to REMOVE, bypass, replace, move, copy or paste it. Sends the
+  same way. Right-click a pan knob for Pan Depth (-3 dB default) and the two-knob Stereo pan.
+- Every Signature plugin has its own interface with artwork, a live display, Basic + Advanced presets,
+  A/B compare and bypass.
+- Window > Mastering (Cmd+Shift+M): the album mastering page (Studio One style) - track list, racks,
+  loudness meters, Detect Loudness, Digital Release with streaming loudness targets, Image + CUE, DDP.
+- Options > EQ Frequency Chart: where 40 instruments and voices live - note ranges, harmonics, high-pass
+  points, boost / cut bands with exact Hz, a piano keyboard and a hover readout (Hz, note, wavelength).
+
+Full guide: SETUP.md.  Plugins, instruments, kits and Cut Lab: PLUGINS.md.
