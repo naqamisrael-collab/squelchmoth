@@ -140,7 +140,7 @@ public:
         mkButton (patMode, "PAT", "Pattern mode: loop this pattern (the timeline stays silent on rack channels)", [this] { setPatternMode (true); });
         mkButton (songMode, "SONG", "Song mode: play the timeline (pattern clips)", [this] { setPatternMode (false); });
         patMode.setClickingTogglesState (false); songMode.setClickingTogglesState (false);
-        mkButton (graphBtn, "GRAPH", "Graph Editor (Cmd+K): per-step lanes for the selected channel", [this] { setGraphVisible (! graphVisible); });
+        mkButton (graphBtn, "GRAPH", "Graph Editor (" SQ_CMD "+K): per-step lanes for the selected channel", [this] { setGraphVisible (! graphVisible); });
         mkButton (keysBtn, "KEYS", "Keyboard Editor: per-step notes and chords", [this] { setGraphVisible (true); graphLane = Lane::note; graphTabs.setCurrentTabIndex ((int) Lane::note); repaint(); });
         mkButton (addBtn, "+", "Add a channel: instrument, kit, sample, layer, MIDI out", [this] { showAddMenu(); });
         addBtn.setColour (juce::TextButton::buttonColourId, Theme::acid()); addBtn.setColour (juce::TextButton::textColourOffId, juce::Colours::black);

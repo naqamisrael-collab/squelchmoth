@@ -12,6 +12,7 @@ INSTALL ON WINDOWS (Windows 10 or 11, 64-bit)
 5. Audio: Setup > Playback Engine. Pick your interface under "Windows Audio" (WASAPI). Your VST3 plug-ins in
    C:\Program Files\Common Files\VST3 are found automatically.
 6. Uninstall any time from Windows Settings > Apps > Installed apps > Squelchmoth. Your sessions stay.
+7. Shortcuts: everywhere these guides say Cmd, use Ctrl on Windows; Opt is Alt.
 
 INSTALL ON MAC
 0. Intel Mac: use Squelchmoth-Mac-Intel.zip. M1/M2/M3/M4 Mac: Squelchmoth-Mac-AppleSilicon.zip.

@@ -657,7 +657,7 @@ public:
             idBounce = 19, idRecSafe = 20, idSoloSafe = 21, idComments = 22, idInput = 23, idOutput = 24, idSamples = 25, idTicks = 26, idDeleteMaster = 27
         };
 
-        m.addItem (40, "New...  (Cmd+Shift+N)");
+        m.addItem (40, "New...  (" SQ_CMD "+Shift+N)");
         m.addSubMenu ("Quick New", QuickNew::build (session, 7000, false));
         m.addSeparator();
         m.addItem (idRename, "Rename...");

@@ -1022,18 +1022,18 @@ private:
             if (juce::ModifierKeys::currentModifiers.isPopupMenu() || onNewTracks == nullptr) showAddTrackMenu();
             else onNewTracks();
         };
-        addTrackBtn.setTooltip ("New Tracks (Cmd+Shift+N) - right-click for a quick track menu");
-        zoomInBtn.onClick = [this] { zoom (0.7); };          zoomInBtn.setTooltip ("Zoom in (Cmd+] or T)");
-        zoomOutBtn.onClick = [this] { zoom (1.4); };         zoomOutBtn.setTooltip ("Zoom out (Cmd+[ or R)");
-        fitBtn.onClick = [this] { zoomToFit(); };            fitBtn.setTooltip ("Fit whole session (Cmd+Opt+F)");
-        fitSelBtn.onClick = [this] { zoomToSelection(); };   fitSelBtn.setTooltip ("Zoom to the selection (Opt+F)");
+        addTrackBtn.setTooltip ("New Tracks (" SQ_CMD "+Shift+N) - right-click for a quick track menu");
+        zoomInBtn.onClick = [this] { zoom (0.7); };          zoomInBtn.setTooltip ("Zoom in (" SQ_CMD "+] or T)");
+        zoomOutBtn.onClick = [this] { zoom (1.4); };         zoomOutBtn.setTooltip ("Zoom out (" SQ_CMD "+[ or R)");
+        fitBtn.onClick = [this] { zoomToFit(); };            fitBtn.setTooltip ("Fit whole session (" SQ_CMD "+" SQ_OPT "+F)");
+        fitSelBtn.onClick = [this] { zoomToSelection(); };   fitSelBtn.setTooltip ("Zoom to the selection (" SQ_OPT "+F)");
         snapBtn.setClickingTogglesState (false);
         snapBtn.setTooltip ("Grid combined with Shuffle or Slip (same as Shift-clicking the Grid button): positions snap to the grid "
                             "while the mode's own behaviour is kept. Hold Cmd while dragging to swap Grid and Slip.");
         snapBtn.onClick = [this] { if (state.editMode == EditMode::shuffle || state.editMode == EditMode::slip) { state.snap = ! state.snap; refreshToolbar(); } };
         snapBtn.setColour (juce::TextButton::buttonOnColourId, Theme::violet().darker (0.3f));
         tabTransBtn.setClickingTogglesState (true);
-        tabTransBtn.setTooltip ("Tab to Transient: Tab / Opt+Tab jump between detected transients instead of clip edges");
+        tabTransBtn.setTooltip ("Tab to Transient: Tab / " SQ_OPT "+Tab jump between detected transients instead of clip edges");
         tabTransBtn.onClick = [this] { state.tabToTransients = tabTransBtn.getToggleState(); canvas.repaint(); };
         tabTransBtn.setColour (juce::TextButton::buttonOnColourId, Theme::magenta().darker (0.4f));
         linkBtn.setClickingTogglesState (true);

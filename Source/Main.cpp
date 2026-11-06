@@ -6,6 +6,14 @@
  #include "httplib.h"   // winsock2 must come before windows.h
 #endif
 #include <JuceHeader.h>
+// Shortcut names in UI text: Cmd / Opt on the Mac, Ctrl / Alt on Windows and Linux.
+#if JUCE_MAC
+ #define SQ_CMD "Cmd"
+ #define SQ_OPT "Opt"
+#else
+ #define SQ_CMD "Ctrl"
+ #define SQ_OPT "Alt"
+#endif
 #include "StereoPan.h"
 #include "Analyzer.h"
 #include "MainComponent.h"

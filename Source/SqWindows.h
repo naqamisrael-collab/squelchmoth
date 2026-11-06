@@ -129,8 +129,8 @@ public:
         setup (play, "Play (Space) - plays from the Edit selection", Theme::mint().darker (0.4f));
         setup (ffwd, "Fast forward one bar", Theme::violet());
         setup (toEnd, "Go to end of session", Theme::violet());
-        setup (rec, "Record (Cmd+Space / F12)", Theme::red());
-        setup (loop, "Loop Playback (Cmd+Shift+L) - loops the Edit selection", Theme::mint().darker (0.4f));
+        setup (rec, "Record (" SQ_CMD "+Space / F12)", Theme::red());
+        setup (loop, "Loop Playback (" SQ_CMD "+Shift+L) - loops the Edit selection", Theme::mint().darker (0.4f));
         setup (preRoll, "Pre-roll: play this much before the selection", Theme::violet());
         setup (postRoll, "Post-roll: keep going this much after the selection", Theme::violet());
         setup (click, "Click / metronome (C)", Theme::violet());
@@ -662,7 +662,7 @@ public:
     void paint (juce::Graphics& g) override { g.fillAll (Theme::panel()); }
 private:
     Session& session; juce::ListBox list; juce::StringArray items; int splitIndex = 0;
-    juce::TextButton undoBtn { "Undo (Cmd+Z)" }, redoBtn { "Redo (Cmd+Shift+Z)" }, clearBtn { "Clear history" };
+    juce::TextButton undoBtn { "Undo (" SQ_CMD "+Z)" }, redoBtn { "Redo (" SQ_CMD "+Shift+Z)" }, clearBtn { "Clear history" };
     int getNumRows() override { return items.size(); }
     void paintListBoxItem (int row, juce::Graphics& g, int w, int h, bool) override
     {
@@ -917,7 +917,7 @@ public:
             { "choice", "op_countOffBars", "Count-off before recording", 0, 0, 2, "Off;1 bar;2 bars" },
             { "bool", "op_showWelcome", "Show the Quick Start window at launch", 1 } }), true);
         tabs.addTab ("Editing", Theme::panel(), buildPanel ({
-            { "num", "ed_fadeCmd", "Fade length for Cmd+F / clip menu fades (seconds)", 0.25, 0.005, 10 },
+            { "num", "ed_fadeCmd", "Fade length for " SQ_CMD "+F / clip menu fades (seconds)", 0.25, 0.005, 10 },
             { "choice", "ed_fadeShape", "Fade shape", 0, 0, 3, "linear;convex;concave;s-curve" },
             { "bool", "ed_autoFades", "Add 4 ms anti-click fades on every separate / trim / move", 1 },
             { "num", "ed_stripThresholdDb", "Strip Silence threshold (dBFS)", -48, -96, 0 },
@@ -1295,7 +1295,7 @@ public:
         g.drawFittedText ("Pro Tools editing, Studio One mastering, the FL Studio Channel Rack - and Claude at the controls. 27 instruments, 87 Signature plug-ins, 186 more effects, 27 kits, the Cut Lab editor, patterns, pages and a live link to claude.ai.", 124, 194, 600, 40, juce::Justification::topLeft, 2);
         g.setColour (juce::Colour (0xff8f84aa)); g.setFont (Theme::font (11.0f));
         g.drawText ("Created and owned by Jamar Stewart", 124, 234, 460, 16, juce::Justification::left);
-        g.drawFittedText ("Keys: Space play  |  Cmd+Space record  |  F1-F4 edit modes  |  F5-F10 tools  |  Cmd+Shift+B Beat page  |  Cmd+6 Channel Rack  |  Cmd+= next page  |  Cmd+, Preferences",
+        g.drawFittedText ("Keys: Space play  |  " SQ_CMD "+Space record  |  F1-F4 edit modes  |  F5-F10 tools  |  " SQ_CMD "+Shift+B Beat page  |  " SQ_CMD "+6 Channel Rack  |  " SQ_CMD "+= next page  |  " SQ_CMD "+, Preferences",
                           24, getHeight() - 92, getWidth() - 48, 30, juce::Justification::centred, 2);
     }
 private:

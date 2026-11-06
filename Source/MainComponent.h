@@ -477,54 +477,54 @@ public:
 
         if (index == 0)   // File
         {
-            m.addItem (1, "New Session...  (Cmd+N)");
+            m.addItem (1, "New Session...  (" SQ_CMD "+N)");
             m.addItem (8, "New Session from Template...");
             m.addItem (18, "Make a Beat  (new session, kit, Beat page)");
-            m.addItem (2, "Open Session...  (Cmd+O)");
+            m.addItem (2, "Open Session...  (" SQ_CMD "+O)");
             juce::PopupMenu recent;
             int id = 50;
             for (auto f : session.sessionsDir.findChildFiles (juce::File::findFiles, false, "*.squelch"))
                 if (id < 80) recent.addItem (id++, f.getFileNameWithoutExtension());
             m.addSubMenu ("Open Recent", recent);
             m.addSeparator();
-            m.addItem (3, "Save  (Cmd+S)", session.savingAllowed());
-            m.addItem (4, "Save As...  (Cmd+Shift+S)", session.savingAllowed());
+            m.addItem (3, "Save  (" SQ_CMD "+S)", session.savingAllowed());
+            m.addItem (4, "Save As...  (" SQ_CMD "+Shift+S)", session.savingAllowed());
             m.addItem (9, "Save Copy In...", session.savingAllowed());
             m.addItem (10, "Save As Template...");
             m.addItem (11, "Revert to Saved...");
             m.addItem (16, "Restore from Backup...");
             m.addItem (17, "Back Up Now", session.edit != nullptr);
             m.addSeparator();
-            m.addItem (5, "Import Audio / MIDI...  (Cmd+Shift+I)");
+            m.addItem (5, "Import Audio / MIDI...  (" SQ_CMD "+Shift+I)");
             m.addItem (12, "Import Session Data (tracks from another session)...");
-            m.addItem (6, "Bounce Mix...  (Cmd+Opt+B)", session.savingAllowed());
+            m.addItem (6, "Bounce Mix...  (" SQ_CMD "+" SQ_OPT "+B)", session.savingAllowed());
             m.addItem (13, "Export Stems...  (each track or folder as its own file)", session.savingAllowed());
             m.addItem (14, "Export MIDI...");
             m.addSeparator();
             m.addItem (7, "Show Session Folder");
-            m.addItem (15, "Session Setup  (Cmd+2)");
+            m.addItem (15, "Session Setup  (" SQ_CMD "+2)");
         }
         else if (index == 1)   // Edit
         {
-            m.addItem (100, "Undo  (Cmd+Z)", hasEdit && session.edit->getUndoManager().canUndo());
-            m.addItem (101, "Redo  (Cmd+Shift+Z)", hasEdit && session.edit->getUndoManager().canRedo());
+            m.addItem (100, "Undo  (" SQ_CMD "+Z)", hasEdit && session.edit->getUndoManager().canUndo());
+            m.addItem (101, "Redo  (" SQ_CMD "+Shift+Z)", hasEdit && session.edit->getUndoManager().canRedo());
             m.addItem (102, "Undo History...");
             m.addSeparator();
-            m.addItem (103, "Cut  (Cmd+X)", anySel); m.addItem (104, "Copy  (Cmd+C)", anySel); m.addItem (105, "Paste  (Cmd+V)", EditOps::canPaste (session));
+            m.addItem (103, "Cut  (" SQ_CMD "+X)", anySel); m.addItem (104, "Copy  (" SQ_CMD "+C)", anySel); m.addItem (105, "Paste  (" SQ_CMD "+V)", EditOps::canPaste (session));
             m.addItem (106, "Clear / Delete  (Delete)", anySel); m.addItem (107, "Delete and close gap  (Shift+Delete)", anySel);
             m.addSeparator();
-            m.addItem (108, "Select All  (Cmd+A)");
+            m.addItem (108, "Select All  (" SQ_CMD "+A)");
             m.addItem (109, "Deselect  (Esc)", anySel || trackSel);
             m.addSeparator();
-            m.addItem (110, "Duplicate  (Cmd+D)", anySel); m.addItem (111, "Repeat...  (Opt+R)", anySel);
-            m.addItem (112, "Separate Clip at Selection / Playhead  (Cmd+E)", clipSel || timeSel);
+            m.addItem (110, "Duplicate  (" SQ_CMD "+D)", anySel); m.addItem (111, "Repeat...  (" SQ_OPT "+R)", anySel);
+            m.addItem (112, "Separate Clip at Selection / Playhead  (" SQ_CMD "+E)", clipSel || timeSel);
             m.addItem (124, "Separate Clip at Transients", audioSel);
-            m.addItem (113, "Heal Separation  (Cmd+H)", clipSel);
-            m.addItem (114, "Trim Clip to Selection  (Cmd+T)", clipSel && timeSel);
+            m.addItem (113, "Heal Separation  (" SQ_CMD "+H)", clipSel);
+            m.addItem (114, "Trim Clip to Selection  (" SQ_CMD "+T)", clipSel && timeSel);
             m.addItem (115, "Trim Clip Start to Insertion  (A)", clipSel); m.addItem (116, "Trim Clip End to Insertion  (S)", clipSel);
-            m.addItem (117, "Strip Silence...  (Cmd+U)", audioSel);
-            m.addItem (118, "Consolidate Clip  (Opt+Shift+3)", clipSel || timeSel);
-            m.addItem (119, "Fades...  (Cmd+F)", audioSel);
+            m.addItem (117, "Strip Silence...  (" SQ_CMD "+U)", audioSel);
+            m.addItem (118, "Consolidate Clip  (" SQ_OPT "+Shift+3)", clipSel || timeSel);
+            m.addItem (119, "Fades...  (" SQ_CMD "+F)", audioSel);
             m.addItem (120, "Insert Silence (selection length)", timeSel);
             m.addSeparator();
             juce::PopupMenu modes;
@@ -543,8 +543,8 @@ public:
         else if (index == 2)   // View
         {
             m.addItem (200, "Edit Window", true, currentView == "edit");
-            m.addItem (201, "Mix Window  (Cmd+=)", true, currentView == "mix");
-            m.addItem (207, "Beat Page  (Cmd+Shift+B)", true, currentView == "beat");
+            m.addItem (201, "Mix Window  (" SQ_CMD "+=)", true, currentView == "mix");
+            m.addItem (207, "Beat Page  (" SQ_CMD "+Shift+B)", true, currentView == "beat");
             m.addItem (202, "Claude Panel", true, currentView == "claude");
             {
                 juce::PopupMenu lay;
@@ -559,12 +559,12 @@ public:
                 juce::PopupMenu bp;
                 bp.addItem (8860, "Browser", true, beat.panelShown ("browser")); bp.addItem (8861, "Instrument panel", true, beat.panelShown ("side"));
                 bp.addItem (8863, "Beat Mixer", true, beat.panelShown ("mixer"));
-                bp.addSeparator(); bp.addItem (8864, "Graph Editor  (Cmd+K in the rack)", true, beat.getRack() != nullptr && beat.getRack()->isGraphVisible());
+                bp.addSeparator(); bp.addItem (8864, "Graph Editor  (" SQ_CMD "+K in the rack)", true, beat.getRack() != nullptr && beat.getRack()->isGraphVisible());
                 m.addSubMenu ("Beat Page Panels", bp);
             }
             m.addSeparator();
-            m.addItem (203, "Zoom In  (Cmd+])"); m.addItem (204, "Zoom Out  (Cmd+[)");
-            m.addItem (205, "Fit Session  (Cmd+Opt+F)"); m.addItem (206, "Fit Selection  (Opt+F)");
+            m.addItem (203, "Zoom In  (" SQ_CMD "+])"); m.addItem (204, "Zoom Out  (" SQ_CMD "+[)");
+            m.addItem (205, "Fit Session  (" SQ_CMD "+" SQ_OPT "+F)"); m.addItem (206, "Fit Selection  (" SQ_OPT "+F)");
             m.addSeparator();
             juce::PopupMenu heights;
             for (int i = 0; i < (int) TimelineState::heightPresets().size(); ++i)
@@ -624,12 +624,12 @@ public:
                     if (IO::formatOf (*at) == "stereo" || session.trackIsStereo (*at)) anyStereoSel = true;
                 }
             }
-            m.addItem (341, "New...  (Cmd+Shift+N)");
-            m.addItem (307, "Group...  (Cmd+G)", trackSel);
+            m.addItem (341, "New...  (" SQ_CMD "+Shift+N)");
+            m.addItem (307, "Group...  (" SQ_CMD "+G)", trackSel);
             m.addItem (306, "Duplicate...", trackSel);
             m.addItem (342, "Split into Mono", anyStereoSel);
             m.addItem (343, anyInactive ? "Make Active" : "Make Inactive", trackSel);
-            m.addItem (308, "Delete...  (Cmd+Shift+Delete)", trackSel);
+            m.addItem (308, "Delete...  (" SQ_CMD "+Shift+Delete)", trackSel);
             m.addSeparator();
             m.addItem (304, "Move to New Routing Folder...", trackSel);
             m.addItem (358, "Move to New Basic Folder...", trackSel);
@@ -663,7 +663,7 @@ public:
             m.addSeparator();
             m.addItem (354, "Hide", trackSel);
             m.addItem (355, "Show All Tracks");
-            m.addItem (356, "Scroll to Track...  (Cmd+Opt+F)");
+            m.addItem (356, "Scroll to Track...  (" SQ_CMD "+" SQ_OPT "+F)");
             m.addItem (357, TrackOps::hasMasterFader (session) ? "Delete Master Fader" : "New Master Fader");
             m.addSeparator();
             m.addSubMenu ("Quick New", QuickNew::build (session, quickNewBase));
@@ -671,14 +671,14 @@ public:
         }
         else if (index == 4)   // Clip
         {
-            m.addItem (400, "Mute / Unmute  (Cmd+M)", clipSel); m.addItem (401, "Lock / Unlock position", clipSel);
+            m.addItem (400, "Mute / Unmute  (" SQ_CMD "+M)", clipSel); m.addItem (401, "Lock / Unlock position", clipSel);
             m.addItem (402, "Rename...", clipSel);
             m.addItem (403, "Spot...", clipSel);
             m.addSeparator();
             juce::PopupMenu gain;
             gain.addItem (410, "+1 dB", audioSel); gain.addItem (411, "-1 dB", audioSel); gain.addItem (412, "+3 dB", audioSel); gain.addItem (413, "-3 dB", audioSel); gain.addItem (414, "Reset", audioSel); gain.addItem (415, "Normalise to -1 dBFS (clip gain)", audioSel);
             m.addSubMenu ("Clip Gain", gain);
-            m.addItem (420, "Fades (default length)  (Cmd+F)", audioSel); m.addItem (421, "Remove Fades", audioSel);
+            m.addItem (420, "Fades (default length)  (" SQ_CMD "+F)", audioSel); m.addItem (421, "Remove Fades", audioSel);
             m.addItem (422, "Reverse", audioSel);
             m.addSeparator();
             m.addItem (430, "Conform to Session Tempo (Elastic Audio)", audioSel); m.addItem (431, "Follow Session Tempo on/off", audioSel);
@@ -709,7 +709,7 @@ public:
             m.addItem (513, "Tap Tempo...");
             m.addSeparator();
             m.addItem (520, "New Memory Location  (Shift+Return / Q)");
-            m.addItem (521, "Memory Locations Window  (Cmd+5)");
+            m.addItem (521, "Memory Locations Window  (" SQ_CMD "+5)");
             m.addItem (522, "Go to Next Marker  (Page Down)"); m.addItem (523, "Go to Previous Marker  (Page Up)");
         }
         else if (index == 6)   // AudioSuite
@@ -721,17 +721,17 @@ public:
             m.addSubMenu ("Render through plugin...", PluginMenu::build (session.getEngine(), PluginMenu::effects), audioSel);
             m.addSeparator();
             m.addItem (605, "Remove all rendered effects from selected clips", audioSel);
-            m.addItem (606, "Strip Silence...  (Cmd+U)", audioSel);
+            m.addItem (606, "Strip Silence...  (" SQ_CMD "+U)", audioSel);
             m.addItem (607, "Separate at Transients", audioSel);
         }
         else if (index == 7)   // Options
         {
-            m.addItem (700, "Loop Playback  (Cmd+Shift+L)", true, loopOn);
+            m.addItem (700, "Loop Playback  (" SQ_CMD "+Shift+L)", true, loopOn);
             m.addItem (701, "Loop Record", true, Prefs::loopRecord());
             m.addItem (702, "QuickPunch", true, Prefs::quickPunch());
             m.addSeparator();
-            m.addItem (703, "Pre-Roll  (Cmd+K)", true, Prefs::preRollEnabled());
-            m.addItem (704, "Post-Roll  (Cmd+Shift+K)", true, Prefs::postRollEnabled());
+            m.addItem (703, "Pre-Roll  (" SQ_CMD "+K)", true, Prefs::preRollEnabled());
+            m.addItem (704, "Post-Roll  (" SQ_CMD "+Shift+K)", true, Prefs::postRollEnabled());
             m.addItem (705, "Count-off (2 bars)", true, Prefs::countOffBars() > 0);
             m.addItem (706, "Click  (C)", true, hasEdit && session.edit->clickTrackEnabled.get());
             m.addSeparator();
@@ -739,7 +739,7 @@ public:
             m.addItem (708, "Wait for Note", true, Prefs::waitForNote());
             m.addItem (709, "MIDI Thru", true, Prefs::midiThru());
             m.addSeparator();
-            m.addItem (710, "Link Timeline and Edit Selection  (Cmd+Shift+J)", true, Prefs::linkTimelineAndEdit());
+            m.addItem (710, "Link Timeline and Edit Selection  (" SQ_CMD "+Shift+J)", true, Prefs::linkTimelineAndEdit());
             m.addItem (711, "Link Track and Edit Selection", true, st.linkTrackAndEditSelection);
             m.addItem (712, "Insertion Follows Playback", true, Prefs::insertionFollowsPlayback());
             m.addItem (713, "Scrolling: Page", true, Prefs::scrollMode() == 1);
@@ -751,13 +751,13 @@ public:
             m.addItem (717, "Auto-fades on edits", true, Prefs::autoFadesOnEdits());
             m.addSeparator();
             m.addItem (718, "EQ Frequency Chart (reference for mixing)...", true, isWindowVisible ("eqchart"));
-            m.addItem (719, "Mastering Window  (Cmd+Shift+M)", true, isWindowVisible ("mastering"));
+            m.addItem (719, "Mastering Window  (" SQ_CMD "+Shift+M)", true, isWindowVisible ("mastering"));
         }
         else if (index == 8)   // Setup
         {
             m.addItem (800, "Playback Engine (audio device)...");
             m.addItem (801, "I/O Setup...");
-            m.addItem (802, "Session Setup  (Cmd+2)");
+            m.addItem (802, "Session Setup  (" SQ_CMD "+2)");
             m.addSeparator();
             m.addItem (803, scanner.isScanning() ? "Scanning plugins..." : "Scan for New Plugins", ! scanner.isScanning());
             m.addItem (804, "Rescan All Plugins");
@@ -772,20 +772,20 @@ public:
             if (CrashGuard::state().safeMode) m.addItem (838, "Leave Safe Mode (load third-party plug-ins)");
             m.addItem (837, "Show Last Crash Report", CrashGuard::reportFile().existsAsFile());
             m.addSeparator();
-            m.addItem (806, "Preferences...  (Cmd+,)");
+            m.addItem (806, "Preferences...  (" SQ_CMD "+,)");
         }
         else if (index == 9)   // Window
         {
             m.addItem (900, "Edit", true, currentView == "edit");
-            m.addItem (901, "Mix  (Cmd+=)", true, currentView == "mix");
+            m.addItem (901, "Mix  (" SQ_CMD "+=)", true, currentView == "mix");
             m.addSeparator();
-            m.addItem (902, "Transport  (Cmd+1)", true, isWindowVisible ("transport"));
-            m.addItem (903, "Big Counter  (Cmd+3)", true, isWindowVisible ("bigcounter"));
-            m.addItem (904, "Memory Locations  (Cmd+5)", true, isWindowVisible ("memory"));
+            m.addItem (902, "Transport  (" SQ_CMD "+1)", true, isWindowVisible ("transport"));
+            m.addItem (903, "Big Counter  (" SQ_CMD "+3)", true, isWindowVisible ("bigcounter"));
+            m.addItem (904, "Memory Locations  (" SQ_CMD "+5)", true, isWindowVisible ("memory"));
             m.addItem (905, "Clip List", true, isWindowVisible ("cliplist"));
             m.addItem (906, "Groups", true, isWindowVisible ("groups"));
             m.addItem (907, "Undo History", true, isWindowVisible ("undo"));
-            m.addItem (908, "Color Palette  (Cmd+Shift+K)", true, isWindowVisible ("colors"));
+            m.addItem (908, "Color Palette  (" SQ_CMD "+Shift+K)", true, isWindowVisible ("colors"));
             m.addSeparator();
             m.addItem (909, "Session Setup", true, isWindowVisible ("session"));
             m.addItem (910, "I/O Setup", true, isWindowVisible ("io"));
@@ -796,11 +796,11 @@ public:
             m.addItem (914, midiSel ? "MIDI Editor (selected MIDI clip)" : "MIDI Editor  (select or double-click a MIDI clip)", midiSel);
             m.addItem (915, stepSel ? "Beat Maker (selected drum clip)" : "Beat Maker  (select or double-click a drum clip)", stepSel);
             m.addItem (916, "Claude Panel", true, currentView == "claude");
-            m.addItem (923, "Channel Rack  (Cmd+6)", hasEdit, isWindowVisible ("rack"));
-            m.addItem (924, "Cut Lab - audio editor  (Cmd+Shift+E)", true, cutLab != nullptr && cutLab->isVisible());
+            m.addItem (923, "Channel Rack  (" SQ_CMD "+6)", hasEdit, isWindowVisible ("rack"));
+            m.addItem (924, "Cut Lab - audio editor  (" SQ_CMD "+Shift+E)", true, cutLab != nullptr && cutLab->isVisible());
             {
                 juce::PopupMenu lay;
-                for (int i = 1; i <= 5; ++i) lay.addItem (8870 + i, "Recall Layout " + juce::String (i) + "  (Cmd+Opt+" + juce::String (i) + ")", Prefs::getString (("layout_slot_" + juce::String (i)).toRawUTF8()).isNotEmpty());
+                for (int i = 1; i <= 5; ++i) lay.addItem (8870 + i, "Recall Layout " + juce::String (i) + "  (" SQ_CMD "+" SQ_OPT "+" + juce::String (i) + ")", Prefs::getString (("layout_slot_" + juce::String (i)).toRawUTF8()).isNotEmpty());
                 lay.addSeparator();
                 for (int i = 1; i <= 5; ++i) lay.addItem (8880 + i, "Save Layout " + juce::String (i));
                 lay.addSeparator();
@@ -809,12 +809,12 @@ public:
                 m.addSubMenu ("Layouts", lay);
             }
             m.addItem (917, "Quick Start / Welcome", true, isWindowVisible ("welcome"));
-            m.addItem (919, "Mastering  (Cmd+Shift+M)", true, isWindowVisible ("mastering"));
+            m.addItem (919, "Mastering  (" SQ_CMD "+Shift+M)", true, isWindowVisible ("mastering"));
             m.addItem (920, "EQ Frequency Chart", true, isWindowVisible ("eqchart"));
             m.addItem (921, "System Usage  (CPU, memory, heaviest plug-ins)", true, isWindowVisible ("usage"));
             m.addItem (922, "Mix Snapshots (A-H)", hasEdit, isWindowVisible ("snapshots"));
             m.addSeparator();
-            m.addItem (918, "Close All Floating Windows  (Cmd+W)");
+            m.addItem (918, "Close All Floating Windows  (" SQ_CMD "+W)");
         }
         else if (index == 10)   // Claude
         {
@@ -2170,13 +2170,13 @@ private:
     void showShortcuts()
     {
         juce::String s;
-        s << "TRANSPORT\n Space play/stop   Cmd+Space / F12 record   Return RTZ   Shift+Space play from start   L loop   C click   Cmd+Shift+L loop playback\n Cmd+K pre-roll   Cmd+Shift+K post-roll   Page Up/Down previous/next marker   Q / Shift+Return new memory location\n Numeric keypad: 0 play  1/2 rewind/forward  3 record  4 loop  5 loop record  6 QuickPunch  7 click  8 count-off  9 MIDI merge\n\n"
+        s << "TRANSPORT\n Space play/stop   " SQ_CMD "+Space / F12 record   Return RTZ   Shift+Space play from start   L loop   C click   " SQ_CMD "+Shift+L loop playback\n " SQ_CMD "+K pre-roll   " SQ_CMD "+Shift+K post-roll   Page Up/Down previous/next marker   Q / Shift+Return new memory location\n Numeric keypad: 0 play  1/2 rewind/forward  3 record  4 loop  5 loop record  6 QuickPunch  7 click  8 count-off  9 MIDI merge\n\n"
           << "EDIT MODES & TOOLS\n F1 Shuffle  F2 Slip  F3 Spot  F4 Grid   |   F5 Zoomer  F6 Trim  F7 Selector  F8 Grabber  F9 Scrubber  F10 Pencil   (F6/F7/F8 again = Smart Tool)\n Hold Cmd while dragging to suspend the grid.\n\n"
-          << "EDITING\n Cmd+E separate   Cmd+D duplicate   Opt+R repeat   Cmd+F fades   Cmd+U strip silence   Cmd+H heal   Cmd+T trim to selection   A / S trim start/end to playhead\n Opt+Shift+3 consolidate   Cmd+M mute clip   Cmd+X/C/V cut/copy/paste   Delete clear   Shift+Delete delete & close gap   Cmd+A select all   Esc deselect\n + / - nudge   , / . nudge by grid   Tab / Opt+Tab next/previous transient or clip edge   Shift+Tab extend selection\n\n"
-          << "ZOOM & VIEW\n Cmd+] / Cmd+[ zoom   T / R zoom   Opt+F fit selection   Cmd+Opt+F fit session   Cmd+Opt+Up/Down track heights   Cmd+= Edit/Mix\n\n"
-          << "TRACKS\n Cmd+Shift+N new track   Cmd+Shift+Delete delete selected   Shift+S/M/R solo/mute/arm selected   Up/Down (P / ;) select track   Shift+Up/Down extend\n Cmd+G groups   Cmd+Shift+K colour palette\n\n"
-          << "WINDOWS\n Cmd+1 Transport   Cmd+2 Session Setup   Cmd+3 Big Counter   Cmd+5 Memory Locations   Cmd+, Preferences   Cmd+W close floating windows\n\n"
-          << "FILE\n Cmd+N new   Cmd+O open   Cmd+S save   Cmd+Shift+S save as   Cmd+Shift+I import   Cmd+Opt+B bounce   Cmd+Z / Cmd+Shift+Z undo / redo";
+          << "EDITING\n " SQ_CMD "+E separate   " SQ_CMD "+D duplicate   " SQ_OPT "+R repeat   " SQ_CMD "+F fades   " SQ_CMD "+U strip silence   " SQ_CMD "+H heal   " SQ_CMD "+T trim to selection   A / S trim start/end to playhead\n " SQ_OPT "+Shift+3 consolidate   " SQ_CMD "+M mute clip   " SQ_CMD "+X/C/V cut/copy/paste   Delete clear   Shift+Delete delete & close gap   " SQ_CMD "+A select all   Esc deselect\n + / - nudge   , / . nudge by grid   Tab / " SQ_OPT "+Tab next/previous transient or clip edge   Shift+Tab extend selection\n\n"
+          << "ZOOM & VIEW\n " SQ_CMD "+] / " SQ_CMD "+[ zoom   T / R zoom   " SQ_OPT "+F fit selection   " SQ_CMD "+" SQ_OPT "+F fit session   " SQ_CMD "+" SQ_OPT "+Up/Down track heights   " SQ_CMD "+= Edit/Mix\n\n"
+          << "TRACKS\n " SQ_CMD "+Shift+N new track   " SQ_CMD "+Shift+Delete delete selected   Shift+S/M/R solo/mute/arm selected   Up/Down (P / ;) select track   Shift+Up/Down extend\n " SQ_CMD "+G groups   " SQ_CMD "+Shift+K colour palette\n\n"
+          << "WINDOWS\n " SQ_CMD "+1 Transport   " SQ_CMD "+2 Session Setup   " SQ_CMD "+3 Big Counter   " SQ_CMD "+5 Memory Locations   " SQ_CMD "+, Preferences   " SQ_CMD "+W close floating windows\n\n"
+          << "FILE\n " SQ_CMD "+N new   " SQ_CMD "+O open   " SQ_CMD "+S save   " SQ_CMD "+Shift+S save as   " SQ_CMD "+Shift+I import   " SQ_CMD "+" SQ_OPT "+B bounce   " SQ_CMD "+Z / " SQ_CMD "+Shift+Z undo / redo";
         auto te2 = new juce::TextEditor();
         te2->setMultiLine (true); te2->setReadOnly (true); te2->setText (s);
         te2->setFont (juce::Font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 12.0f, juce::Font::plain)));
@@ -2191,7 +2191,7 @@ private:
     {
         const char* tips[] = {
             "1/5  THE EDIT WINDOW\n\nThe toolbar has the four Edit Modes (Shuffle, Slip, Spot, Grid) and seven tools, exactly like Pro Tools. The Smart Tool is on by default: top half of a clip selects, bottom half grabs, edges trim, corners fade.",
-            "2/5  SELECTIONS & TRANSPORT\n\nDrag with the Selector to make an Edit selection across tracks - Play starts there, Loop plays it, and Delete, Cmd+E, Cmd+D act on it. Pre/post-roll, count-off, Loop Record and QuickPunch live on the MODE button and in Window > Transport.",
+            "2/5  SELECTIONS & TRANSPORT\n\nDrag with the Selector to make an Edit selection across tracks - Play starts there, Loop plays it, and Delete, " SQ_CMD "+E, " SQ_CMD "+D act on it. Pre/post-roll, count-off, Loop Record and QuickPunch live on the MODE button and in Window > Transport.",
             "3/5  TRACKS\n\nRight-click a track name for I/O, inserts, colour, groups, folders, VCAs, Elastic Audio, playlists and track presets. Each header has an automation mode button (off / read / touch / latch / write).",
             "4/5  CLAUDE\n\nOpen the CLAUDE tab and press Connect. Copy the link into claude.ai > Settings > Connectors > Add custom connector. Claude can then build beats, mix, insert your plugins and edit for you (say \"use Squelchmoth\").",
             "5/5  MAKE IT YOURS\n\nSetup > Preferences > Display changes the Edit and Mix window backgrounds, every accent colour and the track palette. Window > Color Palette recolours selected tracks and clips. Help > Keyboard Shortcuts lists everything." };

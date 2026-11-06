@@ -686,7 +686,7 @@ public:
         viewport.setScrollBarsShown (true, true);
         strips.addMouseListener (this, false);   // right-click on empty console space = new track menu
         strips.addAndMakeVisible (newTrackBtn);
-        newTrackBtn.setTooltip ("New Tracks (Cmd+Shift+N) - right-click for the quick track menu");
+        newTrackBtn.setTooltip ("New Tracks (" SQ_CMD "+Shift+N) - right-click for the quick track menu");
         newTrackBtn.onClick = [this]
         {
             if (juce::ModifierKeys::currentModifiers.isPopupMenu()) showQuickNew();

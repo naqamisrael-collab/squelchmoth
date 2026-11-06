@@ -20,7 +20,7 @@ namespace QuickNew
     inline juce::PopupMenu build (Session& s, int base = 0, bool withPluginSubmenu = true)
     {
         juce::PopupMenu m;
-        m.addItem (base + dialog, "New Tracks...  (Cmd+Shift+N)");
+        m.addItem (base + dialog, "New Tracks...  (" SQ_CMD "+Shift+N)");
         m.addSeparator();
         m.addSectionHeader ("Audio Track");
         m.addItem (base + audioMono, "Mono Audio Track");

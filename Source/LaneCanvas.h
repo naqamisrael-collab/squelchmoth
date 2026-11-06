@@ -1433,13 +1433,13 @@ public:
         bool many = state.selectedClips.size() > 1;
         auto ac = dynamic_cast<te::AudioClipBase*> (&c);
 
-        m.addItem (1, "Separate here  (Cmd+E at playhead)");
-        m.addItem (2, "Duplicate  (Cmd+D)");
-        m.addItem (12, "Repeat...  (Opt+R)");
-        m.addItem (13, "Cut  (Cmd+X)"); m.addItem (14, "Copy  (Cmd+C)");
+        m.addItem (1, "Separate here  (" SQ_CMD "+E at playhead)");
+        m.addItem (2, "Duplicate  (" SQ_CMD "+D)");
+        m.addItem (12, "Repeat...  (" SQ_OPT "+R)");
+        m.addItem (13, "Cut  (" SQ_CMD "+X)"); m.addItem (14, "Copy  (" SQ_CMD "+C)");
         m.addItem (3, state.editMode == EditMode::shuffle ? "Delete (closes gap)" : "Delete");
         m.addItem (15, "Rename...");
-        m.addItem (16, c.isMuted() ? "Unmute clip" : "Mute clip  (Cmd+M)");
+        m.addItem (16, c.isMuted() ? "Unmute clip" : "Mute clip  (" SQ_CMD "+M)");
         m.addItem (17, "Lock position", true, c.state.getProperty ("sqmLocked", false));
         m.addItem (18, "Spot...");
         m.addItem (19, "Time Stamp Selected (set User Time Stamp)");
@@ -1455,13 +1455,13 @@ public:
             gain.addItem (24, "Normalise to -1 dBFS (clip gain)");
             m.addSubMenu ("Clip gain  (" + juce::String (ac->getGainDB(), 1) + " dB)", gain);
             m.addItem (6, "Reverse", true, ac->getIsReversed());
-            m.addItem (7, "Fades: in " + juce::String (Prefs::fadeCommandLength(), 2) + " s / out " + juce::String (Prefs::fadeCommandLength(), 2) + " s  (Cmd+F)");
+            m.addItem (7, "Fades: in " + juce::String (Prefs::fadeCommandLength(), 2) + " s / out " + juce::String (Prefs::fadeCommandLength(), 2) + " s  (" SQ_CMD "+F)");
             m.addItem (25, "Remove fades");
-            m.addItem (26, "Strip Silence...  (Cmd+U)");
+            m.addItem (26, "Strip Silence...  (" SQ_CMD "+U)");
             m.addItem (27, "Separate at transients");
-            m.addItem (28, "Consolidate  (Opt+Shift+3)");
+            m.addItem (28, "Consolidate  (" SQ_OPT "+Shift+3)");
             m.addItem (24, "Open in Cut Lab (audio editor)");
-            m.addItem (29, "Heal separation  (Cmd+H)", many);
+            m.addItem (29, "Heal separation  (" SQ_CMD "+H)", many);
 
             elastic.addItem (40, "Conform to session tempo (detect & stretch)");
             elastic.addItem (41, ac->getAutoTempo() ? "Stop following tempo" : "Follow session tempo (auto-tempo)");

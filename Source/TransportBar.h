@@ -42,7 +42,7 @@ public:
 
         rtz.setTooltip ("Return to zero (Return)");  rew.setTooltip ("Rewind a bar");  stop.setTooltip ("Stop (Space)");
         play.setTooltip ("Play / stop (Space) - plays from the Edit selection");  ffwd.setTooltip ("Forward a bar");  toEnd.setTooltip ("Go to end");
-        rec.setTooltip ("Record (Cmd+Space). Record mode: see the MODE button");  loop.setTooltip ("Loop Playback (Cmd+Shift+L)");  click.setTooltip ("Click (C)");
+        rec.setTooltip ("Record (" SQ_CMD "+Space). Record mode: see the MODE button");  loop.setTooltip ("Loop Playback (" SQ_CMD "+Shift+L)");  click.setTooltip ("Click (C)");
         preBtn.setTooltip ("Pre-roll on/off (length in Transport window or Preferences)");  postBtn.setTooltip ("Post-roll on/off");
         modeBtn.setTooltip ("Record mode: Normal / Loop Record / QuickPunch. Count-off and Wait for Note are in the Transport window (Window menu).");
 
@@ -164,7 +164,7 @@ public:
         editTab.onClick = [this] { if (onShowView) onShowView ("edit"); };
         mixTab.onClick = [this] { if (onShowView) onShowView ("mix"); };
         beatTab.onClick = [this] { if (onShowView) onShowView ("beat"); };
-        beatTab.setTooltip ("Beat page (Cmd+Shift+B): browser, Channel Rack, instrument, playlist - the FL workspace");
+        beatTab.setTooltip ("Beat page (" SQ_CMD "+Shift+B): browser, Channel Rack, instrument, playlist - the FL workspace");
         claudeTab.onClick = [this] { if (onShowView) onShowView ("claude"); };
 
         startTimerHz (20);

@@ -710,7 +710,7 @@ private:
                 addAndMakeVisible (comp);
             keyLabel.setText ("Key", juce::dontSendNotification);
             keyLabel.setColour (juce::Label::textColourId, Theme::dim());
-            hint.setText ("P draw  E select  D erase  C slice | right-click deletes | Alt-drag copies | Cmd+D duplicate | arrows move (Shift = octave) | Cmd+wheel zooms",
+            hint.setText ("P draw  E select  D erase  C slice | right-click deletes | Alt-drag copies | " SQ_CMD "+D duplicate | arrows move (Shift = octave) | " SQ_CMD "+wheel zooms",
                           juce::dontSendNotification);
             hint.setColour (juce::Label::textColourId, Theme::dim());
             hint.setFont (Theme::font (11.0f));

@@ -31,7 +31,7 @@ public:
         addAndMakeVisible (hint);
         hint.setFont (Theme::font (11.0f));
         hint.setColour (juce::Label::textColourId, Theme::dim());
-        hint.setText ("Cmd+Up/Down type  -  Cmd+Left/Right mono/stereo  -  Cmd+Opt+Up/Down timebase  -  Cmd+N add row", juce::dontSendNotification);
+        hint.setText ("" SQ_CMD "+Up/Down type  -  " SQ_CMD "+Left/Right mono/stereo  -  " SQ_CMD "+" SQ_OPT "+Up/Down timebase  -  " SQ_CMD "+N add row", juce::dontSendNotification);
         restoreLastRows();
         setSize (940, 150);
         setWantsKeyboardFocus (true);
@@ -92,7 +92,7 @@ private:
             format.addItem ("Mono", 1);
             format.addItem ("Stereo", 2);
             format.setSelectedId (1, juce::dontSendNotification);
-            format.setTooltip ("Track format (Cmd+Left / Cmd+Right)");
+            format.setTooltip ("Track format (" SQ_CMD "+Left / " SQ_CMD "+Right)");
             auto names = TrackOps::newTypeNames();
             for (int i = 0; i < names.size(); ++i) type.addItem (names[i], i + 1);
             if (! owner.presets.isEmpty())
@@ -101,11 +101,11 @@ private:
                 for (int i = 0; i < owner.presets.size(); ++i) type.addItem (owner.presets[i].getFileNameWithoutExtension(), presetBase + i);
             }
             type.setSelectedId (1, juce::dontSendNotification);
-            type.setTooltip ("Track type or a saved Track Preset (Cmd+Up / Cmd+Down)");
+            type.setTooltip ("Track type or a saved Track Preset (" SQ_CMD "+Up / " SQ_CMD "+Down)");
             timebase.addItem ("Samples", 1);
             timebase.addItem ("Ticks", 2);
             timebase.setSelectedId (1, juce::dontSendNotification);
-            timebase.setTooltip ("Samples: clips stay at their time. Ticks: clips follow tempo changes (Cmd+Opt+Up / Down)");
+            timebase.setTooltip ("Samples: clips stay at their time. Ticks: clips follow tempo changes (" SQ_CMD "+" SQ_OPT "+Up / Down)");
             instrument.addItem ("Mothsynth", 1);
             instrument.addItem ("Chrysalis Sampler", 2);
             instrument.addItem ("(none - add one later)", 3);
@@ -113,8 +113,8 @@ private:
             instrument.setTooltip ("Instrument plug-in for Instrument Tracks");
             type.onChange = [this] { typeChanged (true); };
             format.onChange = [this] { formatTouched = true; };
-            remove.setTooltip ("Remove this row (Cmd+Shift+Down removes the last row)");
-            add.setTooltip ("Add a row below (Cmd+N)");
+            remove.setTooltip ("Remove this row (" SQ_CMD "+Shift+Down removes the last row)");
+            add.setTooltip ("Add a row below (" SQ_CMD "+N)");
             remove.onClick = [this] { owner.removeRow (this); };
             add.onClick = [this] { owner.addRow (this); };
             handle.setTooltip ("Drag to re-order rows");
