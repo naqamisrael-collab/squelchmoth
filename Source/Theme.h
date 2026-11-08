@@ -187,13 +187,36 @@ public:
     void drawButtonBackground (juce::Graphics& g, juce::Button& b, const juce::Colour& bgCol,
                                bool over, bool down) override
     {
+        // 1.10 console finish: a lit top edge, a soft vertical gradient and a shadowed base, so every button reads as a
+        // physical key. "On" buttons get a glow ring in their own colour. Colours still come from the theme.
         auto r = b.getLocalBounds().toFloat().reduced (0.5f);
+        const float radius = juce::jmin (5.0f, r.getHeight() * 0.3f);
+        const bool on = b.getToggleState();
         auto c = bgCol;
-        if (down) c = c.brighter (0.2f); else if (over) c = c.brighter (0.08f);
-        g.setColour (c);
-        g.fillRoundedRectangle (r, 4.0f);
-        g.setColour (Theme::line().brighter (0.15f));
-        g.drawRoundedRectangle (r, 4.0f, 1.0f);
+        if (down) c = c.darker (0.12f); else if (over) c = c.brighter (0.10f);
+        if (! b.isEnabled()) c = c.withMultipliedAlpha (0.55f);
+        g.setGradientFill (juce::ColourGradient (c.brighter (down ? 0.0f : 0.16f), r.getX(), r.getY(), c.darker (0.22f), r.getX(), r.getBottom(), false));
+        g.fillRoundedRectangle (r, radius);
+        if (! down)
+        {
+            g.setColour (juce::Colours::white.withAlpha (on ? 0.22f : 0.10f));
+            g.drawHorizontalLine ((int) r.getY() + 1, r.getX() + radius, r.getRight() - radius);
+        }
+        g.setColour (juce::Colours::black.withAlpha (0.45f));
+        g.drawHorizontalLine ((int) r.getBottom() - 1, r.getX() + radius, r.getRight() - radius);
+        if (on)
+        {
+            g.setColour (bgCol.brighter (0.5f).withAlpha (0.9f));
+            g.drawRoundedRectangle (r, radius, 1.2f);
+            g.setColour (bgCol.withAlpha (0.25f));
+            g.drawRoundedRectangle (r.expanded (1.0f), radius + 1.0f, 1.5f);
+        }
+        else
+        {
+            g.setColour (over ? Theme::line().brighter (0.45f) : Theme::line().brighter (0.15f));
+            g.drawRoundedRectangle (r, radius, 1.0f);
+        }
+
     }
 
     // Dialogs: a clean console-style panel with a compact status badge (the stock V4 badge is a huge,

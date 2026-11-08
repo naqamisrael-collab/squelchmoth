@@ -887,7 +887,23 @@ public:
         g.fillRect (tb);
         g.setColour (Theme::line());
         g.drawHorizontalLine (toolbarHeight - 1, 0.0f, (float) getWidth());
-        g.setFont (Theme::font (9.0f, true));
+        // recessed wells behind the button groups (1.10 console finish)
+        auto groupWell = [&] (juce::Rectangle<int> u)
+        {
+            if (u.isEmpty()) return;
+            auto w = u.expanded (4, 3).toFloat();
+            g.setColour (juce::Colours::black.withAlpha (0.35f));
+            g.fillRoundedRectangle (w, 7.0f);
+            g.setColour (juce::Colours::white.withAlpha (0.05f));
+            g.drawHorizontalLine ((int) w.getBottom() - 1, w.getX() + 7.0f, w.getRight() - 7.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.6f));
+            g.drawRoundedRectangle (w, 7.0f, 1.0f);
+        };
+        juce::Rectangle<int> modes, tools;
+        for (auto& b : modeBtns) modes = modes.isEmpty() ? b.getBounds() : modes.getUnion (b.getBounds());
+        for (auto& b : toolBtns) tools = tools.isEmpty() ? b.getBounds() : tools.getUnion (b.getBounds());
+        groupWell (modes); groupWell (tools);
+        g.setFont (Theme::font (9.0f, true).withExtraKerningFactor (0.12f));
         g.setColour (Theme::dim());
         g.drawText ("EDIT MODE", modeLabelX, 3, 120, 10, juce::Justification::left);
         g.drawText ("TOOLS", toolsLabelX, 3, 120, 10, juce::Justification::left);

@@ -233,6 +233,23 @@ public:
         g.fillAll();
         g.setColour (Theme::line());
         g.drawHorizontalLine (getHeight() - 1, 0.0f, (float) getWidth());
+        // 1.10: the transport keys and the counter sit in recessed pills, like the console reference
+        auto pill = [&] (juce::Rectangle<int> u, float radius)
+        {
+            if (u.isEmpty()) return;
+            auto w = u.toFloat();
+            g.setColour (juce::Colours::black.withAlpha (0.38f));
+            g.fillRoundedRectangle (w, radius);
+            g.setColour (juce::Colours::black.withAlpha (0.65f));
+            g.drawRoundedRectangle (w.reduced (0.5f), radius, 1.0f);
+            g.setColour (juce::Colours::white.withAlpha (0.07f));
+            g.drawHorizontalLine ((int) w.getBottom() - 1, w.getX() + radius, w.getRight() - radius);
+        };
+        juce::Rectangle<int> keys;
+        for (auto* b : { (juce::Component*) &rtz, (juce::Component*) &rew, (juce::Component*) &stop, (juce::Component*) &play, (juce::Component*) &ffwd, (juce::Component*) &toEnd, (juce::Component*) &rec })
+            keys = keys.isEmpty() ? b->getBounds() : keys.getUnion (b->getBounds());
+        pill (keys.expanded (4, 4), 10.0f);
+        pill (counter.getBounds().getUnion (timecode.getBounds()).expanded (4, 2), 8.0f);
     }
 
     void resized() override

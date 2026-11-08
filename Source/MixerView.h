@@ -584,14 +584,14 @@ public:
         {
             L::drawWell (g, footerArea.toFloat(), 6.0f);
             g.setColour (L::dim());
-            g.setFont (L::caps (10.0f));
-            g.drawText ("CHANNEL GAIN", footerCaption, juce::Justification::centredLeft);
+            g.setFont (L::caps (9.5f));
+            g.drawFittedText ("CHANNEL GAIN", footerCaption, juce::Justification::centredLeft, 1, 1.0f);
             auto pill = livePill.toFloat();
             g.setColour (liveShown ? L::live().withAlpha (0.15f) : juce::Colours::transparentBlack);
             g.fillRoundedRectangle (pill, 5.0f);
             g.setColour (liveShown ? L::live() : L::faint());
             g.drawRoundedRectangle (pill.reduced (0.5f), 5.0f, 1.2f);
-            g.setFont (L::caps (10.5f));
+            g.setFont (L::caps (9.5f));
             g.drawText (juce::String::fromUTF8 ("\xe2\x80\xa2 LIVE"), pill, juce::Justification::centred);
         }
         if (! integratedArea.isEmpty())
@@ -756,11 +756,11 @@ public:
             auto f = footerArea.reduced (8, 4);
             if (hasMS)
             {
-                solo.setBounds (f.removeFromRight (26).withSizeKeepingCentre (26, 22)); f.removeFromRight (4);
-                mute.setBounds (f.removeFromRight (26).withSizeKeepingCentre (26, 22)); f.removeFromRight (8);
+                solo.setBounds (f.removeFromRight (24).withSizeKeepingCentre (24, 22)); f.removeFromRight (4);
+                mute.setBounds (f.removeFromRight (24).withSizeKeepingCentre (24, 22)); f.removeFromRight (8);
             }
-            livePill = f.removeFromRight (54).withSizeKeepingCentre (54, 20); f.removeFromRight (6);
-            footerCaption = f.removeFromLeft (juce::jmin (104, f.getWidth() / 2));
+            livePill = f.removeFromRight (48).withSizeKeepingCentre (48, 20); f.removeFromRight (6);
+            footerCaption = f.removeFromLeft (juce::jmin (98, f.getWidth() - 62));   // "CHANNEL GAIN" in full; the readout keeps >= 62 px
             gainText.setBounds (f);
             gainText.setJustificationType (juce::Justification::centredLeft);
             if (row == nullptr) { r.removeFromBottom (4); integratedArea = r.removeFromBottom (14); }

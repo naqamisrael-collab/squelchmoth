@@ -228,7 +228,7 @@ public:
         polarityBtn.setClickingTogglesState (false);
         polarityBtn.setTooltip ("Polarity (phase) invert - flips this track's signal. Use it when two mics on one source cancel each other "
                                 "(snare top/bottom, kick in/out). Glitch-free, undoable, saved with the session.");
-        polarityBtn.setColour (juce::TextButton::buttonOnColourId, Theme::acid().darker (0.2f));
+        polarityBtn.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff1fa8c4));   // console cyan
         polarityBtn.onClick = [this]
         {
             const bool inv = ! TrackOps::isPolarityInverted (track);
@@ -245,10 +245,11 @@ public:
         solo.onClick  = [this] { session.setTrackSolo (track, ! track.isSolo (false)); refresh(); };
         mute.onClick  = [this] { session.setTrackMute (track, ! track.isMuted (false)); refresh(); };
 
-        rec.setColour (juce::TextButton::buttonOnColourId, Theme::red());
-        solo.setColour (juce::TextButton::buttonOnColourId, Theme::amber());
-        mute.setColour (juce::TextButton::buttonOnColourId, Theme::violet());
-        input.setColour (juce::TextButton::buttonOnColourId, Theme::mint().darker (0.3f));
+        // the same key colours as the console strips: R red, S yellow, M orange, I live green, polarity cyan
+        rec.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xffe03030));
+        solo.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xffd8bd1e));
+        mute.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xffe07e1c));
+        input.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff1fb86a));
 
         volume.setSliderStyle (juce::Slider::LinearHorizontal);
         MixCtl::setupVolumeSlider (volume);
@@ -321,15 +322,26 @@ public:
         bool selected = state.isTrackSelected (&track);
         int depth = Session::depthOf (&track);
 
-        g.setColour (selected ? Theme::panel2().brighter (0.08f) : Theme::panel());
-        g.fillRect (r);
+        // 1.10 console finish: a lit top edge and a soft gradient body; the track colour is a rounded bar with a glow
+        {
+            auto base = selected ? Theme::panel2().brighter (0.08f) : Theme::panel();
+            g.setGradientFill (juce::ColourGradient (base.brighter (0.06f), 0.0f, 0.0f, base.darker (0.12f), 0.0f, (float) getHeight(), false));
+            g.fillRect (r);
+            g.setColour (juce::Colours::white.withAlpha (0.05f));
+            g.drawHorizontalLine (0, (float) depth * 10.0f, (float) r.getRight());
+        }
         if (depth > 0)
         {
             g.setColour (Theme::panel2().withAlpha (0.6f));
             g.fillRect (0, 0, depth * 10, getHeight());
         }
-        g.setColour (track.getColour());
-        g.fillRect (depth * 10, 0, 5, getHeight());
+        {
+            auto bar = juce::Rectangle<float> ((float) depth * 10.0f + 1.0f, 3.0f, 4.0f, (float) getHeight() - 7.0f);
+            g.setColour (track.getColour().withAlpha (0.25f));
+            g.fillRoundedRectangle (bar.expanded (2.0f, 1.0f), 3.0f);
+            g.setColour (track.getColour());
+            g.fillRoundedRectangle (bar, 2.0f);
+        }
         if (folder != nullptr)
         {
             g.setColour (track.getColour().withAlpha (0.12f));
@@ -338,9 +350,12 @@ public:
         g.setColour (Theme::line());
         g.drawHorizontalLine (getHeight() - 1, 0.0f, (float) getWidth());
         if (selected)
-        {
-            g.setColour (Theme::acid().withAlpha (0.8f));
-            g.drawRect (r.withTrimmedLeft (depth * 10 + 5), 1);
+        {   // the same cyan rim the console uses for a selected strip
+            auto sr = r.withTrimmedLeft (depth * 10 + 7).toFloat().reduced (1.0f, 1.5f);
+            g.setColour (juce::Colour (0xff38e1ff).withAlpha (0.18f));
+            g.drawRoundedRectangle (sr.expanded (1.0f), 5.0f, 2.0f);
+            g.setColour (juce::Colour (0xff38e1ff).withAlpha (0.85f));
+            g.drawRoundedRectangle (sr, 4.0f, 1.2f);
         }
         if (! master && TrackOps::isInactive (track))
         {

@@ -138,28 +138,43 @@ namespace MixCtl
     }
 
     //==========================================================================
-    /** Horizontal fader cap for the Edit window track headers. */
+    //==========================================================================
+    // 1.10: the Edit window's channel controls follow the console rules - recessed black well, chrome cap with a
+    // white centre line (orange above 0 dB), the same colours as the Mix window strips.
+    inline void drawChromeCap (juce::Graphics& g, juce::Rectangle<float> cap, bool aboveUnity, bool vertical)
+    {
+        g.setColour (juce::Colours::black.withAlpha (0.45f));
+        g.fillRoundedRectangle (cap.translated (0.0f, 1.5f), 3.0f);
+        juce::ColourGradient chrome (juce::Colour (0xfff4f8fb), cap.getX(), cap.getY(), juce::Colour (0xff59636f), cap.getX(), cap.getBottom(), false);
+        chrome.addColour (0.45, juce::Colour (0xffb6c0cb));
+        chrome.addColour (0.55, juce::Colour (0xff7d8894));
+        g.setGradientFill (chrome);
+        g.fillRoundedRectangle (cap, 3.0f);
+        g.setColour (juce::Colours::black.withAlpha (0.6f));
+        g.drawRoundedRectangle (cap, 3.0f, 1.0f);
+        g.setColour (aboveUnity ? juce::Colour (0xffff9a2a) : juce::Colours::white);
+        if (vertical) g.fillRect (cap.getX() + 3.0f, cap.getCentreY() - 0.75f, cap.getWidth() - 6.0f, 1.5f);
+        else          g.fillRect (cap.getCentreX() - 0.75f, cap.getY() + 3.0f, 1.5f, cap.getHeight() - 6.0f);
+    }
+
+    /** Horizontal fader for the Edit window track headers. */
     struct HFaderLookAndFeel : public juce::LookAndFeel_V4
     {
         void drawLinearSlider (juce::Graphics& g, int x, int y, int w, int h, float pos, float, float, juce::Slider::SliderStyle, juce::Slider& s) override
         {
-            auto track = juce::Rectangle<float> ((float) x, (float) y + (float) h * 0.5f - 2.0f, (float) w, 4.0f);
-            g.setColour (Theme::bg().darker (0.4f));
-            g.fillRoundedRectangle (track, 2.0f);
-            g.setColour (Theme::acid().withAlpha (0.35f));
-            g.fillRoundedRectangle (track.withRight (pos), 2.0f);
+            auto well = juce::Rectangle<float> ((float) x, (float) y + (float) h * 0.5f - 3.0f, (float) w, 6.0f);
+            g.setColour (juce::Colour (0xff05080c));
+            g.fillRoundedRectangle (well, 3.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.8f));
+            g.drawRoundedRectangle (well.reduced (0.5f), 3.0f, 1.0f);
+            // filled to the fader position in the console's cyan
+            g.setColour (juce::Colour (0xff38e1ff).withAlpha (0.45f));
+            g.fillRoundedRectangle (well.reduced (1.0f).withRight (juce::jmax (well.getX() + 1.0f, pos)), 2.0f);
             auto unityX = (float) s.getPositionOfValue (0.0);
-            g.setColour (Theme::dim());
+            g.setColour (juce::Colours::white.withAlpha (0.55f));
             g.fillRect (unityX, (float) y + 2.0f, 1.0f, (float) h - 4.0f);
-            auto capH = juce::jmin ((float) h - 2.0f, 16.0f), capW = 12.0f;
-            juce::Rectangle<float> cap (pos - capW * 0.5f, (float) y + (float) h * 0.5f - capH * 0.5f, capW, capH);
-            juce::ColourGradient grad (Theme::panel2().brighter (0.35f), cap.getX(), cap.getY(), Theme::panel2().darker (0.5f), cap.getRight(), cap.getBottom(), false);
-            g.setGradientFill (grad);
-            g.fillRoundedRectangle (cap, 2.5f);
-            g.setColour (Theme::bg().darker (0.6f));
-            g.drawRoundedRectangle (cap, 2.5f, 1.0f);
-            g.setColour (s.getValue() > 0.05 ? Theme::amber() : Theme::acid());
-            g.fillRect (cap.getCentreX() - 1.0f, cap.getY() + 2.0f, 2.0f, cap.getHeight() - 4.0f);
+            auto capH = juce::jmin ((float) h - 2.0f, 16.0f), capW = 13.0f;
+            drawChromeCap (g, { pos - capW * 0.5f, (float) y + (float) h * 0.5f - capH * 0.5f, capW, capH }, s.getValue() > 0.05, false);
         }
         int getSliderThumbRadius (juce::Slider&) override   { return 6; }
     };
@@ -171,29 +186,22 @@ namespace MixCtl
         void drawLinearSlider (juce::Graphics& g, int x, int y, int w, int h, float pos, float, float, juce::Slider::SliderStyle, juce::Slider& s) override
         {
             auto track = juce::Rectangle<float> ((float) x + (float) w * 0.5f - 2.0f, (float) y, 4.0f, (float) h);
-            g.setColour (Theme::bg().darker (0.4f));
+            g.setColour (juce::Colours::black);
             g.fillRoundedRectangle (track, 2.0f);
-            g.setColour (Theme::line());
-            g.drawRoundedRectangle (track, 2.0f, 1.0f);
-            g.setColour (Theme::dim());
+            g.setColour (juce::Colours::white.withAlpha (0.10f));
+            g.drawRoundedRectangle (track, 2.0f, 0.8f);
             g.setFont (Theme::font (9.0f));
             for (float db : { 6.0f, 0.0f, -5.0f, -10.0f, -20.0f, -40.0f })
             {
                 auto yy = (float) s.getPositionOfValue (db);
+                g.setColour (db == 0.0f ? Theme::text() : Theme::dim());
                 g.fillRect ((float) x + 2.0f, yy, 8.0f, 1.0f);
-                g.drawText (juce::String ((int) db), x + 10, (int) yy - 6, 24, 12, juce::Justification::centredLeft);
+                g.drawText (db > 0 ? "+" + juce::String ((int) db) : juce::String ((int) db), x + 10, (int) yy - 6, 24, 12, juce::Justification::centredLeft);
             }
-            auto capW = juce::jmin ((float) w - 30.0f, 26.0f), capH = 30.0f;
-            juce::Rectangle<float> cap ((float) x + (float) w * 0.5f - capW * 0.5f, pos - capH * 0.5f, capW, capH);
-            juce::ColourGradient grad (Theme::panel2().brighter (0.35f), cap.getX(), cap.getY(), Theme::panel2().darker (0.5f), cap.getRight(), cap.getBottom(), false);
-            g.setGradientFill (grad);
-            g.fillRoundedRectangle (cap, 3.0f);
-            g.setColour (Theme::bg().darker (0.6f));
-            g.drawRoundedRectangle (cap, 3.0f, 1.0f);
-            g.setColour (s.getValue() > 0.05 ? Theme::amber() : Theme::acid());
-            g.fillRect (cap.getX() + 3.0f, cap.getCentreY() - 1.0f, cap.getWidth() - 6.0f, 2.0f);
+            auto capW = juce::jmin ((float) w - 30.0f, 34.0f), capH = 18.0f;
+            drawChromeCap (g, { (float) x + (float) w * 0.5f - capW * 0.5f, pos - capH * 0.5f, capW, capH }, s.getValue() > 0.05, true);
         }
-        int getSliderThumbRadius (juce::Slider&) override   { return 15; }
+        int getSliderThumbRadius (juce::Slider&) override   { return 9; }
     };
     inline VFaderLookAndFeel& vFaderLookAndFeel()   { static VFaderLookAndFeel l; return l; }
 
