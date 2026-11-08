@@ -16,6 +16,7 @@
 // Everything is driven by Claude too (mastering_* commands).
 
 #include "Session.h"
+#include "MonitorChain.h"
 #include "Analyzer.h"
 #include "PluginMenu.h"
 #include "Behaviours.h"
@@ -212,6 +213,7 @@ public:
         p.time = { te::TimePosition(), e.getLength() + te::TimeDuration::fromSeconds (0.5) };
         p.useMasterPlugins = true; p.usePlugins = true; p.canRenderInMono = false;
         p.tracksToDo = te::toBitSet (te::getAllTracks (e));
+        MonitorChain::PrintGuard guard (session);
         auto f = te::Renderer::renderToFile ("Mastering bounce", p);
         return f.existsAsFile() ? f : juce::File();
     }

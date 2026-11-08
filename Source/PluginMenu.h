@@ -43,6 +43,26 @@ namespace PluginMenu
         return true;
     }
 
+    /** Instrument / plug-in favourites (Studio One wish): names kept in the settings file, shown at the top of every
+        plug-in menu. A name matches the menu label without its lock or format suffix. */
+    inline juce::StringArray favourites()
+    {
+        juce::StringArray a; a.addLines (Prefs::getString ("pl_favourites"));
+        a.removeEmptyStrings(); a.trim();
+        return a;
+    }
+    inline bool isFavourite (const juce::String& name)   { return favourites().contains (name, true); }
+    inline void setFavourite (const juce::String& name, bool on)
+    {
+        auto a = favourites();
+        if (on) a.addIfNotAlreadyThere (name, true); else a.removeString (name, true);
+        Prefs::set ("pl_favourites", a.joinIntoString ("\n"));
+    }
+    inline juce::String plainLabel (const juce::String& label)
+    {
+        return label.upToFirstOccurrenceOf ("   [locked", false, false).upToFirstOccurrenceOf ("  (", false, false).trim();
+    }
+
     /** Every entry a menu can offer: label, result id, Pro Tools category, maker. */
     struct Entry { juce::String label, category, vendor, group; int id = 0; bool instrument = false; };
 
@@ -90,6 +110,12 @@ namespace PluginMenu
         root.addSeparator();
 
         auto all = entries (engine, filter, stereoTarget);
+        {
+            const auto favs = favourites();
+            juce::PopupMenu fm;
+            for (auto& f : favs) for (auto& e : all) if (plainLabel (e.label).equalsIgnoreCase (f)) { fm.addItem (e.id, e.label); break; }
+            if (fm.getNumItems() > 0) { root.addSubMenu (juce::String::fromUTF8 ("\xe2\x98\x85 Favourites"), fm); root.addSeparator(); }
+        }
         const auto org = organisation();
         int numThird = 0;
         for (auto& e : all) if (e.group == "thirdparty") ++numThird;

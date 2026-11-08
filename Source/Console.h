@@ -401,8 +401,15 @@ namespace Console
             auto& list = row != nullptr ? row->pluginList : s.edit->getMasterPluginList();
             if (auto t = findTap (list))
             {
-                if (row == nullptr && list.indexOf (t) != list.size() - 1)   // keep it last on the master
-                    if (auto parent = t->state.getParent(); parent.isValid()) parent.moveChild (parent.indexOf (t->state), -1, nullptr);
+                if (row == nullptr)   // keep it last in the printed master chain (Control Room inserts come after it)
+                    if (auto parent = t->state.getParent(); parent.isValid())
+                    {
+                        int firstMonitor = -1;
+                        for (int i = 0; i < parent.getNumChildren(); ++i) if ((bool) parent.getChild (i).getProperty ("sqmMonitorOnly", false)) { firstMonitor = i; break; }
+                        const int cur = parent.indexOf (t->state);
+                        const int want = firstMonitor < 0 ? parent.getNumChildren() - 1 : (cur < firstMonitor ? firstMonitor - 1 : firstMonitor);
+                        if (cur != want) parent.moveChild (cur, want, nullptr);
+                    }
                 return t;
             }
             // Added straight to the model without the undo manager: a meter is not an edit the user should undo.

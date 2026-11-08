@@ -428,34 +428,57 @@ private:
 class ClipListContent : public juce::Component, private juce::TableListBoxModel, private juce::Timer
 {
 public:
+    // 1.10 (Pro Tools wish #1): clips can be filed in bins - folders in the Clip List. A clip's bin is saved with it
+    // ("sqmBin"); bins are listed A-Z with Unfiled last, each one collapsible. Right-click a clip to file it.
+    static inline const juce::Identifier binId { "sqmBin" };
+    static juce::String binOf (te::Clip& c)   { return c.state.getProperty (binId).toString(); }
+
     ClipListContent (Session& s, TimelineState& st) : session (s), state (st)
     {
         addAndMakeVisible (table);
         table.setModel (this);
         table.getHeader().addColumn ("Clip", 1, 220);
+        table.getHeader().addColumn ("Bin", 7, 110);
         table.getHeader().addColumn ("Track", 2, 140);
         table.getHeader().addColumn ("Start", 3, 90);
         table.getHeader().addColumn ("Length", 4, 90);
         table.getHeader().addColumn ("Type", 5, 70);
-        table.getHeader().addColumn ("Source file", 6, 260);
+        table.getHeader().addColumn ("Source file", 6, 240);
         table.setRowHeight (22);
+        table.setMultipleSelectionEnabled (true);
         search.setTextToShowWhenEmpty ("Find clip...", Theme::dim());
         search.onTextChange = [this] { refresh(); };
         addAndMakeVisible (search);
         addAndMakeVisible (revealBtn);
         revealBtn.onClick = [this] { if (auto c = selected()) if (auto wc = dynamic_cast<te::WaveAudioClip*> (c)) wc->getSourceFileReference().getFile().revealToUser(); };
+        addAndMakeVisible (binBtn);
+        binBtn.setTooltip ("File the selected clips in a bin (or right-click a clip)");
+        binBtn.onClick = [this] { showBinMenu (&binBtn); };
         startTimerHz (1);
-        setSize (900, 420);
+        setSize (980, 440);
     }
     std::function<void()> onChanged;
     void refresh()
     {
-        clips.clear();
+        rows.clear();
         auto filter = search.getText().trim();
+        std::map<juce::String, std::vector<Row>> byBin;
         for (auto t : session.getTracks())
             for (auto c : t->getClips())
-                if (filter.isEmpty() || c->getName().containsIgnoreCase (filter) || t->getName().containsIgnoreCase (filter))
-                    clips.push_back ({ c, t });
+                if (filter.isEmpty() || c->getName().containsIgnoreCase (filter) || t->getName().containsIgnoreCase (filter) || binOf (*c).containsIgnoreCase (filter))
+                    byBin[binOf (*c)].push_back ({ c, t, {}, false });
+        juce::StringArray names;
+        for (auto& [k, v] : byBin) if (k.isNotEmpty()) names.add (k);
+        names.sortNatural();
+        if (byBin.count ({}) > 0) names.add ({});
+        const bool anyBins = names.size() > 1 || (names.size() == 1 && names[0].isNotEmpty());
+        for (auto& n : names)
+        {
+            auto& list = byBin[n];
+            if (anyBins) rows.push_back ({ nullptr, nullptr, n.isEmpty() ? juce::String ("Unfiled") : n, true, (int) list.size() });
+            if (anyBins && collapsed.count (n.isEmpty() ? juce::String ("Unfiled") : n)) continue;
+            for (auto& r : list) rows.push_back (r);
+        }
         table.updateContent(); table.repaint();
     }
     void resized() override
@@ -464,26 +487,97 @@ public:
         auto top = r.removeFromTop (26);
         revealBtn.setBounds (top.removeFromRight (150));
         top.removeFromRight (6);
+        binBtn.setBounds (top.removeFromRight (120));
+        top.removeFromRight (6);
         search.setBounds (top);
         r.removeFromTop (6);
         table.setBounds (r);
     }
     void paint (juce::Graphics& g) override { g.fillAll (Theme::panel()); }
+
+    /** Files clips in a bin ("" = unfile). Undoable. */
+    static void fileClips (Session& s, const juce::Array<te::Clip*>& cs, const juce::String& bin)
+    {
+        for (auto c : cs)
+        {
+            if (bin.isEmpty()) c->state.removeProperty (binId, &s.edit->getUndoManager());
+            else c->state.setProperty (binId, bin, &s.edit->getUndoManager());
+        }
+    }
+    static juce::StringArray allBins (Session& s)
+    {
+        juce::StringArray b;
+        for (auto t : s.getTracks()) for (auto c : t->getClips()) if (binOf (*c).isNotEmpty()) b.addIfNotAlreadyThere (binOf (*c));
+        b.sortNatural();
+        return b;
+    }
+
 private:
-    struct Row { te::Clip::Ptr clip; te::AudioTrack* track; };
+    struct Row { te::Clip::Ptr clip; te::AudioTrack* track; juce::String header; bool isHeader = false; int count = 0; };
     Session& session; TimelineState& state;
-    juce::TableListBox table; juce::TextEditor search; juce::TextButton revealBtn { "Show file in Finder" };
-    std::vector<Row> clips;
-    te::Clip* selected() { auto r = table.getSelectedRow(); return r >= 0 && r < (int) clips.size() ? clips[(size_t) r].clip.get() : nullptr; }
-    int getNumRows() override { return (int) clips.size(); }
-    void paintRowBackground (juce::Graphics& g, int row, int, int, bool sel) override { g.fillAll (sel ? Theme::violet().withAlpha (0.4f) : (row % 2 ? Theme::panel() : Theme::bg())); }
+    juce::TableListBox table; juce::TextEditor search; juce::TextButton revealBtn { SQ_FILE_BROWSER_SHOW }, binBtn { "File in bin..." };
+    std::vector<Row> rows;
+    std::set<juce::String> collapsed;
+    size_t lastCount = 0;
+
+    te::Clip* selected() { auto r = table.getSelectedRow(); return r >= 0 && r < (int) rows.size() ? rows[(size_t) r].clip.get() : nullptr; }
+    juce::Array<te::Clip*> selectedClips()
+    {
+        juce::Array<te::Clip*> out;
+        auto sel = table.getSelectedRows();
+        for (int i = 0; i < sel.size(); ++i) { auto r = sel[i]; if (r >= 0 && r < (int) rows.size() && rows[(size_t) r].clip != nullptr) out.add (rows[(size_t) r].clip.get()); }
+        return out;
+    }
+    void showBinMenu (juce::Component* target)
+    {
+        auto cs = selectedClips();
+        if (cs.isEmpty()) { Ui::message (juce::MessageBoxIconType::InfoIcon, "Clip List", "Select one or more clips first (Shift / " SQ_CMD "-click for several)."); return; }
+        juce::PopupMenu m;
+        auto bins = allBins (session);
+        for (int i = 0; i < bins.size(); ++i) m.addItem (100 + i, "Move to " + bins[i]);
+        if (! bins.isEmpty()) m.addSeparator();
+        m.addItem (1, "New bin...");
+        m.addItem (2, "Unfile (no bin)");
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (target), [this, cs, bins] (int r)
+        {
+            if (r >= 100) { fileClips (session, cs, bins[r - 100]); refresh(); }
+            else if (r == 2) { fileClips (session, cs, {}); refresh(); }
+            else if (r == 1)
+            {
+                auto* aw = new juce::AlertWindow ("New bin", "Name the bin for the " + juce::String (cs.size()) + " selected clip" + (cs.size() == 1 ? "" : "s") + ":", juce::MessageBoxIconType::NoIcon);
+                aw->addTextEditor ("name", "Bin " + juce::String (allBins (session).size() + 1));
+                aw->addButton ("Create", 1, juce::KeyPress (juce::KeyPress::returnKey));
+                aw->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+                aw->enterModalState (true, juce::ModalCallbackFunction::create ([this, aw, cs] (int ok)
+                {
+                    auto n = aw->getTextEditorContents ("name").trim();
+                    if (ok == 1 && n.isNotEmpty() && n != "Unfiled") { fileClips (session, cs, n); refresh(); }
+                }), true);
+            }
+        });
+    }
+    int getNumRows() override { return (int) rows.size(); }
+    void paintRowBackground (juce::Graphics& g, int row, int, int, bool sel) override
+    {
+        if (row < (int) rows.size() && rows[(size_t) row].isHeader) { g.fillAll (Theme::panel2().brighter (0.05f)); g.setColour (Theme::line()); g.drawHorizontalLine (0, 0.0f, (float) g.getClipBounds().getRight()); return; }
+        g.fillAll (sel ? Theme::violet().withAlpha (0.4f) : (row % 2 ? Theme::panel() : Theme::bg()));
+    }
     void paintCell (juce::Graphics& g, int row, int col, int w, int h, bool) override
     {
-        if (row >= (int) clips.size()) return;
-        auto& r = clips[(size_t) row];
+        if (row >= (int) rows.size()) return;
+        auto& r = rows[(size_t) row];
+        if (r.isHeader)
+        {
+            if (col != 1) return;
+            g.setColour (Theme::text()); g.setFont (Theme::font (12.5f, true));
+            const bool closed = collapsed.count (r.header) > 0;
+            g.drawText (juce::String::fromUTF8 (closed ? "\xe2\x96\xb8  " : "\xe2\x96\xbe  ") + r.header + "   (" + juce::String (r.count) + ")", 6, 0, w + 200, h, juce::Justification::centredLeft, true);
+            return;
+        }
         g.setColour (Theme::text()); g.setFont (Theme::font (12.0f));
         juce::String s;
-        if (col == 1) s = r.clip->getName();
+        if (col == 1) s = (rows.front().isHeader ? "      " : "") + r.clip->getName();
+        else if (col == 7) s = binOf (*r.clip);
         else if (col == 2) s = r.track->getName();
         else if (col == 3) s = session.barsBeatsString (r.clip->getPosition().getStart());
         else if (col == 4) s = juce::String (r.clip->getPosition().getLength().inSeconds(), 2) + " s";
@@ -491,22 +585,24 @@ private:
         else if (auto wc = dynamic_cast<te::WaveAudioClip*> (r.clip.get())) s = wc->getSourceFileReference().getFile().getFileName();
         g.drawText (s, 6, 0, w - 8, h, juce::Justification::centredLeft, true);
     }
-    void cellClicked (int row, int, const juce::MouseEvent&) override
+    void cellClicked (int row, int, const juce::MouseEvent& e) override
     {
-        if (row >= (int) clips.size()) return;
-        auto& r = clips[(size_t) row];
+        if (row >= (int) rows.size()) return;
+        auto& r = rows[(size_t) row];
+        if (r.isHeader) { if (collapsed.count (r.header)) collapsed.erase (r.header); else collapsed.insert (r.header); refresh(); return; }
+        if (e.mods.isPopupMenu()) { if (! table.isRowSelected (row)) table.selectRow (row); showBinMenu (&table); return; }
         state.selectClip (r.clip); state.selectTrack (r.track); state.timeSelection = r.clip->getPosition().time;
         if (onChanged) onChanged();
     }
     void cellDoubleClicked (int row, int, const juce::MouseEvent&) override
     {
-        if (row >= (int) clips.size()) return;
-        session.edit->getTransport().setPosition (clips[(size_t) row].clip->getPosition().getStart());
+        if (row >= (int) rows.size() || rows[(size_t) row].isHeader) return;
+        session.edit->getTransport().setPosition (rows[(size_t) row].clip->getPosition().getStart());
     }
     void timerCallback() override
     {
         size_t n = 0; for (auto t : session.getTracks()) n += (size_t) t->getClips().size();
-        if (n != clips.size() && search.getText().isEmpty()) refresh();
+        if (n != lastCount && search.getText().isEmpty()) { lastCount = n; refresh(); }
     }
 };
 
@@ -783,7 +879,7 @@ private:
     Session& session;
     juce::Label nameL, fileL, rateL, deviceL, lengthL, tracksL, clipsL, warnL, tempoField, meterField, tcStartField;
     juce::ComboBox rateBox, bitDepth, tcRate, panDepth;
-    juce::TextButton revealBtn { "Show session file in Finder" }, audioBtn { "Playback Engine (audio device)..." }, matchBtn { "Set interface to session rate" };
+    juce::TextButton revealBtn { SQ_FILE_BROWSER_SHOW_SESSION }, audioBtn { "Playback Engine (audio device)..." }, matchBtn { "Set interface to session rate" };
     void timerCallback() override
     {
         if (session.edit == nullptr) return;

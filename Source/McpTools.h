@@ -26,6 +26,8 @@
 #include "AudioEditor.h"
 #include "BurnToMidi.h"
 #include "Console.h"
+#include "MonitorChain.h"
+#include "PluginMenu.h"
 
 //==============================================================================
 struct ToolResult
@@ -1454,7 +1456,7 @@ private:
                      if (ts.isEmpty()) return ToolResult::error ("None of those tracks exist.");
                      auto p = BounceExport::params (session, o, dest);
                      p.tracksToDo = te::toBitSet (ts);
-                     f = te::Renderer::renderToFile ("Bounce", p);
+                     MonitorChain::PrintGuard guard (session); f = te::Renderer::renderToFile ("Bounce", p);
                      if (! f.existsAsFile()) err = "Bounce failed - is there any audio on those tracks in that range?";
                  }
                  else f = BounceExport::bounceMix (session, o, dest, err);

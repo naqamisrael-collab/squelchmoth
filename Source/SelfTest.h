@@ -1770,6 +1770,68 @@ inline int runSelfTest()
         check ((int) rq["ran"] == 2 && (int) rq["succeeded"] == 2, "render_queue: run renders every job in order (" + juce::String ((int) rq["succeeded"]) + "/2)");
         check (juce::JSON::parse (call ("render_queue", R"({"action":"list"})")).size() == 0, "render_queue: empty after a run");
 
+        // Control Room: monitor-only master inserts and the Master fader never print
+        {
+            auto bounceGtr = [&] (const juce::String& name)
+            {
+                auto f = tmp.getChildFile (name); f.deleteFile();
+                call ("bounce", "{\"path\":\"" + pathOf (f) + "\",\"tracks\":[\"Gtr\"],\"start_bar\":1,\"end_bar\":3,\"tail_seconds\":0,\"bit_depth\":32}");
+                return juce::Decibels::gainToDecibels (peakOf (f), -100.0f);
+            };
+            const float a = bounceGtr ("sqm110_cr_a.wav");
+            call ("monitor_chain", R"({"action":"add","plugin":"Cocoon Compressor"})");
+            auto ml3 = juce::JSON::parse (call ("monitor_chain", R"({"action":"list"})"));
+            const int crSlot = ml3["master_inserts"].size();
+            if (auto ins = Session::getInserts (session->edit->getMasterPluginList(), nullptr); ! ins.isEmpty())
+            {
+                Console::Model::setParam (*ins.getLast(), "threshold", juce::Decibels::decibelsToGain (-40.0f));
+                Console::Model::setParam (*ins.getLast(), "ratio", 0.0f);
+            }
+            const float b = bounceGtr ("sqm110_cr_b.wav");
+            check (crSlot >= 1 && ! (bool) ml3["master_inserts"][crSlot - 1]["prints"] && std::abs (a - b) < 0.05f,
+                   "Control Room: a monitor-only master insert is not printed (" + juce::String (a, 2) + " vs " + juce::String (b, 2) + " dBFS)");
+            call ("monitor_chain", "{\"action\":\"set\",\"slot\":" + juce::String (crSlot) + ",\"monitor\":false}");
+            const float c = bounceGtr ("sqm110_cr_c.wav");
+            check (c < a - 3.0f, "Control Room: the same insert prints once it is not monitor-only (" + juce::String (c, 2) + " dBFS)");
+            call ("monitor_chain", "{\"action\":\"set\",\"slot\":" + juce::String (crSlot) + ",\"monitor\":true}");
+            auto mv = session->edit->getMasterVolumePlugin();
+            mv->setVolumeDb (-12.0f);
+            call ("monitor_chain", R"({"action":"master_fader_prints","value":false})");
+            const float d = bounceGtr ("sqm110_cr_d.wav");
+            check (std::abs (d - a) < 0.05f && std::abs (mv->getVolumeDb() + 12.0f) < 0.01f, "Control Room: renders ignore the Master fader when asked, and the fader comes back (" + juce::String (d, 2) + " dBFS)");
+            call ("monitor_chain", R"({"action":"master_fader_prints","value":true})");
+            const float e = bounceGtr ("sqm110_cr_e.wav");
+            check (std::abs (e - (a - 12.0f)) < 0.1f, "Control Room: the Master fader prints again by default (" + juce::String (e, 2) + " dBFS)");
+            mv->setVolumeDb (0.0f);
+            for (auto p : MonitorChain::plugins (*session)) p->deleteFromParent();
+        }
+
+        // favourites, MIDI CC, clip bins
+        call ("plugin_favourites", R"({"action":"add","name":"Prism EQ"})");
+        check (PluginMenu::isFavourite ("Prism EQ"), "plugin_favourites: added");
+        {
+            auto menu = PluginMenu::build (*engine, PluginMenu::effects);
+            bool found = false;
+            for (juce::PopupMenu::MenuItemIterator it (menu); it.next();) if (it.getItem().text.contains ("Favourites")) found = true;
+            check (found, "plugin_favourites: every plug-in menu opens with a Favourites submenu");
+        }
+        call ("plugin_favourites", R"({"action":"remove","name":"Prism EQ"})");
+        call ("add_track", R"({"kind":"instrument","name":"Keys CC","instrument":"Mothsynth"})");
+        call ("create_midi_clip", R"({"track":"Keys CC","length_bars":2,"notes":[{"pitch":60,"start_beat":0,"length_beats":4}]})");
+        call ("midi_cc", R"({"action":"ramp","track":"Keys CC","cc":74,"from_beat":0,"to_beat":4,"from":10,"to":120,"steps":10})");
+        auto ccr = juce::JSON::parse (call ("midi_cc", R"({"action":"read","track":"Keys CC","cc":74})"));
+        check (ccr.size() == 11 && (int) ccr[0]["value"] == 10 && (int) ccr[10]["value"] == 120 && std::abs ((double) ccr[5]["beat"] - 2.0) < 1.0e-6, "midi_cc: a 10-step ramp 10 -> 120 over 4 beats lands exactly");
+        call ("midi_cc", R"({"action":"write","track":"Keys CC","cc":"pitch","points":[{"beat":1,"value":-8192},{"beat":2,"value":8191}]})");
+        auto pr = juce::JSON::parse (call ("midi_cc", R"({"action":"read","track":"Keys CC","cc":"pitch"})"));
+        check (pr.size() == 2 && (int) pr[0]["value"] == -8192 && (int) pr[1]["value"] == 8191, "midi_cc: pitch bend keeps its full -8192..8191 range");
+        call ("midi_cc", R"({"action":"write","track":"Keys CC","cc":200,"points":[]})", false);
+        call ("clip_bins", R"({"action":"file","clips":[{"track":"Gtr","clip":1},{"track":"Keys CC","clip":1}],"bin":"Takes"})");
+        auto bl = juce::JSON::parse (call ("clip_bins", R"({"action":"list"})"));
+        check (bl["bins"].size() == 1 && bl["bins"][0].toString() == "Takes" && bl["contents"]["Takes"].size() == 2, "clip_bins: two clips filed in a bin");
+        call ("clip_bins", R"({"action":"rename","bin":"Takes","to":"Keepers"})");
+        bl = juce::JSON::parse (call ("clip_bins", R"({"action":"list"})"));
+        check (bl["bins"][0].toString() == "Keepers", "clip_bins: rename");
+
         // private settings
         check (call ("set_preference", R"({"key":"cl_anthropicKey","value":"x"})", false).contains ("private")
                && call ("set_preference", R"({"key":"chat_apiBase","value":"http://evil.example"})", false).contains ("private")

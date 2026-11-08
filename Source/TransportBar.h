@@ -21,6 +21,81 @@ public:
     std::unique_ptr<juce::Drawable> drawable;
 };
 
+//==============================================================================
+/** 1.10: the stereo master meter in the top bar (the reference's bar meter): L / R LED bars, -48..+3 dBFS, peak hold
+    and a clip light. Click to reset. Reads the playback context's master levels (post Master fader). */
+class MasterMeterBar : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
+{
+public:
+    explicit MasterMeterBar (Session& s) : session (s)   { startTimerHz (30); setTooltip ("Master output (post fader) - click to clear the peak and clip lights"); }
+    ~MasterMeterBar() override   { detach (true); }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto r = getLocalBounds().toFloat();
+        g.setColour (juce::Colours::black.withAlpha (0.45f));
+        g.fillRoundedRectangle (r, 8.0f);
+        g.setColour (juce::Colours::black.withAlpha (0.7f));
+        g.drawRoundedRectangle (r.reduced (0.5f), 8.0f, 1.0f);
+        auto inner = r.reduced (10.0f, 9.0f);
+        auto clipLed = inner.removeFromRight (8.0f);
+        inner.removeFromRight (4.0f);
+        const float bh = (inner.getHeight() - 4.0f) / 2.0f;
+        for (int c = 0; c < 2; ++c)
+        {
+            auto bar = juce::Rectangle<float> (inner.getX(), inner.getY() + (float) c * (bh + 4.0f), inner.getWidth(), bh);
+            const float lit = bar.getX() + bar.getWidth() * prop (level[c]);
+            for (float x = bar.getX(); x + 2.0f <= bar.getRight(); x += 3.0f)
+            {
+                const float db = -48.0f + (x - bar.getX()) / bar.getWidth() * 51.0f;
+                auto col = db > 0.0f ? juce::Colour (0xffff3b3b) : db > -3.0f ? juce::Colour (0xffff9a2a) : db > -12.0f ? juce::Colour (0xffffe23a) : juce::Colour (0xff2bff88);
+                g.setColour (x + 1.0f <= lit ? col : col.withAlpha (0.10f));
+                g.fillRect (x, bar.getY(), 2.0f, bar.getHeight());
+            }
+            if (hold[c] > -47.0f)
+            {
+                g.setColour (juce::Colours::white.withAlpha (0.85f));
+                g.fillRect (bar.getX() + bar.getWidth() * prop (hold[c]) - 1.0f, bar.getY(), 2.0f, bar.getHeight());
+            }
+        }
+        g.setColour (clip ? juce::Colour (0xffff3b3b) : juce::Colour (0xff3a4656));
+        g.fillRoundedRectangle (clipLed, 2.0f);
+    }
+    void mouseDown (const juce::MouseEvent&) override   { clip = false; hold[0] = hold[1] = -100.0f; repaint(); }
+
+private:
+    Session& session;
+    te::EditPlaybackContext* ctx = nullptr;
+    te::LevelMeasurer::Client client;
+    float level[2] = { -100, -100 }, hold[2] = { -100, -100 };
+    int holdTicks[2] = { 0, 0 };
+    bool clip = false;
+
+    static float prop (float db)   { return juce::jlimit (0.0f, 1.0f, (db + 48.0f) / 51.0f); }
+    void detach (bool contextStillExists)
+    {
+        if (ctx != nullptr && contextStillExists) ctx->masterLevels.removeClient (client);
+        ctx = nullptr;
+    }
+    void timerCallback() override
+    {
+        auto epc = session.edit != nullptr ? session.edit->getCurrentPlaybackContext() : nullptr;
+        if (epc != ctx) { detach (false); ctx = epc; if (ctx != nullptr) ctx->masterLevels.addClient (client); }
+        bool changed = false;
+        for (int c = 0; c < 2; ++c)
+        {
+            const float l = ctx != nullptr ? client.getAndClearAudioLevel (c).dB : -100.0f;
+            const float nl = juce::jmax (l, level[c] - 1.2f);
+            if (std::abs (nl - level[c]) > 0.05f) changed = true;
+            level[c] = nl;
+            if (l > hold[c]) { hold[c] = l; holdTicks[c] = 45; changed = true; }
+            else if (--holdTicks[c] <= 0 && hold[c] > -100.0f) { hold[c] = juce::jmax (-100.0f, hold[c] - 1.0f); changed = true; }
+            if (l >= 0.0f && ! clip) { clip = true; changed = true; }
+        }
+        if (changed) repaint();
+    }
+};
+
 class TransportBar : public juce::Component,
                      private juce::Timer,
                      private juce::ChangeListener
@@ -166,6 +241,7 @@ public:
         beatTab.onClick = [this] { if (onShowView) onShowView ("beat"); };
         beatTab.setTooltip ("Beat page (" SQ_CMD "+Shift+B): browser, Channel Rack, instrument, playlist - the FL workspace");
         claudeTab.onClick = [this] { if (onShowView) onShowView ("claude"); };
+        addAndMakeVisible (masterMeter);
         addAndMakeVisible (chatTab);
         chatTab.setClickingTogglesState (false);
         chatTab.setTooltip ("Squelchmoth Chat (" SQ_CMD "+Shift+C): type to Claude and it works in this session");
@@ -254,40 +330,46 @@ public:
 
     void resized() override
     {
+        // Fits 1500 px with nothing clipped: below 1720 px the wordmark hides (the logo stays) and the keys tighten.
         auto r = getLocalBounds().reduced (8, 6);
+        const bool roomy = getWidth() >= 1720;
+        const int key = roomy ? 40 : 36, wide = roomy ? 54 : 50, tabW = roomy ? 86 : 76;
         logo.setBounds (r.removeFromLeft (48));
         r.removeFromLeft (4);
-        title.setBounds (r.removeFromLeft (150));
+        title.setVisible (roomy);
+        if (roomy) title.setBounds (r.removeFromLeft (150));
         r.removeFromLeft (8);
 
         juce::Array<juce::TextButton*> shown;
         for (auto* b : { &editTab, &mixTab, &beatTab, &claudeTab }) if (b->isVisible()) shown.add (b);
-        chatTab.setBounds (r.removeFromRight (78).reduced (3, 8));
-        r.removeFromRight (6);
-        auto tabs = r.removeFromRight (shown.size() * 92);
+        chatTab.setBounds (r.removeFromRight (roomy ? 78 : 68).reduced (3, 8));
+        r.removeFromRight (4);
+        auto tabs = r.removeFromRight (shown.size() * tabW);
         auto tw = tabs.getWidth() / juce::jmax (1, shown.size());
         for (int i = 0; i < shown.size(); ++i) shown[i]->setBounds ((i + 1 == shown.size() ? tabs : tabs.removeFromLeft (tw)).reduced (3, 8));
-        cpu.setBounds (r.removeFromRight (80));
+        r.removeFromRight (6);
+        masterMeter.setBounds (r.removeFromRight (roomy ? 160 : 118).reduced (0, 9));
+        cpu.setBounds (r.removeFromRight (roomy ? 72 : 52));
 
         for (auto* b : { &rtz, &rew, &stop, &play, &ffwd, &toEnd, &rec })
-            b->setBounds (r.removeFromLeft (40).reduced (2, 8));
-        loop.setBounds (r.removeFromLeft (54).reduced (2, 8));
-        click.setBounds (r.removeFromLeft (54).reduced (2, 8));
-        patSong.setBounds (r.removeFromLeft (54).reduced (2, 8));
+            b->setBounds (r.removeFromLeft (key).reduced (2, 8));
+        loop.setBounds (r.removeFromLeft (wide).reduced (2, 8));
+        click.setBounds (r.removeFromLeft (wide).reduced (2, 8));
+        patSong.setBounds (r.removeFromLeft (wide).reduced (2, 8));
         r.removeFromLeft (6);
-        auto modes = r.removeFromLeft (120);
+        auto modes = r.removeFromLeft (116);
         auto top = modes.removeFromTop (modes.getHeight() / 2);
-        preBtn.setBounds (top.removeFromLeft (60).reduced (2, 3));
+        preBtn.setBounds (top.removeFromLeft (58).reduced (2, 3));
         postBtn.setBounds (top.reduced (2, 3));
         modeBtn.setBounds (modes.reduced (2, 3));
         r.removeFromLeft (8);
 
-        auto cnt = r.removeFromLeft (200);
+        auto cnt = r.removeFromLeft (roomy ? 200 : 168);
         counter.setBounds (cnt.removeFromTop (cnt.getHeight() * 2 / 3));
         timecode.setBounds (cnt);
         r.removeFromLeft (8);
-        tempo.setBounds (r.removeFromLeft (96).reduced (2, 10));
-        meter.setBounds (r.removeFromLeft (56).reduced (2, 10));
+        tempo.setBounds (r.removeFromLeft (92).reduced (2, 10));
+        meter.setBounds (r.removeFromLeft (54).reduced (2, 10));
     }
 
 private:
@@ -350,6 +432,7 @@ private:
     IconButton rtz { "|<" }, rew { "<<" }, stop { "[]" }, play { ">" }, ffwd { ">>" }, toEnd { ">|" }, rec { "O" }, loop { "LOOP" }, click { "CLICK" }, patSong { "PAT" };
     juce::TextButton preBtn { "PRE" }, postBtn { "POST" }, modeBtn { "NORMAL" };
     juce::TextButton editTab { "EDIT" }, mixTab { "MIX" }, beatTab { "BEAT" }, claudeTab { "CLAUDE" }, chatTab { "CHAT" };
+    MasterMeterBar masterMeter { session };
 
     te::Edit* edit()    { return session.edit.get(); }
 

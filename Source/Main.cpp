@@ -10,7 +10,11 @@
 #if JUCE_MAC
  #define SQ_CMD "Cmd"
  #define SQ_OPT "Opt"
+ #define SQ_FILE_BROWSER_SHOW "Show file in Finder"
+ #define SQ_FILE_BROWSER_SHOW_SESSION "Show session file in Finder"
 #else
+ #define SQ_FILE_BROWSER_SHOW "Show file in Explorer"
+ #define SQ_FILE_BROWSER_SHOW_SESSION "Show session file in Explorer"
  #define SQ_CMD "Ctrl"
  #define SQ_OPT "Alt"
 #endif

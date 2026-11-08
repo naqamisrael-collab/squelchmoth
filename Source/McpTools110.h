@@ -456,4 +456,181 @@ void register110Tools()
              }
              return ToolResult::error ("Unknown action");
          });
+
+    //==========================================================================
+    add ("monitor_chain",
+         "The Control Room (Logic wish): Master inserts that you hear on playback but that NEVER print into bounces, stems or the mastering bounce - room correction, headphone EQ, a reference trim. "
+         "list; add (plugin name: inserted on the Master as monitor-only, after the meter tap so LUFS readings stay what prints); set (slot = Master insert number from list, monitor true/false); "
+         "master_fader_prints false keeps the Master fader out of every render (turn the room down without changing the printed level), true restores normal printing.",
+         R"json({"type":"object","properties":{"action":{"type":"string","enum":["list","add","set","master_fader_prints"]},"plugin":{"type":"string"},"slot":{"type":"integer"},"monitor":{"type":"boolean"},"value":{"type":"boolean"}},"required":["action"]})json",
+         [this, refresh] (const juce::var& a)
+         {
+             auto act = str (a, "action").toLowerCase();
+             auto& list = edit().getMasterPluginList();
+             auto inserts = Session::getInserts (list, nullptr);
+             if (act == "list")
+             {
+                 auto o = obj();
+                 juce::Array<juce::var> arr;
+                 for (int i = 0; i < inserts.size(); ++i)
+                 {
+                     auto e = obj(); set (e, "slot", i + 1); set (e, "plugin", Signature::displayName (*inserts[i]));
+                     set (e, "prints", ! MonitorChain::isMonitorOnly (*inserts[i])); arr.add (e);
+                 }
+                 set (o, "master_inserts", arr);
+                 set (o, "master_fader_prints", MonitorChain::masterFaderPrints());
+                 return ToolResult::ok (o);
+             }
+             if (act == "master_fader_prints")
+             {
+                 Prefs::set ("bx_masterFaderOff", ! flag (a, "value", true));
+                 return ToolResult::ok (MonitorChain::masterFaderPrints() ? "The Master fader prints into bounces again." : "Renders now ignore the Master fader (it only sets your listening level).");
+             }
+             if (act == "add")
+             {
+                 juce::String err;
+                 auto p = session.createPluginByName (str (a, "plugin"), err);
+                 if (p == nullptr) return ToolResult::error (err.isNotEmpty() ? err : "No plug-in named '" + str (a, "plugin") + "'");
+                 list.insertPlugin (p, -1, nullptr);
+                 MonitorChain::setMonitorOnly (session, *p, true);
+                 refresh();
+                 return ToolResult::ok (Signature::displayName (*p) + " is on the Master as a Control Room insert: heard on playback, never printed.");
+             }
+             if (act == "set")
+             {
+                 const int slot = (int) num (a, "slot", 0) - 1;
+                 if (slot < 0 || slot >= inserts.size()) return ToolResult::error ("slot must be 1.." + juce::String (inserts.size()) + " (action list)");
+                 MonitorChain::setMonitorOnly (session, *inserts[slot], flag (a, "monitor", true));
+                 refresh();
+                 return ToolResult::ok (Signature::displayName (*inserts[slot]) + (flag (a, "monitor", true) ? " is now monitor-only." : " prints again."));
+             }
+             return ToolResult::error ("Unknown action");
+         });
+
+    //==========================================================================
+    add ("plugin_favourites",
+         "Plug-in favourites (Studio One wish): names shown in a Favourites submenu at the top of every plug-in menu. list; add (name); remove (name). Names as list_plugins shows them.",
+         R"json({"type":"object","properties":{"action":{"type":"string","enum":["list","add","remove"]},"name":{"type":"string"}},"required":["action"]})json",
+         [this] (const juce::var& a)
+         {
+             auto act = str (a, "action").toLowerCase();
+             if (act != "list")
+             {
+                 auto n = str (a, "name").trim();
+                 if (n.isEmpty()) return ToolResult::error ("Give the plug-in name.");
+                 PluginMenu::setFavourite (n, act == "add");
+             }
+             juce::Array<juce::var> arr; for (auto& f : PluginMenu::favourites()) arr.add (f);
+             return ToolResult::ok (juce::var (arr));
+         });
+
+    //==========================================================================
+    add ("midi_cc",
+         "MIDI controller data in a MIDI clip (Logic wish: CC lanes). cc: a controller number 0-127 (1 mod wheel, 7 volume, 10 pan, 11 expression, 64 sustain, 74 brightness), or 'pitch' / 'pressure'. "
+         "action read: the events (beat, value). write: points [{beat, value}] (0-127; pitch -8192..8191) - replace=true clears that controller first. "
+         "ramp: from_beat, to_beat, from, to, steps (default 16) - a smooth line, e.g. a filter sweep. clear: remove that controller. Beats are relative to the clip start. Undoable.",
+         R"json({"type":"object","properties":{"action":{"type":"string","enum":["read","write","ramp","clear"]},"track":{"type":["string","integer"]},"clip":{"type":["string","integer"]},"cc":{"type":["string","integer"]},
+            "points":{"type":"array","items":{"type":"object","properties":{"beat":{"type":"number"},"value":{"type":"number"}},"required":["beat","value"]}},"replace":{"type":"boolean"},
+            "from_beat":{"type":"number"},"to_beat":{"type":"number"},"from":{"type":"number"},"to":{"type":"number"},"steps":{"type":"integer"}},"required":["action","track","cc"]})json",
+         [this] (const juce::var& a)
+         {
+             juce::String err;
+             auto t = trackArg (a, err);
+             if (t == nullptr) return ToolResult::error (err);
+             te::MidiClip* mc = nullptr;
+             if (has (a, "clip")) mc = dynamic_cast<te::MidiClip*> (clipArg (*t, a, err));
+             else for (auto c : t->getClips()) if (auto m = dynamic_cast<te::MidiClip*> (c)) { mc = m; break; }
+             if (mc == nullptr) return ToolResult::error (err.isNotEmpty() ? err : t->getName() + " has no MIDI clip (create_midi_clip first).");
+             auto ccs = a["cc"].toString().trim().toLowerCase();
+             int type; bool pitch = false;
+             if (ccs == "pitch" || ccs == "pitchbend" || ccs == "pitch wheel") { type = te::MidiControllerEvent::pitchWheelType; pitch = true; }
+             else if (ccs == "pressure" || ccs == "aftertouch") type = te::MidiControllerEvent::channelPressureType;
+             else { type = ccs.getIntValue(); if (type < 0 || type > 127 || ! ccs.containsOnly ("0123456789")) return ToolResult::error ("cc must be 0-127, 'pitch' or 'pressure'"); }
+             auto& seq = mc->getSequence();
+             auto toStored = [pitch] (double v) { return pitch ? juce::jlimit (0, 16383, juce::roundToInt (v) + 8192) : juce::jlimit (0, 16383, juce::roundToInt (juce::jlimit (0.0, 127.0, v)) << 7); };
+             auto fromStored = [pitch] (int v) { return pitch ? v - 8192 : v >> 7; };
+             auto clearType = [&]
+             {
+                 juce::Array<te::MidiControllerEvent*> kill;
+                 for (auto e : seq.getControllerEvents()) if (e->getType() == type) kill.add (e);
+                 for (auto e : kill) seq.removeControllerEvent (*e, um());
+                 return kill.size();
+             };
+             auto act = str (a, "action").toLowerCase();
+             if (act == "clear") return ToolResult::ok ("Removed " + juce::String (clearType()) + " events.");
+             if (act == "write" || act == "ramp")
+             {
+                 if (act == "write" && flag (a, "replace")) clearType();
+                 int n = 0;
+                 if (act == "write")
+                 {
+                     if (auto arr = a["points"].getArray())
+                         for (auto& p : *arr) { seq.addControllerEvent (te::BeatPosition::fromBeats ((double) p["beat"]), type, toStored ((double) p["value"]), um()); ++n; }
+                 }
+                 else
+                 {
+                     const double b0 = num (a, "from_beat", 0.0), b1 = num (a, "to_beat", b0 + 4.0), v0 = num (a, "from", 0.0), v1 = num (a, "to", 127.0);
+                     const int steps = juce::jlimit (2, 512, (int) num (a, "steps", 16));
+                     if (b1 <= b0) return ToolResult::error ("to_beat must be after from_beat");
+                     for (int i = 0; i <= steps; ++i)
+                     {
+                         const double f = (double) i / steps;
+                         seq.addControllerEvent (te::BeatPosition::fromBeats (b0 + f * (b1 - b0)), type, toStored (v0 + f * (v1 - v0)), um()); ++n;
+                     }
+                 }
+                 return ToolResult::ok ("Wrote " + juce::String (n) + " " + te::MidiControllerEvent::getControllerTypeName (type) + " events in " + mc->getName() + ".");
+             }
+             juce::Array<juce::var> arr;
+             for (auto e : seq.getControllerEvents())
+                 if (e->getType() == type) { auto o = obj(); set (o, "beat", e->getBeatPosition().inBeats()); set (o, "value", fromStored (e->getControllerValue())); arr.add (o); }
+             return ToolResult::ok (juce::var (arr));
+         });
+
+    //==========================================================================
+    add ("clip_bins",
+         "Clip List bins (Pro Tools wish): folders for clips. list: every bin and its clips (plus unfiled). file: put clips in a bin - track + clip (one) or clips [{track, clip}] - bin name ('' or 'none' unfiles). "
+         "rename (bin, to). The Clip List window (Window > Clip List) shows bins as collapsible folders. Undoable.",
+         R"json({"type":"object","properties":{"action":{"type":"string","enum":["list","file","rename"]},"bin":{"type":"string"},"to":{"type":"string"},"track":{"type":["string","integer"]},"clip":{"type":["string","integer"]},
+            "clips":{"type":"array","items":{"type":"object","properties":{"track":{"type":["string","integer"]},"clip":{"type":["string","integer"]}}}}},"required":["action"]})json",
+         [this] (const juce::var& a)
+         {
+             static const juce::Identifier binId ("sqmBin");
+             auto act = str (a, "action").toLowerCase();
+             if (act == "list")
+             {
+                 std::map<juce::String, juce::Array<juce::var>> bins;
+                 for (auto t : session.getTracks())
+                     for (auto c : t->getClips()) bins[c->state.getProperty (binId).toString()].add (t->getName() + " > " + c->getName());
+                 auto o = obj();
+                 for (auto& [k, v] : bins) set (o, k.isEmpty() ? juce::Identifier ("(unfiled)") : juce::Identifier (k.replaceCharacters (" .", "__")), juce::var (v));
+                 juce::Array<juce::var> names; for (auto& [k, v] : bins) if (k.isNotEmpty()) names.add (k);
+                 auto out = obj(); set (out, "bins", names); set (out, "contents", o);
+                 return ToolResult::ok (out);
+             }
+             if (act == "rename")
+             {
+                 auto from = str (a, "bin"), to = str (a, "to").trim();
+                 if (to.isEmpty()) return ToolResult::error ("Give the new name (to).");
+                 int n = 0;
+                 for (auto t : session.getTracks()) for (auto c : t->getClips()) if (c->state.getProperty (binId).toString() == from) { c->state.setProperty (binId, to, um()); ++n; }
+                 return n > 0 ? ToolResult::ok ("Renamed bin '" + from + "' to '" + to + "' (" + juce::String (n) + " clips).") : ToolResult::error ("No bin named '" + from + "'.");
+             }
+             if (act != "file") return ToolResult::error ("Unknown action");
+             auto bin = str (a, "bin").trim();
+             if (bin.equalsIgnoreCase ("none") || bin.equalsIgnoreCase ("unfiled")) bin = {};
+             juce::Array<juce::var> refs;
+             if (auto arr = a["clips"].getArray()) refs = *arr; else refs.add (a);
+             int n = 0;
+             for (auto& r : refs)
+             {
+                 juce::String err;
+                 auto t = trackArg (r, err);
+                 if (t == nullptr) return ToolResult::error (err);
+                 auto c = clipArg (*t, r, err);
+                 if (c == nullptr) return ToolResult::error (err);
+                 if (bin.isEmpty()) c->state.removeProperty (binId, um()); else c->state.setProperty (binId, bin, um());
+                 ++n;
+             }
+             return ToolResult::ok (juce::String (n) + " clip" + (n == 1 ? "" : "s") + (bin.isEmpty() ? " unfiled." : " filed in '" + bin + "'."));
+         });
 }

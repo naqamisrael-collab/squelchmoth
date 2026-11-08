@@ -70,6 +70,13 @@ THE CONSOLE (Mix window)
 - Select several strips (Shift-click) and drag one fader: they all move by the same amount. Hold Alt
   (Opt on a Mac) to move just one. Drag a strip's name sideways to reorder tracks.
 
+CONTROL ROOM, BINS AND FAVOURITES
+- Control Room: open a Master insert's menu (the small arrow) and choose "Monitor only". You still hear it
+  (room correction, headphone EQ), but it never prints into a bounce or stems. The insert shows "CR".
+- Clip List bins: Window > Clip List. Select clips, then click "File in bin..." (or right-click) to put them in
+  a bin. Click a bin's name to fold it open or shut.
+- Favourites: in any insert's menu choose "Add to Favourites". It then sits at the top of every plug-in menu.
+
 CONNECT CLAUDE (use Squelchmoth from claude.ai instead)
 1. Click CLAUDE (top right). Five status lights show each step.
 2. Click CONNECT CLAUDE. Wait until the fourth light is green ("verified: the internet can

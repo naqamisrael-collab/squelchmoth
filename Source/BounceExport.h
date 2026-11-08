@@ -7,6 +7,7 @@
 #include "Session.h"
 #include "TimeFormat.h"
 #include "Theme.h"
+#include "MonitorChain.h"
 
 namespace BounceExport
 {
@@ -66,6 +67,7 @@ namespace BounceExport
         if (r.getLength() <= 0.001s) { err = "Nothing to bounce - the session is empty or the range is invalid."; return {}; }
         auto p = params (s, o, dest);
         p.tracksToDo = te::toBitSet (te::getAllTracks (*s.edit));
+        MonitorChain::PrintGuard guard (s);   // the Control Room chain and (optionally) the Master fader never print
         auto f = te::Renderer::renderToFile ("Bounce", p);
         if (! f.existsAsFile()) { err = "The bounce produced no audio - is there anything between those points?"; return {}; }
         return f;
@@ -180,6 +182,7 @@ namespace BounceExport
         res.folder.createDirectory();
         const auto ext = "." + (o.format == "aiff" ? juce::String ("aif") : o.format);
 
+        MonitorChain::PrintGuard guard (s);
         int n = 0;
         for (auto t : stems)
         {

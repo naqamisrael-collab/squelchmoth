@@ -7,6 +7,7 @@
 #include "PluginMenu.h"
 #include "IORouting.h"
 #include "InsertChains.h"
+#include "MonitorChain.h"
 
 class SlotController
 {
@@ -107,6 +108,12 @@ public:
         m.addItem (8, "Paste insert here (replace)", copiedInsert().isValid());
         m.addSeparator();
         m.addItem (9, "Save as preset...");
+        m.addItem (11, PluginMenu::isFavourite (Signature::displayName (*p)) ? "Remove from Favourites" : "Add to Favourites (top of every plug-in menu)");
+        if (row == nullptr)
+        {
+            m.addSeparator();
+            m.addItem (10, "Monitor only - Control Room (heard, never printed)", true, MonitorChain::isMonitorOnly (*p));
+        }
         m.addSeparator();
         m.addSubMenu ("Insert chain (all inserts)", InsertChains::menu (chainFiles));
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (target), [this, target, slotIndex, p] (int r)
@@ -128,6 +135,14 @@ public:
                 }
             }
             else if (r == 7) { session.edit->flushPluginStateIfNeeded (*p); copiedInsert() = p->state.createCopy(); }
+            else if (r == 11) { auto n = Signature::displayName (*p); PluginMenu::setFavourite (n, ! PluginMenu::isFavourite (n)); }
+            else if (r == 10)
+            {
+                const bool on = ! MonitorChain::isMonitorOnly (*p);
+                MonitorChain::setMonitorOnly (session, *p, on);
+                session.log.add ("You", Signature::displayName (*p) + (on ? " is monitor-only (Control Room: heard, never printed)" : " prints again"));
+                slotsChanged();
+            }
             else if (r == 8) { pasteInsert (slotIndex, p); return; }
             else if (r == 9) savePluginPreset (p);
             slotsChanged();
@@ -268,7 +283,7 @@ struct InsertSlot : public juce::Component, public juce::SettableTooltipClient
     void refresh()
     {
         if (plugin != nullptr)
-            setTooltip ("Insert " + SlotController::slotLetter (index) + ": " + Signature::displayName (*plugin) + (plugin->isEnabled() ? "" : " (bypassed)") + "\nclick: open window   |   arrow / right-click: remove, bypass, move, replace, copy   |   double-click: bypass");
+            setTooltip ("Insert " + SlotController::slotLetter (index) + ": " + Signature::displayName (*plugin) + (plugin->isEnabled() ? "" : " (bypassed)") + (MonitorChain::isMonitorOnly (*plugin) ? " - Control Room: heard on playback, never printed" : "") + "\nclick: open window   |   arrow / right-click: remove, bypass, move, replace, copy   |   double-click: bypass");
         else
             setTooltip ("Insert " + SlotController::slotLetter (index) + " - click to add a plug-in");
         repaint();
@@ -277,14 +292,15 @@ struct InsertSlot : public juce::Component, public juce::SettableTooltipClient
     {
         auto r = getLocalBounds().toFloat();
         bool on = plugin != nullptr && plugin->isEnabled();
-        auto fill = plugin == nullptr ? Theme::bg().withAlpha (0.6f) : (on ? Theme::violet().withAlpha (0.55f) : Theme::panel2());
+        const bool monitor = plugin != nullptr && MonitorChain::isMonitorOnly (*plugin);
+        auto fill = plugin == nullptr ? Theme::bg().withAlpha (0.6f) : (on ? (monitor ? juce::Colour (0xff1d6f86) : Theme::violet().withAlpha (0.55f)) : Theme::panel2());
         g.setColour (fill);
         g.fillRoundedRectangle (r, compact ? 2.0f : 3.0f);
         if (plugin != nullptr && ! on) { g.setColour (Theme::amber().withAlpha (0.8f)); g.drawRoundedRectangle (r.reduced (0.5f), 3.0f, 1.0f); }
         g.setFont (Theme::font (compact ? juce::jmin (10.0f, getHeight() * 0.8f) : 10.0f, plugin != nullptr));
         g.setColour (plugin == nullptr ? Theme::dim().withAlpha (0.6f) : (on ? Theme::text() : Theme::dim()));
         auto nameArea = getLocalBounds().withTrimmedRight (12).withTrimmedLeft (4);
-        g.drawText (plugin != nullptr ? Signature::displayName (*plugin) : SlotController::slotLetter (index), nameArea, juce::Justification::centredLeft);
+        g.drawText (plugin != nullptr ? (monitor ? "CR  " : "") + Signature::displayName (*plugin) : SlotController::slotLetter (index), nameArea, juce::Justification::centredLeft);
         if (getHeight() >= 9)
         {
             g.setColour (Theme::dim());
