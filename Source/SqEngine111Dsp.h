@@ -433,8 +433,12 @@ namespace Eng
                 for (int i = 0; i < n; ++i) f[(size_t) i] = fn (-range + i * step);
                 // integrate from 0 outwards (Simpson on 8 sub-steps) so F(0) = 0 and the table is symmetric in error
                 const int z = (int) std::round (range / step);
-                auto seg = [&fn] (double x0, double x1) { const int m = 8; const double h = (x1 - x0) / m; double s = fn (x0) + fn (x1);
-                                                        for (int k = 1; k < m; ++k) s += fn (x0 + k * h) * (k % 2 ? 4.0 : 2.0); return s * h / 3.0; };
+                auto seg = [&fn] (double x0, double x1)
+                {
+                    const int m = 8; const double h = (x1 - x0) / m; double s = fn (x0) + fn (x1);
+                    for (int k = 1; k < m; ++k) s += fn (x0 + k * h) * (k % 2 ? 4.0 : 2.0);
+                    return s * h / 3.0;
+                };
                 for (int i = z + 1; i < n; ++i) F[(size_t) i] = F[(size_t) (i - 1)] + seg (-range + (i - 1) * step, -range + i * step);
                 for (int i = z - 1; i >= 0; --i) F[(size_t) i] = F[(size_t) (i + 1)] - seg (-range + i * step, -range + (i + 1) * step);
                 fLo = f.front(); fHi = f.back(); FLo = F.front(); FHi = F.back();

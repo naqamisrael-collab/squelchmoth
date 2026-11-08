@@ -78,7 +78,7 @@ namespace Edition
             { "sqmMandible", Pack::beat }, { "sqmMandibleLite", Pack::beat },
             { "sqmTimeWeaver", Pack::creative }, { "sqmLarvaFilter", Pack::creative }, { "sqmOilCan", Pack::creative }, { "sqmBBD", Pack::creative },
             { "sqmRing", Pack::creative }, { "sqmPhase12", Pack::creative }, { "sqmLadder", Pack::creative },
-            { "sqmCinder", Pack::color } };
+            { "sqmCinder", Pack::color }, { "sqmWingbeat", Pack::color }, { "sqmFoilPlate", Pack::color }, { "sqmRadiant", Pack::color }, { "sqmMaw", Pack::color } };
         auto it = m.find (type); return it != m.end() ? it->second : Pack::none;
     }
     /** The Demo's basic set: 16 effects, 6 instruments and what the rack needs to run. */
@@ -87,7 +87,7 @@ namespace Edition
         static const juce::StringArray demo { "4bandEq", "airwindows_biquad2", "lowpass", "airwindows_toneslant", "compressor", "airwindows_gatelope", "airwindows_deess",
                                               "airwindows_drive", "reverb", "delay", "chorus", "phaser", "pitchShifter", "airwindows_wider", "airwindows_monoam",
                                               "airwindows_purestgain", "midiModifier", "sqmRackChannel", "4osc", "sqmMiniMoth", "sqmSimMoth", "sqmThump", "sqm808",
-                                              "sampler", "sqmHivePads" };
+                                              "sampler", "sqmHivePads", "sqmWingbeatJr", "sqmFoilPlateLite" };
         return demo.contains (type);
     }
     /** Product types are the Signature bundle and the AirWindows collection; everything else (meters, panners, sends,

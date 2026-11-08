@@ -1514,7 +1514,7 @@ namespace Skins
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -1794,6 +1794,30 @@ namespace Skins
                                                          G ("OUTPUT", { "Output", "Auto Gain", "Mix" }, true, 3),
                                                          G ("TONE", { "Low Cut", "Thump", "Tone", "High Cut", "Steep" }, false, 5), G ("STEREO / KEY", { "Mid/Side", "Duck Drive", "Key Input" }, false, 3),
                                                          G ("QUALITY", { "Oversampling", "Linear Phase", "Delta" }, false, 3) }; }
+        else if (name == "Wingbeat Echo") { s.family = Family::wingbeat; s.knob = KnobStyle::chicken; s.width = 1280; s.height = 800; s.vizH = 250; s.rowSplit = 3; s.row1Share = 0.5f;
+                                            s.groups = { G ("ECHO", { "Mode", "Style", "Sync L", "Time", "Feedback", "Mix" }, true, 3), G ("CHARACTER", { "Saturation", "Wow", "Flutter", "Diffusion" }, false, 2),
+                                                         G ("OUTPUT", { "Duck", "Duck Release", "Output" }, false, 3),
+                                                         G ("TWEAK", { "Sync R", "Time R", "Groove", "Feel", "Width", "L/R Offset", "Accent", "Warp" }, false, 4), G ("TONE", { "Low Cut", "High Cut", "Input" }, false, 3),
+                                                         G ("MACHINE", { "Time Change", "Heads", "Limiter", "Pattern", "Freeze", "Prime", "Key Input" }, false, 4) }; }
+        else if (name == "Wingbeat Jr.")  { s.family = Family::wingbeat; s.knob = KnobStyle::chicken; s.width = 960; s.height = 600; s.vizH = 210;
+                                            s.groups = { G ("ECHO", { "Style", "Mode", "Sync", "Time" }, true, 2), G ("SOUND", { "Feedback", "Saturation", "Tone" }, false, 3), G ("MIX", { "Change", "Mix", "Output" }, true, 3) }; }
+        else if (name == "Foil Plate")    { s.family = Family::foilplate; s.knob = KnobStyle::vintage; s.width = 1240; s.height = 780; s.vizH = 250; s.rowSplit = 3; s.row1Share = 0.5f;
+                                            s.groups = { G ("PLATE", { "Plate", "Decay", "Pre-Delay" }, true, 3), G ("INPUT", { "Input", "Input Drive", "Low Cut", "High Cut" }, false, 2),
+                                                         G ("MIX", { "Mix", "Output" }, true, 2),
+                                                         G ("TWEAK", { "Mod", "Mod Rate", "Width", "Balance", "Low EQ", "High EQ" }, false, 3), G ("AUTO DECAY", { "Auto Decay", "Auto Threshold", "Key Input" }, false, 3),
+                                                         G ("MODES", { "Low Slope", "High Slope", "Freeze", "Darkening", "Mono In" }, false, 3) }; }
+        else if (name == "Foil Plate Lite") { s.family = Family::foilplate; s.knob = KnobStyle::vintage; s.width = 860; s.height = 560; s.vizH = 220;
+                                            s.groups = { G ("PLATE", { "Decay", "Low Cut", "Mod" }, true, 3), G ("MIX", { "Mix", "Output" }, true, 2) }; }
+        else if (name == "Radiant")       { s.family = Family::radiant; s.knob = KnobStyle::vintage; s.width = 1100; s.height = 680; s.vizH = 240;
+                                            s.groups = { G ("TUBES", { "Circuit", "Input", "Output" }, true, 3), G ("TONE", { "Bass", "Treble" }, true, 2), G ("MIX", { "Mix", "Trim" }, false, 1),
+                                                         G ("SWITCHES", { "Mic", "Noisy", "Oversampling", "Mid/Side" }, false, 2) }; }
+        else if (name == "Radiant Pre")   { s.family = Family::radiant; s.knob = KnobStyle::vintage; s.width = 860; s.height = 560; s.vizH = 220;
+                                            s.groups = { G ("PREAMP", { "Gain", "Bias", "Noisy" }, true, 3), G ("OUT", { "Output", "Mix" }, true, 2) }; }
+        else if (name == "Maw")           { s.family = Family::maw; s.knob = KnobStyle::chicken; s.width = 1060; s.height = 660; s.vizH = 240;
+                                            s.groups = { G ("CRUSH", { "Crush", "Crunch", "Darkness" }, true, 3), G ("TIME", { "Release", "Stretch", "Fast" }, false, 3),
+                                                         G ("OUT", { "Mix", "Output", "Key Input", "Key HPF" }, false, 2) }; }
+        else if (name == "Maw Lite")      { s.family = Family::maw; s.knob = KnobStyle::chicken; s.width = 760; s.height = 520; s.vizH = 200;
+                                            s.groups = { G ("CRUSH", { "Crush", "Crunch", "Output" }, true, 3) }; }
         else if (name == "Silk Ladder")   { s.family = Family::ladder; s.knob = KnobStyle::chicken; s.width = 940; s.height = 580; s.vizH = 220;
                                             s.groups = { G ("FILTER", { "Cutoff", "Resonance" }, true, 2), G ("ENVELOPE", { "Env Amount", "Fast Envelope" }, false, 1), G ("DRIVE", { "Poles", "Drive" }, false, 1), G ("OUTPUT", { "Output", "Mix" }, false, 1) }; }
         else if (name == "Halo Ring")     { s.family = Family::ring; s.knob = KnobStyle::chicken; s.width = 900; s.height = 560; s.vizH = 220;
@@ -2238,6 +2262,68 @@ namespace Skins
                 add (choice ("Mode", { "ECHO", "DOUBLER" }, [oc] { return oc->mode.get(); }, [oc, um] (int i) { oc->mode.setValue (i, um); }));
                 add (choice ("Sync", { "FREE", "1/16", "1/8", "1/8 D", "1/4", "1/2" }, [oc] { return oc->sync.get(); }, [oc, um] (int i) { oc->sync.setValue (i, um); }));
             }
+            else if (auto rdp = dynamic_cast<SqRadiantPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Circuit", SqRadiantPlugin::archNames(), [rdp] { return rdp->arch.get(); }, [rdp, um] (int i) { rdp->arch.setValue (i, um); }));
+                add (toggle ("Mic", [rdp] { return rdp->mic.get(); }, [rdp, um] (bool b) { rdp->mic.setValue (b, um); }));
+                add (toggle ("Noisy", [rdp] { return rdp->noisy.get(); }, [rdp, um] (bool b) { rdp->noisy.setValue (b, um); }));
+                add (choice ("Oversampling", SqRadiantPlugin::osNames(), [rdp] { return rdp->oversample.get(); }, [rdp, um] (int i) { rdp->oversample.setValue (i, um); }));
+                add (choice ("Mid/Side", SqRadiantPlugin::msNames(), [rdp] { return rdp->ms.get(); }, [rdp, um] (int i) { rdp->ms.setValue (i, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Bass" || hs->name == "Treble" || hs->name == "Output" || hs->name == "Trim" || hs->name == "Input") hs->bipolar = true;
+            }
+            else if (auto rpr = dynamic_cast<SqRadiantPrePlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (toggle ("Bias", [rpr] { return rpr->bias.get(); }, [rpr, um] (bool b) { rpr->bias.setValue (b, um); }));
+                add (toggle ("Noisy", [rpr] { return rpr->noisy.get(); }, [rpr, um] (bool b) { rpr->noisy.setValue (b, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output") hs->bipolar = true;
+            }
+            else if (auto mwp = dynamic_cast<SqMawPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (toggle ("Fast", [mwp] { return mwp->fast.get(); }, [mwp, um] (bool b) { mwp->fast.setValue (b, um); }));
+                add (toggle ("Key Input", [mwp] { return mwp->keyOn.get(); }, [mwp, um] (bool b) { mwp->keyOn.setValue (b, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output") hs->bipolar = true;
+            }
+            else if (auto fpl = dynamic_cast<SqFoilPlatePlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Plate", SqFoilPlatePlugin::archetypeNames(), [fpl] { return fpl->plate.get(); }, [fpl, um] (int i) { fpl->plate.setValue (i, um); }));
+                add (choice ("Input", SqFoilPlatePlugin::inputNames(), [fpl] { return fpl->input.get(); }, [fpl, um] (int i) { fpl->input.setValue (i, um); }));
+                add (choice ("Low Slope", SqFoilPlatePlugin::slopeNames(), [fpl] { return fpl->lowSlope.get(); }, [fpl, um] (int i) { fpl->lowSlope.setValue (i, um); }));
+                add (choice ("High Slope", SqFoilPlatePlugin::slopeNames(), [fpl] { return fpl->highSlope.get(); }, [fpl, um] (int i) { fpl->highSlope.setValue (i, um); }));
+                add (toggle ("Freeze", [fpl] { return fpl->freeze.get(); }, [fpl, um] (bool b) { fpl->freeze.setValue (b, um); }));
+                add (toggle ("Darkening", [fpl] { return fpl->darkening.get(); }, [fpl, um] (bool b) { fpl->darkening.setValue (b, um); }));
+                add (toggle ("Mono In", [fpl] { return fpl->monoIn.get(); }, [fpl, um] (bool b) { fpl->monoIn.setValue (b, um); }));
+                add (toggle ("Key Input", [fpl] { return fpl->keyOn.get(); }, [fpl, um] (bool b) { fpl->keyOn.setValue (b, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Balance" || hs->name == "Low EQ" || hs->name == "High EQ" || hs->name == "Auto Decay" || hs->name == "Output") hs->bipolar = true;
+            }
+            else if (auto we = dynamic_cast<SqWingbeatPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Mode", SqWingbeatPlugin::modeNames(), [we] { return we->mode.get(); }, [we, um] (int i) { we->mode.setValue (i, um); }));
+                add (choice ("Style", SqWingbeatPlugin::styleNames(), [we] { return we->style.get(); }, [we, um] (int i) { we->style.setValue (i, um); }));
+                add (choice ("Sync L", SqWingbeatPlugin::syncNames(), [we] { return we->syncL.get(); }, [we, um] (int i) { we->syncL.setValue (i, um); }));
+                add (choice ("Sync R", SqWingbeatPlugin::syncNames(), [we] { return we->syncR.get(); }, [we, um] (int i) { we->syncR.setValue (i, um); }));
+                add (choice ("Time Change", SqWingbeatPlugin::changeNames(), [we] { return we->timeChange.get(); }, [we, um] (int i) { we->timeChange.setValue (i, um); }));
+                add (choice ("Heads", SqWingbeatPlugin::headNames(), [we] { return we->heads.get() - 1; }, [we, um] (int i) { we->heads.setValue (i + 1, um); }));
+                add (choice ("Limiter", SqWingbeatPlugin::limitNames(), [we] { return we->limiter.get(); }, [we, um] (int i) { we->limiter.setValue (i, um); }));
+                add (choice ("Pattern", SqWingbeatPlugin::patternNames(), [we] { return we->pattern.get(); }, [we, um] (int i) { we->pattern.setValue (i, um); }));
+                add (toggle ("Freeze", [we] { return we->freeze.get(); }, [we, um] (bool b) { we->freeze.setValue (b, um); }));
+                add (toggle ("Prime", [we] { return we->prime.get(); }, [we, um] (bool b) { we->prime.setValue (b, um); }));
+                add (toggle ("Key Input", [we] { return we->keyOn.get(); }, [we, um] (bool b) { we->keyOn.setValue (b, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Groove" || hs->name == "Feel" || hs->name == "Output" || hs->name == "Input") hs->bipolar = true;
+            }
+            else if (auto wj = dynamic_cast<SqWingbeatJrPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Style", SqWingbeatJrPlugin::styleNames(), [wj] { return wj->style.get(); }, [wj, um] (int i) { wj->style.setValue (i, um); }));
+                add (choice ("Mode", SqWingbeatJrPlugin::modeNames(), [wj] { return wj->mode.get(); }, [wj, um] (int i) { wj->mode.setValue (i, um); }));
+                add (choice ("Sync", SqWingbeatPlugin::syncNames(), [wj] { return wj->sync.get(); }, [wj, um] (int i) { wj->sync.setValue (i, um); }));
+                add (choice ("Change", SqWingbeatJrPlugin::changeNames(), [wj] { return wj->change.get(); }, [wj, um] (int i) { wj->change.setValue (i, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output") hs->bipolar = true;
+            }
             else if (auto cd = dynamic_cast<SqCinderPlugin*> (&plugin))
             {
                 auto um = &plugin.edit.getUndoManager();
@@ -2402,6 +2488,10 @@ namespace Skins
                 case Family::oilcan:    viz = std::make_unique<OilCanViz> (handles, plugin, accent); break;
                 case Family::ladder:    viz = std::make_unique<LadderViz> (handles, plugin, accent); break;
                 case Family::cinder:    viz = std::make_unique<CinderViz> (handles, plugin, accent); break;
+                case Family::wingbeat:  viz = std::make_unique<WingbeatViz> (handles, plugin, accent); break;
+                case Family::foilplate: viz = std::make_unique<FoilPlateViz> (handles, plugin, accent); break;
+                case Family::radiant:   viz = std::make_unique<RadiantViz> (handles, plugin, accent); break;
+                case Family::maw:       viz = std::make_unique<MawViz> (handles, plugin, accent); break;
                 case Family::ring:      viz = std::make_unique<RingViz> (handles, plugin, accent); break;
                 case Family::phase12:   viz = std::make_unique<Phase12Viz> (handles, plugin, accent); break;
                 case Family::bbd:       viz = std::make_unique<BucketViz> (handles, plugin, accent); break;

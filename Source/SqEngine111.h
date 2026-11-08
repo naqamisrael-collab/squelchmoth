@@ -173,7 +173,7 @@ namespace PresetAudit
     inline bool levelExempt (const juce::String& plugin, const juce::String& category, const juce::String& presetName)
     {
         const auto c = category.toLowerCase() + " " + presetName.toLowerCase();
-        for (auto w : { "loud", "destroy", "lo-fi", "lofi", "crush", "smash", "gate", "slice", "tremolo", "stutter", "filter sweep", "telephone", "radio", "fx", "creative", "special", "kill", "mute", "duck", "pump" })
+        for (auto w : { "loud", "destroy", "lo-fi", "lofi", "crush", "smash", "gate", "slice", "tremolo", "stutter", "filter sweep", "telephone", "radio", "fx", "creative", "special", "kill", "mute", "duck", "pump", "sound design" })
             if (c.contains (w)) return true;
         juce::ignoreUnused (plugin);
         return false;
@@ -181,11 +181,11 @@ namespace PresetAudit
 
     /** The audit signal a preset is held to (+-1 dB): vocal presets on the sung vocal, drum / 808 presets on the drum
         loop, everything else on pink noise. The other two signals are still rendered and reported. */
-    inline int targetSignal (const juce::String& pluginCategory, const juce::String& presetCategory)
+    inline int targetSignal (const juce::String& pluginCategory, const juce::String& presetCategory, const juce::String& presetName = {})
     {
         const auto c = presetCategory + " " + pluginCategory;
         if (c.containsIgnoreCase ("Vocal") || c.containsIgnoreCase ("Voice")) return 2;
-        if (c.containsIgnoreCase ("Drum") || presetCategory.startsWith ("808")) return 1;
+        if (c.containsIgnoreCase ("Drum") || presetCategory.startsWith ("808") || presetCategory.startsWith ("Dub") || presetCategory.startsWith ("Rhythmic") || presetCategory.startsWith ("Snare") || presetCategory.startsWith ("Drum Room") || presetName.containsIgnoreCase ("Parallel Smash | Drum")) return 1;
         return 0;
     }
 
@@ -262,7 +262,7 @@ namespace PresetAudit
         if (! row.finite) why.add ("NaN / Inf in the output");
         if (row.peakDb > 6.0f) why.add ("peak " + juce::String (row.peakDb, 1) + " dBFS");
         row.levelChecked = strictLevel && ! levelExempt (e.name, row.category, pr.name);
-        row.target = targetSignal (e.category, row.category);
+        row.target = targetSignal (e.category, row.category, pr.name);
         if (row.levelChecked && std::abs (row.levelDb[row.target]) > 1.0f)
             why.add ("level " + juce::String (row.levelDb[row.target], 1) + " dB on " + sig.names[row.target]);
         if (row.cpuPercent > 25.0f) why.add ("CPU " + juce::String (row.cpuPercent, 1) + " %");

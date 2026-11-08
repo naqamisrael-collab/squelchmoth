@@ -168,6 +168,14 @@ public:
         engine->getPluginManager().createBuiltInType<SqOilCanPlugin>();
         engine->getPluginManager().createBuiltInType<SqLadderPlugin>();
         engine->getPluginManager().createBuiltInType<SqCinderPlugin>();             // 1.11 Color & Space
+        engine->getPluginManager().createBuiltInType<SqWingbeatPlugin>();
+        engine->getPluginManager().createBuiltInType<SqWingbeatJrPlugin>();
+        engine->getPluginManager().createBuiltInType<SqFoilPlatePlugin>();
+        engine->getPluginManager().createBuiltInType<SqFoilPlateLitePlugin>();
+        engine->getPluginManager().createBuiltInType<SqRadiantPlugin>();
+        engine->getPluginManager().createBuiltInType<SqRadiantPrePlugin>();
+        engine->getPluginManager().createBuiltInType<SqMawPlugin>();
+        engine->getPluginManager().createBuiltInType<SqMawLitePlugin>();
         engine->getPluginManager().createBuiltInType<SqRingPlugin>();
         engine->getPluginManager().createBuiltInType<SqPhase12Plugin>();
         engine->getPluginManager().createBuiltInType<SqBucketPlugin>();

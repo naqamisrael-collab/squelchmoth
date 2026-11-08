@@ -22,6 +22,9 @@
 #include "SqFx181.h"
 #include "SqColour.h"
 #include "SqCinder.h"
+#include "SqWingbeat.h"
+#include "SqFoilPlate.h"
+#include "SqRadiantMaw.h"
 
 namespace te = tracktion;
 
@@ -101,6 +104,10 @@ namespace Signature
             { "Pop Knock",        "airwindows_pop",   "Dynamics",   "Explosive drum compressor that brings kicks and snares forward in the mix",           0xffd4ff3a, "popknock" },
             // ---------------- Saturation, tape & console
             { "Cinder",           "sqmCinder",       "Saturation & Tape", "Ten-model saturation: tape preamp to diode fuzz, oversampled to 16x with anti-aliased curves, Model Blend, Bias, Dynamics, Mid/Side, ducked drive, Delta and a live harmonic readout", 0xffff5a1f, "cinder" },
+            { "Radiant",          "sqmRadiant",      "Saturation & Tape", "Two-stage tube mixer colour: 60s mixer, 50s broadcast pre or tube line amp, Baxandall bass / treble, Mic / Line, noise floor, heat VU, Mid/Side", 0xffffb347, "radiant" },
+            { "Radiant Pre",      "sqmRadiantPre",   "Saturation & Tape", "Tube mic preamp colour: one hot stage, a Bias switch for choppy breakup, a vintage noise floor", 0xffff9a3a, "radiantpre" },
+            { "Maw",              "sqmMaw",          "Dynamics",    "The crushing podium limiter: Crush, Crunch, Darkness, Mix, 1.3 ms attack, a release that stretches as it saturates, external key with HPF, GR history", 0xffff3a5a, "maw" },
+            { "Maw Lite",         "sqmMawLite",      "Dynamics",    "Crush and Crunch: instant room-mic attitude", 0xffe83a55, "mawlite" },
             { "Ember Tape",       "airwindows_totape5", "Saturation & Tape", "Full tape machine model: head bump, flutter, softness, bias - the Squelchmoth 'warm' button", 0xffff8a3a, "embertape" },
             { "Scorch Drive",     "airwindows_drive", "Saturation & Tape", "Classic overdrive with highpass and tone - from grit to fuzz",    0xffff8a3a, "scorchdrive" },
             { "Lumen Channel",    "airwindows_console6channel", "Saturation & Tape", "Console channel stage: put one on every track, Lumen Buss on the master, for analogue summing", 0xffff8a3a, "lumenchannel" },
@@ -112,6 +119,10 @@ namespace Signature
             { "Grit Bits",        "airwindows_derez2", "Saturation & Tape", "Bit and sample-rate reduction with analogue softness - lo-fi textures",            0xffff8a3a, "gritbits" },
             // ---------------- Space: reverb & delay
             { "Aurora Verb",      "sqmAurora",       "Space",       "Eight-line FDN reverb: eight room types, early reflections, three-band decay, modulation, ducking, freeze and width", 0xff6a7bff, "auroraverb" },
+            { "Wingbeat Echo",    "sqmWingbeat",     "Space",       "The 36-style echo: tape, tube, spring, bucket, oil can, radios and digital racks; Single, Dual, Ping-Pong and 32-tap Rhythm, up to 30 s, ducking, freeze and a live tap map", 0xff3ac8ff, "wingbeat" },
+            { "Wingbeat Jr.",     "sqmWingbeatJr",   "Space",       "The quick echo: eight styles, Normal / Wide / Ping-Pong, glide or stretch when the time changes", 0xff3aa8ff, "wingbeatjr" },
+            { "Foil Plate",       "sqmFoilPlate",    "Space",       "Plate reverb: seven plates from steel to gold foil, four audible input stages, decay per band, auto-decay that shortens or lengthens (or follows a key), freeze", 0xffd8c27a, "foilplate" },
+            { "Foil Plate Lite",  "sqmFoilPlateLite", "Space",      "The steel plate in four knobs: Decay, Low Cut, Mod, Mix", 0xffc8b26a, "foilplatelite" },
             { "Oil Can Delay",    "sqmOilCan",       "Space",       "Electrostatic oil-can echo: wobbling delay line, sustain, tone, drive - echo or doubler", 0xffffa31a, "oilcan" },
             { "Bucket Brigade",   "sqmBBD",          "Space",       "Analog bucket-brigade delay: darkening repeats, compander drive, filtered feedback and chorus-style modulation", 0xffff5a8a, "bucketbrigade" },
             { "Nebula Verb",      "reverb",          "Space",       "Lush algorithmic reverb: room size, damping, width, pre-delay, freeze",           0xff3affb0, "nebulaverb" },

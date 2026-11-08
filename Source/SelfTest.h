@@ -39,6 +39,14 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqOilCanPlugin>();
     engine->getPluginManager().createBuiltInType<SqLadderPlugin>();
     engine->getPluginManager().createBuiltInType<SqCinderPlugin>();
+    engine->getPluginManager().createBuiltInType<SqWingbeatPlugin>();
+    engine->getPluginManager().createBuiltInType<SqWingbeatJrPlugin>();
+    engine->getPluginManager().createBuiltInType<SqFoilPlatePlugin>();
+    engine->getPluginManager().createBuiltInType<SqFoilPlateLitePlugin>();
+    engine->getPluginManager().createBuiltInType<SqRadiantPlugin>();
+    engine->getPluginManager().createBuiltInType<SqRadiantPrePlugin>();
+    engine->getPluginManager().createBuiltInType<SqMawPlugin>();
+    engine->getPluginManager().createBuiltInType<SqMawLitePlugin>();
     engine->getPluginManager().createBuiltInType<SqRingPlugin>();
     engine->getPluginManager().createBuiltInType<SqPhase12Plugin>();
     engine->getPluginManager().createBuiltInType<SqBucketPlugin>();
@@ -2071,6 +2079,111 @@ inline int runSelfTest()
                 if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
             }
             call ("delete_track", R"({"track":"Cin"})");
+        }
+        // ---------------------------------------------------------------- Wingbeat Echo + Jr. (C2)
+        {
+            call ("add_track", R"({"kind":"audio","name":"Echo"})");
+            call ("studio_fx", R"({"track":"Echo","which":"wingbeat","action":"add"})");
+            auto* et = session->findTrack ("Echo"); SqWingbeatPlugin* wp = nullptr;
+            if (et != nullptr) for (auto pl : et->pluginList) if ((wp = dynamic_cast<SqWingbeatPlugin*> (pl)) != nullptr) break;
+            check (wp != nullptr, "Wingbeat Echo: added through studio_fx");
+            int nW = 0, nJ = 0; for (auto& e : Signature::entries()) { if (juce::String (e.name) == "Wingbeat Echo") nW = (int) e.presets.size(); if (juce::String (e.name) == "Wingbeat Jr.") nJ = (int) e.presets.size(); }
+            check (nW >= 160 && nJ >= 60, "Wingbeat: " + juce::String (nW) + " Echo presets, " + juce::String (nJ) + " Jr. presets");
+            call ("studio_fx", R"({"track":"Echo","which":"wingbeat","action":"set","settings":{"mode":"Rhythm","style":"Spring Tape Echo","syncL":"1/8.","heads":5,"Feedback":60,
+                                  "tapData":[{"sixteenths":3,"level":0.8,"pan":-1},{"sixteenths":6,"level":0.6,"pan":1,"pitch":12}],"tapLength":8}})");
+            if (wp != nullptr)
+            {
+                for (int i = 0; i < 5; ++i) juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+                check (wp->mode.get() == 3 && wp->style.get() == 4 && wp->syncL.get() == 11 && wp->heads.get() == 5 && std::abs (wp->bank[SqWingbeatPlugin::feedback] - 60.0f) < 0.01f
+                       && wp->tapData.get().contains ("6:0.6:1:14000:12"), "Wingbeat Echo: mode, style, note value, heads, feedback and custom 2-tap rhythm set by name");
+            }
+            auto got = call ("studio_fx", R"({"track":"Echo","which":"wingbeat","action":"get"})");
+            check (got.contains ("Spring Tape Echo") && got.contains ("live_time_ms"), "Wingbeat Echo: get reports the style, mode and live time");
+            call ("delete_track", R"({"track":"Echo"})");
+            Edition::owned() = Edition::Owned {};
+            check (Edition::isTypeAllowed ("sqmWingbeatJr") && ! Edition::isTypeAllowed ("sqmWingbeat"), "editions: Wingbeat Jr. is in the Demo, Wingbeat Echo is in Color & Space");
+            Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+            auto rep = session->sessionsDir.getChildFile ("preset-audit-wingbeat.md");
+            auto sum = PresetAudit::run (*session->edit, { "Wingbeat Echo", "Wingbeat Jr." }, { "sqmWingbeat", "sqmWingbeatJr" }, 3.0, rep);
+            juce::String firstFail; int failN = 0; for (auto& row : sum.rows) if (! row.pass) { if (firstFail.isEmpty()) firstFail = row.plugin + " / " + row.preset + ": " + row.why; ++failN; }
+            double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
+            check (sum.presets >= 220 && sum.failed == 0, "Wingbeat: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
+            auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-wingbeat.md");
+            if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
+        }
+        // ---------------------------------------------------------------- Foil Plate + Lite (C4)
+        {
+            call ("add_track", R"({"kind":"audio","name":"Plate"})");
+            call ("studio_fx", R"({"track":"Plate","which":"foilplate","action":"add"})");
+            auto* pt = session->findTrack ("Plate"); SqFoilPlatePlugin* fpp = nullptr;
+            if (pt != nullptr) for (auto pl : pt->pluginList) if ((fpp = dynamic_cast<SqFoilPlatePlugin*> (pl)) != nullptr) break;
+            check (fpp != nullptr, "Foil Plate: added through studio_fx");
+            int nF = 0, nL = 0; for (auto& e : Signature::entries()) { if (juce::String (e.name) == "Foil Plate") nF = (int) e.presets.size(); if (juce::String (e.name) == "Foil Plate Lite") nL = (int) e.presets.size(); }
+            check (nF >= 120 && nL >= 30, "Foil Plate: " + juce::String (nF) + " presets, Lite " + juce::String (nL));
+            call ("studio_fx", R"({"track":"Plate","which":"foilplate","action":"set","settings":{"plate":"Iron Mammoth","input":"Solid State","Decay":4.5,"lowSlope":24,"Auto Decay":-60}})");
+            if (fpp != nullptr)
+                check (fpp->plate.get() == 6 && fpp->input.get() == 1 && fpp->lowSlope.get() == 2 && std::abs (fpp->bank[SqFoilPlatePlugin::decay] - 4.5f) < 0.01f && std::abs (fpp->bank[SqFoilPlatePlugin::autoDecay] + 60.0f) < 0.01f,
+                       "Foil Plate: plate, input stage, slope, decay and auto-decay set by name");
+            auto got = call ("studio_fx", R"({"track":"Plate","which":"foilplate","action":"get"})");
+            check (got.contains ("Iron Mammoth") && got.contains ("rt60_500hz_s") && got.contains ("input_thd_percent_at_minus18"), "Foil Plate: get reports the plate, RT60 per band and the input THD");
+            // decay accuracy, measured from the impulse response (Schroeder integration, 500 Hz band)
+            {
+                FoilPlate::Processor q; q.p.archetype = 0; q.p.decayS = 2.5f; q.p.mix = 1; q.p.input = FoilPlate::clean; q.p.mod = 0; q.p.preDelayMs = 0; q.p.lowCut = 20; q.p.highCut = 20000; q.prepare (48000.0, 256);
+                std::vector<float> l (48000 * 5, 0.0f), r = l; l[0] = r[0] = 0.5f;
+                for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; q.process (ch, 2, nullptr, 256); }
+                Eng::Biquad b1, b2; b1.set (Eng::Biquad::bandpass, 48000.0, 500, 1.4); b2.set (Eng::Biquad::bandpass, 48000.0, 500, 1.4);
+                std::vector<double> e (l.size()); for (size_t i = 0; i < l.size(); ++i) { const double v = b2.process (b1.process (l[i])); e[i] = v * v; }
+                for (size_t i = e.size() - 1; i-- > 0;) e[i] += e[i + 1];
+                int t5 = -1, t25 = -1; for (size_t i = 0; i < e.size(); ++i) { const double db = 10 * std::log10 (e[i] / e[0] + 1e-30); if (t5 < 0 && db < -5) t5 = (int) i; if (t25 < 0 && db < -25) { t25 = (int) i; break; } }
+                const double rt = 3.0 * (t25 - t5) / 48000.0;
+                check (std::abs (rt - 2.5) < 0.25, "Foil Plate: Decay 2.5 s measures " + juce::String (rt, 2) + " s RT60 at 500 Hz");
+            }
+            call ("delete_track", R"({"track":"Plate"})");
+            Edition::owned() = Edition::Owned {};
+            check (Edition::isTypeAllowed ("sqmFoilPlateLite") && ! Edition::isTypeAllowed ("sqmFoilPlate"), "editions: Foil Plate Lite is in the Demo, Foil Plate is in Color & Space");
+            Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+            auto rep = session->sessionsDir.getChildFile ("preset-audit-foilplate.md");
+            auto sum = PresetAudit::run (*session->edit, { "Foil Plate", "Foil Plate Lite" }, { "sqmFoilPlate", "sqmFoilPlateLite" }, 3.0, rep);
+            juce::String firstFail; for (auto& row : sum.rows) if (! row.pass && firstFail.isEmpty()) firstFail = row.plugin + " / " + row.preset + ": " + row.why;
+            double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
+            check (sum.presets >= 150 && sum.failed == 0, "Foil Plate: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
+            auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-foilplate.md");
+            if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
+        }
+        // ---------------------------------------------------------------- Radiant + Pre (C10), Maw + Lite (C11)
+        {
+            call ("add_track", R"({"kind":"audio","name":"Tube"})");
+            call ("studio_fx", R"({"track":"Tube","which":"radiant","action":"add"})");
+            call ("studio_fx", R"({"track":"Tube","which":"maw","action":"add"})");
+            auto* tt = session->findTrack ("Tube"); SqRadiantPlugin* rp = nullptr; SqMawPlugin* mp = nullptr;
+            if (tt != nullptr) for (auto pl : tt->pluginList) { if (auto x = dynamic_cast<SqRadiantPlugin*> (pl)) rp = x; if (auto y = dynamic_cast<SqMawPlugin*> (pl)) mp = y; }
+            check (rp != nullptr && mp != nullptr, "Radiant and Maw: added through studio_fx");
+            call ("studio_fx", R"({"track":"Tube","which":"radiant","action":"set","settings":{"arch":"50s Broadcast","Input":12,"Bass":4,"micOn":true}})");
+            call ("studio_fx", R"({"track":"Tube","which":"maw","action":"set","settings":{"Crush":80,"Release":3.5,"fastOn":true}})");
+            if (rp != nullptr && mp != nullptr)
+                check (rp->arch.get() == 1 && rp->mic.get() && std::abs (rp->bank[SqRadiantPlugin::input] - 12.0f) < 0.01f && std::abs (mp->bank[SqMawPlugin::crush] - 80.0f) < 0.01f && mp->fast.get(),
+                       "Radiant circuit / mic / input and Maw crush / fast set by name");
+            auto gr = call ("studio_fx", R"({"track":"Tube","which":"radiant","action":"get"})");
+            check (gr.contains ("50s Broadcast Pre") && gr.contains ("thd_percent_at_minus18"), "Radiant: get reports the circuit and measured THD");
+            {
+                Maw::Processor m; m.p.crush = 0.6f; m.p.crunch = 0; m.prepare (48000.0, 64);
+                std::vector<float> l (48000 * 2, 0.0f), r; for (size_t i = 24000; i < l.size(); ++i) l[i] = 0.5f * (float) std::sin (2 * juce::MathConstants<double>::pi * 200 * (double) i / 48000.0); r = l;
+                std::vector<float> g (l.size()); for (size_t i = 0; i + 64 <= l.size(); i += 64) { float* ch[2] = { l.data() + i, r.data() + i }; m.process (ch, 2, nullptr, 64); for (int k = 0; k < 64; ++k) g[i + (size_t) k] = m.gainReductionDb(); }
+                const float fin = g[l.size() - 100]; int t63 = -1; for (size_t i = 24000; i < g.size(); ++i) if (g[i] >= 0.632f * fin) { t63 = (int) (i - 24000); break; }
+                check (std::abs (t63 / 48.0 - 1.3) < 0.2, "Maw: attack measures " + juce::String (t63 / 48.0, 2) + " ms (1.3 +- 0.2)");
+            }
+            call ("delete_track", R"({"track":"Tube"})");
+            Edition::owned() = Edition::Owned {}; Edition::owned().core = true;
+            check (Edition::isTypeAllowed ("sqmRadiantPre") && Edition::isTypeAllowed ("sqmMawLite") && ! Edition::isTypeAllowed ("sqmMaw") && ! Edition::isTypeAllowed ("sqmRadiant"),
+                   "editions: Radiant Pre and Maw Lite are in Squelchmoth (core), Radiant and Maw are in Color & Space");
+            Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+            auto rep = session->sessionsDir.getChildFile ("preset-audit-radmaw.md");
+            auto sum = PresetAudit::run (*session->edit, { "Radiant", "Radiant Pre", "Maw", "Maw Lite" }, { "sqmRadiant", "sqmRadiantPre", "sqmMaw", "sqmMawLite" }, 3.0, rep);
+            juce::String firstFail; for (auto& row : sum.rows) if (! row.pass && firstFail.isEmpty()) firstFail = row.plugin + " / " + row.preset + ": " + row.why;
+            double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
+            check (sum.presets >= 270 && sum.failed == 0, "Radiant / Maw: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
+            auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-radiant-maw.md");
+            if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
         }
         std::cout << "  (1.11 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)\n";
     }
