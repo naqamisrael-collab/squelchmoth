@@ -5,6 +5,7 @@
 
 #include "TransportController.h"
 #include "PluginScanner.h"
+#include "SqOwnedWindow.h"
 
 //==============================================================================
 /** A floating tool window that hides (rather than deletes) when closed and remembers its position. */
@@ -23,6 +24,10 @@ public:
         setResizable (resizable, false);
         setAlwaysOnTop (false);
     }
+
+    // one taskbar icon for the whole app: this window belongs to the main window
+    int getDesktopWindowStyleFlags() const override   { return sqmSecondaryStyleFlags (juce::DocumentWindow::getDesktopWindowStyleFlags()); }
+    void addToDesktop (int flags, void* native = nullptr) override   { juce::DocumentWindow::addToDesktop (flags, native); sqmAttachToMain (*this); }
 
     void closeButtonPressed() override
     {
@@ -59,6 +64,7 @@ public:
         }
         keepOnScreen();
 
+        sqmAttachToMain (*this);
         setVisible (true);
         applyFloating();
         toFront (true);

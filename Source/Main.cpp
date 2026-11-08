@@ -39,6 +39,13 @@ public:
 
     void initialise (const juce::String& commandLine) override
     {
+       #if JUCE_MAC
+        // Plug-in scanning and the command-line modes are extra copies of this binary: on macOS each would
+        // otherwise add its own Squelchmoth icon to the Dock next to the real app.
+        if (commandLine.contains ("PluginScan") || commandLine.contains ("--selftest") || commandLine.contains ("--preset-audit")
+            || commandLine.contains ("--make-") || commandLine.contains ("--check-key"))
+            juce::Process::setDockIconVisible (false);
+       #endif
         // Out-of-process plugin scanning re-launches this binary with special arguments.
         if (te::PluginManager::startChildProcessPluginScan (commandLine))
             return;
@@ -278,21 +285,27 @@ public:
         if (f.existsAsFile() && session) session->openSession (f);
     }
 
-    class MainWindow : public juce::DocumentWindow
+    class MainWindow : public juce::DocumentWindow, private juce::Timer
     {
     public:
         MainWindow (Session& s, McpTools& t, McpServer& srv, Tunnel& tun, PluginScanner& sc, juce::PropertiesFile& p, Licence& lic)
             : DocumentWindow ("Squelchmoth - " + s.getFile().getFileNameWithoutExtension(), Theme::bg(), DocumentWindow::allButtons)
         {
             setUsingNativeTitleBar (true);
+            sqmMainWindow() = this;   // secondary windows attach to this one (one taskbar icon)
             setContentOwned (new MainComponent (s, t, srv, tun, sc, p, lic), true);
             setResizable (true, false);
             setResizeLimits (1000, 640, 10000, 10000);
             centreWithSize (getWidth(), getHeight());
             setVisible (true);
             getContentComponent()->grabKeyboardFocus();
+           #if JUCE_WINDOWS
+            startTimerHz (4);   // any new editor / dialog window joins the main window's single taskbar icon
+           #endif
         }
 
+        ~MainWindow() override              { stopTimer(); sqmDetachAll(); if (sqmMainWindow() == this) sqmMainWindow() = nullptr; }
+        void timerCallback() override       { sqmAttachAll(); }
         void closeButtonPressed() override  { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
     };
 

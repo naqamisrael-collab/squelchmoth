@@ -184,6 +184,7 @@ endif()
 if (WIN32)
     target_link_libraries (${TARGET_NAME} PRIVATE ws2_32)
     target_link_options (${TARGET_NAME} PRIVATE "/STACK:8388608")   # 8 MB main-thread stack, like macOS and Linux
+    target_sources (${TARGET_NAME} PRIVATE Source/WinWindowHelpers.cpp)   # secondary windows owned by the main one: one taskbar icon
 endif()
 
 if (APPLE AND CMAKE_CROSSCOMPILING)

@@ -7,6 +7,7 @@
 #include "SqLocked.h"
 #include "PluginSkins.h"
 #include "CrashGuard.h"
+#include "SqOwnedWindow.h"
 
 //==============================================================================
 /** Generic editor for plugins without their own GUI (the built-ins): one slider per parameter. */
@@ -167,6 +168,7 @@ public:
 
         auto w = std::make_unique<PluginWindow> (plugin);
         if (w->editor == nullptr) return {};
+        sqmAttachToMain (*w);
         w->setVisible (true);
        #if JUCE_MAC
         // Plug-in windows float above the Edit/Mix window like Pro Tools (and hide when the app is in the background)
