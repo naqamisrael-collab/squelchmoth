@@ -1507,13 +1507,14 @@ namespace Skins
     #include "SkinsVocal.inl"
     #include "SkinsApex.inl"
     #include "SkinsColour.inl"
+    #include "SkinsColor111.inl"
     #include "SkinsSynths.inl"
     #include "SkinsSynths2.inl"
     #include "SkinsFx181.inl"
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -1788,6 +1789,11 @@ namespace Skins
                                                          G ("MID SECTION", { "Mid Low Freq", "Mid Low Peak", "Dip Freq", "Mid Dip", "Mid High Freq", "Mid High Peak" }, false, 6), G ("OUTPUT", { "Output", "Tube" }, false, 2) }; }
         else if (name == "Oil Can Delay") { s.family = Family::oilcan; s.knob = KnobStyle::vintage; s.width = 980; s.height = 600; s.vizH = 230;
                                             s.groups = { G ("ECHO", { "Mode", "Sync", "Delay" }, false, 1), G ("CAN", { "Variation", "Wobble Rate", "Sustain" }, true, 3), G ("TONE", { "Tone", "Drive" }, false, 1), G ("MIX", { "Mix" }, true, 1) }; }
+        else if (name == "Cinder")        { s.family = Family::cinder; s.knob = KnobStyle::chicken; s.width = 1180; s.height = 760; s.vizH = 250; s.rowSplit = 3; s.row1Share = 0.5f;
+                                            s.groups = { G ("SATURATION", { "Model", "Drive", "Punish" }, true, 3), G ("CHARACTER", { "Bias", "Dynamics", "Model B", "Model Blend" }, false, 2),
+                                                         G ("OUTPUT", { "Output", "Auto Gain", "Mix" }, true, 3),
+                                                         G ("TONE", { "Low Cut", "Thump", "Tone", "High Cut", "Steep" }, false, 5), G ("STEREO / KEY", { "Mid/Side", "Duck Drive", "Key Input" }, false, 3),
+                                                         G ("QUALITY", { "Oversampling", "Linear Phase", "Delta" }, false, 3) }; }
         else if (name == "Silk Ladder")   { s.family = Family::ladder; s.knob = KnobStyle::chicken; s.width = 940; s.height = 580; s.vizH = 220;
                                             s.groups = { G ("FILTER", { "Cutoff", "Resonance" }, true, 2), G ("ENVELOPE", { "Env Amount", "Fast Envelope" }, false, 1), G ("DRIVE", { "Poles", "Drive" }, false, 1), G ("OUTPUT", { "Output", "Mix" }, false, 1) }; }
         else if (name == "Halo Ring")     { s.family = Family::ring; s.knob = KnobStyle::chicken; s.width = 900; s.height = 560; s.vizH = 220;
@@ -2232,6 +2238,21 @@ namespace Skins
                 add (choice ("Mode", { "ECHO", "DOUBLER" }, [oc] { return oc->mode.get(); }, [oc, um] (int i) { oc->mode.setValue (i, um); }));
                 add (choice ("Sync", { "FREE", "1/16", "1/8", "1/8 D", "1/4", "1/2" }, [oc] { return oc->sync.get(); }, [oc, um] (int i) { oc->sync.setValue (i, um); }));
             }
+            else if (auto cd = dynamic_cast<SqCinderPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Model", SqCinderPlugin::modelNames(), [cd] { return cd->modelA.get(); }, [cd, um] (int i) { cd->modelA.setValue (i, um); }));
+                add (choice ("Model B", SqCinderPlugin::modelNames(), [cd] { return cd->modelB.get(); }, [cd, um] (int i) { cd->modelB.setValue (i, um); }));
+                add (toggle ("Punish", [cd] { return cd->punish.get(); }, [cd, um] (bool b) { cd->punish.setValue (b, um); }));
+                add (toggle ("Steep", [cd] { return cd->steep.get(); }, [cd, um] (bool b) { cd->steep.setValue (b, um); }));
+                add (toggle ("Auto Gain", [cd] { return cd->autoGain.get(); }, [cd, um] (bool b) { cd->autoGain.setValue (b, um); }));
+                add (choice ("Mid/Side", SqCinderPlugin::msNames(), [cd] { return cd->msMode.get(); }, [cd, um] (int i) { cd->msMode.setValue (i, um); }));
+                add (choice ("Oversampling", SqCinderPlugin::osNames(), [cd] { return cd->oversample.get(); }, [cd, um] (int i) { cd->oversample.setValue (i, um); }));
+                add (toggle ("Linear Phase", [cd] { return cd->linearPhase.get(); }, [cd, um] (bool b) { cd->linearPhase.setValue (b, um); }));
+                add (toggle ("Delta", [cd] { return cd->delta.get(); }, [cd, um] (bool b) { cd->delta.setValue (b, um); }));
+                add (toggle ("Key Input", [cd] { return cd->keyOn.get(); }, [cd, um] (bool b) { cd->keyOn.setValue (b, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output" || hs->name == "Tone" || hs->name == "Bias") hs->bipolar = true;
+            }
             else if (auto ld = dynamic_cast<SqLadderPlugin*> (&plugin))
             {
                 auto um = &plugin.edit.getUndoManager();
@@ -2380,6 +2401,7 @@ namespace Skins
                 case Family::pulse:     viz = std::make_unique<PulseViz> (handles, plugin, accent); break;
                 case Family::oilcan:    viz = std::make_unique<OilCanViz> (handles, plugin, accent); break;
                 case Family::ladder:    viz = std::make_unique<LadderViz> (handles, plugin, accent); break;
+                case Family::cinder:    viz = std::make_unique<CinderViz> (handles, plugin, accent); break;
                 case Family::ring:      viz = std::make_unique<RingViz> (handles, plugin, accent); break;
                 case Family::phase12:   viz = std::make_unique<Phase12Viz> (handles, plugin, accent); break;
                 case Family::bbd:       viz = std::make_unique<BucketViz> (handles, plugin, accent); break;

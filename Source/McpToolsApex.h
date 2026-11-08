@@ -12,6 +12,7 @@ static juce::String apexTypeFor (const juce::String& k)
 static juce::String colourTypeFor (const juce::String& k)
 {
     const auto s = k.toLowerCase().removeCharacters (" -_");
+    if (s.contains ("cinder")) return SqCinderPlugin::xmlTypeName;
     if (s.contains ("aurora") || s.contains ("verb")) return SqAuroraPlugin::xmlTypeName;
     if (s.contains ("opto") || s.contains ("level")) return SqOptoPlugin::xmlTypeName;
     if (s.contains ("pulse") || s.contains ("eq")) return SqPulseEqPlugin::xmlTypeName;
@@ -31,7 +32,8 @@ static const juce::StringArray& knownPluginSettings()
         juce::StringArray k { "mode", "detection", "scFilter", "autoMakeup", "attenListen", "keyListen", "externalKey", "link", "autoRelease", "target",
                               "bands", "linearPhase", "range", "midiTune", "driveType",
                               "roomType", "freeze", "limitMode", "meterMode", "lowFreq", "highFreq", "attenFreq", "midLowFreq", "dipFreq", "midHighFreq",
-                              "sync", "poles", "envFast", "lfoShape", "stages" };
+                              "sync", "poles", "envFast", "lfoShape", "stages",
+                              "model", "modelB", "punishOn", "steepOn", "autoGainOn", "msMode", "oversample", "linearPhaseOn", "deltaOn", "keyOn" };
         for (int b = 1; b <= 6; ++b) for (auto pre : { "solo", "bypass", "flip", "auto" }) k.add (juce::String (pre) + juce::String (b));
         return k;
     }();
@@ -84,6 +86,16 @@ juce::var describeApex (te::Plugin& p)
     if (auto sb = dynamic_cast<SqApexSubPlugin*> (&p)) set (o, "tracked_hz", sb->trackedHz.load());
     if (auto op = dynamic_cast<SqOptoPlugin*> (&p)) { set (o, "gain_reduction_db", op->grDb.load()); set (o, "output_vu_db", op->outVu.load()); }
     if (auto lp = dynamic_cast<SqLadderPlugin*> (&p)) set (o, "live_cutoff_hz", lp->liveCutoff.load());
+    if (auto cp = dynamic_cast<SqCinderPlugin*> (&p))
+    {
+        set (o, "model", SqCinderPlugin::modelNames()[juce::jlimit (0, 9, cp->modelA.get())]);
+        set (o, "model_b", SqCinderPlugin::modelNames()[juce::jlimit (0, 9, cp->modelB.get())]);
+        set (o, "mid_side", SqCinderPlugin::msNames()[juce::jlimit (0, 3, cp->msMode.get())]);
+        set (o, "oversampling", SqCinderPlugin::osNames()[juce::jlimit (0, 4, cp->oversample.get())] + juce::String (cp->linearPhase.get() ? " linear phase" : " minimum phase"));
+        set (o, "latency_ms", cp->getLatencySeconds() * 1000.0); set (o, "auto_gain_db", cp->autoGainDb.load()); set (o, "drive_now_db", cp->activity.load());
+        float h[10]; const double thd = cp->harmonicProfile (-18.0f, h);
+        set (o, "thd_percent_at_minus18", thd); juce::Array<juce::var> hv; for (int k = 1; k < 10; ++k) hv.add (juce::roundToInt (h[k] * 10) / 10.0); set (o, "harmonics_h2_h10_db", hv);
+    }
     if (auto rp = dynamic_cast<SqRingPlugin*> (&p)) set (o, "live_frequency_hz", rp->liveFreq.load());
     if (auto ap = dynamic_cast<SqAuroraPlugin*> (&p)) set (o, "room", SqAuroraPlugin::roomNames()[juce::jlimit (0, 7, ap->roomType.get())]);
     if (auto ph = dynamic_cast<SqPhase12Plugin*> (&p)) set (o, "stages", SqPhase12Plugin::stageCount (ph->stages.get()));
@@ -108,12 +120,17 @@ void registerApexTools()
 
     add ("studio_fx",
          "Squelchmoth's colour plug-ins (originals standing in for Avid's paid bundle). which = aurora (Aurora Verb, FDN reverb) | opto (Opto Leveler) |\n"
-         " pulse (Pulse EQ, passive program EQ + mid section) | oilcan (Oil Can Delay) | ladder (Silk Ladder) | ring (Halo Ring) | phaser (Twelve Phase) | bbd (Bucket Brigade).\n"
+         " pulse (Pulse EQ, passive program EQ + mid section) | oilcan (Oil Can Delay) | ladder (Silk Ladder) | ring (Halo Ring) | phaser (Twelve Phase) | bbd (Bucket Brigade) |\n"
+         " cinder (Cinder, 1.11: ten-model saturation, 140 presets - 'get' also returns the harmonic profile H2-H10 and THD at -18 dBFS, latency and auto gain).\n"
          " Actions: add (optional preset), get, set {name: value}, preset (name or 'list'), open.\n"
          " Parameters by name, e.g. Aurora: Pre-Delay, Size, Decay, Low Decay, High Decay, Diffusion, Early Level, Tail Level, Modulation, Mod Rate, Width, Low Cut, High Cut, Ducking, Mix;\n"
          "   Opto: Peak Reduction, Gain, Emphasis, Tube, Mix; Pulse: Low Boost, Low Atten, High Boost, Bandwidth, High Atten, Mid Low Peak, Mid Dip, Mid High Peak, Output, Tube;\n"
          "   Oil Can: Delay, Variation, Sustain, Tone, Drive, Wobble Rate, Mix; Ladder: Cutoff, Resonance, Env Amount, Drive, Output, Mix; Ring: Frequency, LFO Rate, LFO Amount, Drive, Output, Mix;\n"
-         "   Phaser: Rate, Sweep, Centre, Resonance, Stereo Spread, Mix; BBD: Time, Feedback, Filter, Drive, Mod Rate, Mod Depth, Mix.\n"
+         "   Phaser: Rate, Sweep, Centre, Resonance, Stereo Spread, Mix; BBD: Time, Feedback, Filter, Drive, Mod Rate, Mod Depth, Mix;\n"
+         "   Cinder: Drive (-12..36 dB), Model Blend, Bias, Dynamics, Low Cut (20 = off), Thump, Tone (tilt, +-6 dB), High Cut, Output, Mix, Duck Drive.\n"
+         " Cinder settings: model / modelB (Tape Preamp, British Channel, Germanium Class-A, Triode Box, Pentode Box, Transformer Iron, Op-Amp Rail, Diode Fuzz,\n"
+         "   Tape Hysteresis, Broadcast Limiter Amp, or 0-9), punishOn (+20 dB), steepOn (30 dB/oct high cut), autoGainOn, msMode (Stereo, Mid/Side, Mid only, Side only),\n"
+         "   oversample (1x 2x 4x 8x 16x or 0-4), linearPhaseOn, deltaOn (hear only what the saturation adds), keyOn (sidechain ducks the drive by Duck Drive).\n"
          " Settings: roomType (Hall/Chamber/Room/Plate/Church/Cathedral/Studio/Ambience or 0-7), freeze, limitMode, meterMode, lowFreq/highFreq/attenFreq/midLowFreq/dipFreq/midHighFreq (Hz - snaps to the\n"
          "   nearest switch position), mode (0 echo / 1 doubler), sync (0 free, 1 1/16, 2 1/8, 3 dotted 1/8, 4 1/4, 5 1/2), poles (0 two / 1 four), envFast, lfoShape (0 sine / 1 square), stages (4, 6, 8 or 12).",
          R"json({"type":"object","properties":{"track":{"type":["string","integer"]},"which":{"type":"string"},"action":{"type":"string","enum":["add","get","set","preset","open"]},
@@ -121,7 +138,7 @@ void registerApexTools()
          [this] (const juce::var& a)
          {
              const auto type = colourTypeFor (str (a, "which"));
-             if (type.isEmpty()) return ToolResult::error ("which must be aurora, opto, pulse, oilcan, ladder, ring, phaser or bbd");
+             if (type.isEmpty()) return ToolResult::error ("which must be aurora, opto, pulse, oilcan, ladder, ring, phaser, bbd or cinder");
              return runSeriesTool (a, type);
          });
 }
@@ -195,7 +212,13 @@ ToolResult runSeriesTool (const juce::var& a, const juce::String& type)
                  {
                      const auto key = pr.name.toString();
                      auto v = pr.value;
-                     if (auto ap = Signature::findParam (*p, key)) { ap->setParameter (ap->getValueRange().clipValue ((float) (double) v), juce::sendNotification); continue; }
+                     // an exact parameter name / ID wins; a known setting comes next; only then a partial parameter name
+                     te::AutomatableParameter* exact = nullptr;
+                     for (auto ap : p->getAutomatableParameters()) if (ap->paramID.equalsIgnoreCase (key) || ap->getParameterName().equalsIgnoreCase (key)) exact = ap;
+                     bool isSetting = knownPluginSettings().contains (key, true);
+                     for (int i = 0; i < p->state.getNumProperties() && ! isSetting; ++i) isSetting = p->state.getPropertyName (i).toString().equalsIgnoreCase (key);
+                     if (exact != nullptr) { exact->setParameter (exact->getValueRange().clipValue ((float) (double) v), juce::sendNotification); continue; }
+                     if (! isSetting) if (auto ap = Signature::findParam (*p, key)) { ap->setParameter (ap->getValueRange().clipValue ((float) (double) v), juce::sendNotification); continue; }
                      // settings with names
                      juce::String id = key;
                      if (key.equalsIgnoreCase ("mode") && v.isString()) v = SqApexDynamicsPlugin::modeNames().indexOf (v.toString().toUpperCase());
@@ -203,6 +226,10 @@ ToolResult runSeriesTool (const juce::var& a, const juce::String& type)
                      if (key.equalsIgnoreCase ("driveType") && v.isString()) v = SqApexSubPlugin::driveNames().indexOf (v.toString().toUpperCase());
                      if (key.equalsIgnoreCase ("target") && v.isString()) { int ti = 0; for (int i = 0; i < (int) SqApexLimiterPlugin::targets().size(); ++i) if (juce::String (SqApexLimiterPlugin::targets()[(size_t) i].name).containsIgnoreCase (v.toString())) ti = i; v = ti; }
                      if (key.equalsIgnoreCase ("roomType") && v.isString()) v = juce::jmax (0, SqAuroraPlugin::roomNames().indexOf (v.toString(), true));
+                     if ((key.equalsIgnoreCase ("model") || key.equalsIgnoreCase ("modelB")) && v.isString())
+                     { int mi = -1; auto names = SqCinderPlugin::modelNames(); for (int i = 0; i < names.size(); ++i) if (names[i].containsIgnoreCase (v.toString()) || v.toString().containsIgnoreCase (names[i])) { mi = i; break; } v = juce::jmax (0, mi); }
+                     if (key.equalsIgnoreCase ("msMode") && v.isString()) v = juce::jmax (0, SqCinderPlugin::msNames().indexOf (v.toString(), true));
+                     if (key.equalsIgnoreCase ("oversample") && v.isString()) v = juce::jmax (0, SqCinderPlugin::osNames().indexOf (v.toString().trim().toLowerCase(), true));
                      if (key.equalsIgnoreCase ("stages") && (int) v >= 4) { const int want = (int) v; int best = 0; for (int i = 0; i < 4; ++i) if (std::abs (SqPhase12Plugin::stageCount (i) - want) < std::abs (SqPhase12Plugin::stageCount (best) - want)) best = i; v = best; }
                      if (dynamic_cast<SqPulseEqPlugin*> (p) != nullptr && key.endsWithIgnoreCase ("Freq") && (double) v > 10.0)
                      {

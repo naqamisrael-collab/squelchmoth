@@ -96,8 +96,8 @@ public:
         juce::MemoryBlock pk; pk.loadFromHexString (pubHex); if (pk.getSize() != 32) return false;
         uint8_t msg[17]; std::memcpy (msg, "squelchmoth2", 12); std::memcpy (msg + 12, d, 5);
         if (! Ed25519::verify (d + 5, msg, sizeof (msg), static_cast<const uint8_t*> (pk.getData()))) return false;
-        static const char* codes[] = { "", "CORE", "COMPLETE", "VOCAL", "MASTER", "INSTR", "BEAT", "CREATIVE" };
-        if (d[0] < 1 || d[0] > 7) return false;
+        static const char* codes[] = { "", "CORE", "COMPLETE", "VOCAL", "MASTER", "INSTR", "BEAT", "CREATIVE", "COLOR" };
+        if (d[0] < 1 || d[0] > 8) return false;
         productOut = codes[d[0]];
         serialOut = juce::String::toHexString (d + 1, 4, 0).toUpperCase();
         return true;
@@ -158,9 +158,9 @@ private:
         {
             const auto& p = k.product;
             if (p == "CORE") o.core = true;
-            else if (p == "COMPLETE") o.core = o.vocal = o.mastering = o.instruments = o.beat = o.creative = true;
+            else if (p == "COMPLETE") o.core = o.vocal = o.mastering = o.instruments = o.beat = o.creative = o.color = true;
             else if (p == "VOCAL") o.vocal = true; else if (p == "MASTER") o.mastering = true; else if (p == "INSTR") o.instruments = true;
-            else if (p == "BEAT") o.beat = true; else if (p == "CREATIVE") o.creative = true;
+            else if (p == "BEAT") o.beat = true; else if (p == "CREATIVE") o.creative = true; else if (p == "COLOR") o.color = true;
         }
         owned = o; Edition::owned() = o;
     }

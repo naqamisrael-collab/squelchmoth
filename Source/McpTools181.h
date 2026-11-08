@@ -314,7 +314,7 @@ void register181Tools()
              juce::Array<juce::var> owned;
              auto& o = Edition::owned();
              if (o.core) owned.add ("Squelchmoth"); if (o.vocal) owned.add ("Vocal Suite"); if (o.mastering) owned.add ("Mastering Suite");
-             if (o.instruments) owned.add ("Instrument Collection"); if (o.beat) owned.add ("Beat Lab Expansion"); if (o.creative) owned.add ("Creative FX");
+             if (o.instruments) owned.add ("Instrument Collection"); if (o.beat) owned.add ("Beat Lab Expansion"); if (o.creative) owned.add ("Creative FX"); if (o.color) owned.add ("Color & Space");
              set (res, "owns", owned);
              set (res, "max_tracks", Edition::isDemo() ? juce::var (Edition::demoMaxTracks) : juce::var ("unlimited"));
              set (res, "store", Edition::storeUrl());

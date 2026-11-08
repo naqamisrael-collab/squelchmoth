@@ -34,7 +34,7 @@ public:
     bool moreThanOneInstanceAllowed() override
     {
         auto cl = getCommandLineParameters();
-        return cl.contains ("--selftest") || cl.contains ("--make-") || cl.contains ("--check-key") || cl.contains ("PluginScan");
+        return cl.contains ("--selftest") || cl.contains ("--preset-audit") || cl.contains ("--make-") || cl.contains ("--check-key") || cl.contains ("PluginScan");
     }
 
     void initialise (const juce::String& commandLine) override
@@ -79,6 +79,22 @@ public:
                 }
             std::cout << ok << " valid, " << bad << " invalid\n";
             setApplicationReturnValue (bad == 0 && ok > 0 ? 0 : 1);
+            quit();
+            return;
+        }
+
+        if (commandLine.contains ("--preset-audit"))
+        {
+            // Squelchmoth --preset-audit [report.md] [--only "Plug-in Name,Other Name"]
+            auto args = juce::ArgumentList ("Squelchmoth", commandLine);
+            SelfTestMode::presetAuditOnly = true;
+            for (int i = 0; i < args.size(); ++i)
+            {
+                if (args[i].text == "--preset-audit" && i + 1 < args.size() && ! args[i + 1].text.startsWith ("--")) SelfTestMode::reportPath = args[i + 1].text.unquoted();
+                if (args[i].text == "--only" && i + 1 < args.size()) SelfTestMode::only = juce::StringArray::fromTokens (args[i + 1].text.unquoted(), ",", "\"");
+            }
+            for (auto& o : SelfTestMode::only) o = o.trim();
+            setApplicationReturnValue (runSelfTest());
             quit();
             return;
         }
@@ -151,6 +167,7 @@ public:
         engine->getPluginManager().createBuiltInType<SqPulseEqPlugin>();
         engine->getPluginManager().createBuiltInType<SqOilCanPlugin>();
         engine->getPluginManager().createBuiltInType<SqLadderPlugin>();
+        engine->getPluginManager().createBuiltInType<SqCinderPlugin>();             // 1.11 Color & Space
         engine->getPluginManager().createBuiltInType<SqRingPlugin>();
         engine->getPluginManager().createBuiltInType<SqPhase12Plugin>();
         engine->getPluginManager().createBuiltInType<SqBucketPlugin>();

@@ -11,10 +11,10 @@
 
 namespace Edition
 {
-    enum class Pack { none, vocal, mastering, instruments, beat, creative };
+    enum class Pack { none, vocal, mastering, instruments, beat, creative, color };
 
     struct Product { const char* code; const char* name; const char* price; const char* list; const char* blurb; };
-    // codes match the SQM2 key product byte: 1 CORE, 2 COMPLETE, 3 VOCAL, 4 MASTER, 5 INSTR, 6 BEAT, 7 CREATIVE
+    // codes match the SQM2 key product byte: 1 CORE, 2 COMPLETE, 3 VOCAL, 4 MASTER, 5 INSTR, 6 BEAT, 7 CREATIVE, 8 COLOR
     inline const std::vector<Product>& products()
     {
         static const std::vector<Product> p {
@@ -24,13 +24,14 @@ namespace Edition
             { "MASTER",   "Mastering Suite",       "$99",     "$149",    "The Apex series, Pulse EQ and Opto Leveler" },
             { "INSTR",    "Instrument Collection", "$99",     "$149",    "Hexwing, Toxin FM, Lantern, Lantern Exo, Pollen, Blossom 2, Thorn Bass, Larva Bass, Chrysalis 2 and Chrysalis SF" },
             { "BEAT",     "Beat Lab Expansion",    "$49",     "$79",     "Carapace, Live Drum Synth, Drum Pad Model, Thump Live, Mandible, Mandible Lite, ten more kits and 51 genre loops" },
-            { "CREATIVE", "Creative FX",           "$49",     "$79",     "Time Weaver, Larva Filter, Oil Can Delay, Bucket Brigade, Halo Ring, Twelve Phase and Silk Ladder" } };
+            { "CREATIVE", "Creative FX",           "$49",     "$79",     "Time Weaver, Larva Filter, Oil Can Delay, Bucket Brigade, Halo Ring, Twelve Phase and Silk Ladder" },
+            { "COLOR",    "Color & Space",         "$179",    "$299",    "Cinder and the 1.11 Color & Space family: saturation, delays, plates, modulation and space" } };
         return p;
     }
     inline const Product* productFor (Pack p)
     {
         switch (p) { case Pack::vocal: return &products()[2]; case Pack::mastering: return &products()[3]; case Pack::instruments: return &products()[4];
-                     case Pack::beat: return &products()[5]; case Pack::creative: return &products()[6]; default: return &products()[0]; }
+                     case Pack::beat: return &products()[5]; case Pack::creative: return &products()[6]; case Pack::color: return &products()[7]; default: return &products()[0]; }
     }
 
     /** The store. One page per product so a lock can send people straight to the thing they need. */
@@ -43,22 +44,22 @@ namespace Edition
 
     //==========================================================================
     // What the running copy owns (set by Licence from the stored keys)
-    struct Owned { bool core = false; bool vocal = false, mastering = false, instruments = false, beat = false, creative = false; };
+    struct Owned { bool core = false; bool vocal = false, mastering = false, instruments = false, beat = false, creative = false, color = false; };
     inline Owned& owned()   { static Owned o; return o; }
     inline bool isDemo()    { return ! owned().core; }
     inline bool hasPack (Pack p)
     {
         auto& o = owned();
         switch (p) { case Pack::vocal: return o.vocal; case Pack::mastering: return o.mastering; case Pack::instruments: return o.instruments;
-                     case Pack::beat: return o.beat; case Pack::creative: return o.creative; default: return true; }
+                     case Pack::beat: return o.beat; case Pack::creative: return o.creative; case Pack::color: return o.color; default: return true; }
     }
     inline juce::String editionName()
     {
         auto& o = owned();
-        if (o.core && o.vocal && o.mastering && o.instruments && o.beat && o.creative) return "Squelchmoth Complete";
+        if (o.core && o.vocal && o.mastering && o.instruments && o.beat && o.creative && o.color) return "Squelchmoth Complete";
         if (! o.core) return "Squelchmoth Demo";
         juce::StringArray packs;
-        for (auto p : { Pack::vocal, Pack::mastering, Pack::instruments, Pack::beat, Pack::creative }) if (hasPack (p)) packs.add (productFor (p)->name);
+        for (auto p : { Pack::vocal, Pack::mastering, Pack::instruments, Pack::beat, Pack::creative, Pack::color }) if (hasPack (p)) packs.add (productFor (p)->name);
         return packs.isEmpty() ? juce::String ("Squelchmoth") : "Squelchmoth + " + packs.joinIntoString (", ");
     }
 
@@ -76,7 +77,8 @@ namespace Edition
             { "sqmCarapace", Pack::beat }, { "sqmLiveDrumSynth", Pack::beat }, { "sqmDrumPadModel", Pack::beat }, { "sqmThumpLive", Pack::beat },
             { "sqmMandible", Pack::beat }, { "sqmMandibleLite", Pack::beat },
             { "sqmTimeWeaver", Pack::creative }, { "sqmLarvaFilter", Pack::creative }, { "sqmOilCan", Pack::creative }, { "sqmBBD", Pack::creative },
-            { "sqmRing", Pack::creative }, { "sqmPhase12", Pack::creative }, { "sqmLadder", Pack::creative } };
+            { "sqmRing", Pack::creative }, { "sqmPhase12", Pack::creative }, { "sqmLadder", Pack::creative },
+            { "sqmCinder", Pack::color } };
         auto it = m.find (type); return it != m.end() ? it->second : Pack::none;
     }
     /** The Demo's basic set: 16 effects, 6 instruments and what the rack needs to run. */

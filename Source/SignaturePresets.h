@@ -934,6 +934,7 @@ namespace SignaturePresets
 #include "SignaturePresets18.inl"
 #include "SignaturePresets181.inl"
 #include "SignaturePresets181fx.inl"
+#include "SignaturePresets111.inl"
         { "MIDI Shaper", {
             B ("Unity",           { N ("Semitones", 0) }),
             B ("Octave Down",     { N ("Semitones", -12) }),

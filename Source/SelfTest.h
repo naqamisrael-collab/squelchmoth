@@ -7,6 +7,10 @@
 #include "Licence.h"
 #include "ChatPanel.h"
 #include "MixerView.h"
+#include "SqEngine111.h"
+
+/** Set by Main for "--preset-audit [report.md]": the self-test sets up the engine, runs the audit and returns. */
+struct SelfTestMode { static inline bool presetAuditOnly = false; static inline juce::String reportPath; static inline juce::StringArray only; };
 
 inline int runSelfTest()
 {
@@ -34,6 +38,7 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqPulseEqPlugin>();
     engine->getPluginManager().createBuiltInType<SqOilCanPlugin>();
     engine->getPluginManager().createBuiltInType<SqLadderPlugin>();
+    engine->getPluginManager().createBuiltInType<SqCinderPlugin>();
     engine->getPluginManager().createBuiltInType<SqRingPlugin>();
     engine->getPluginManager().createBuiltInType<SqPhase12Plugin>();
     engine->getPluginManager().createBuiltInType<SqBucketPlugin>();
@@ -88,6 +93,18 @@ inline int runSelfTest()
     int failures = 0, passes = 0, id = 1;
     juce::String sid;
 
+    if (SelfTestMode::presetAuditOnly)
+    {
+        auto report = SelfTestMode::reportPath.isNotEmpty() ? juce::File::getCurrentWorkingDirectory().getChildFile (SelfTestMode::reportPath)
+                                                            : juce::File::getCurrentWorkingDirectory().getChildFile ("preset-audit.md");
+        std::cout << "== Squelchmoth preset audit ==\n";
+        auto sum = PresetAudit::run (*session->edit, SelfTestMode::only, { "*" }, 1.5, report, [] (const juce::String& m) { std::cout << "  FAIL " << m << "\n"; });
+        std::cout << "\n== " << sum.plugins << " plug-ins, " << sum.presets << " presets: " << sum.passed << " passed, " << sum.failed << " failed ("
+                  << juce::String (sum.seconds, 1) << " s) ==\nReport: " << report.getFullPathName() << "\n";
+        scannerOwner.reset(); session.reset(); engine.reset();
+        return sum.failed == 0 ? 0 : 1;
+    }
+
     auto rpc = [&] (const juce::String& method, const juce::var& params) -> juce::var
     {
         auto o = new juce::DynamicObject();
@@ -132,7 +149,7 @@ inline int runSelfTest()
     };
 
     std::cout << "== Squelchmoth MCP self-test ==\n";
-    Edition::owned() = Edition::Owned { true, true, true, true, true, true };   // the self-test runs as Complete; the editions section switches to the Demo itself
+    Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };   // the self-test runs as Complete; the editions section switches to the Demo itself
 
     auto init = rpc ("initialize", juce::JSON::parse (R"({"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"selftest","version":"1"}})"));
     check (init["result"]["serverInfo"]["name"].toString() == "squelchmoth", "initialize returns serverInfo");
@@ -1929,6 +1946,133 @@ inline int runSelfTest()
         }
 
         std::cout << "  (1.10 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)\n";
+    }
+
+    // ===================================================================================== 1.11 shared engines
+    {
+        std::cout << "\n-- 1.11: shared engines (Wing Mod, Analog Style, Nonlinear core, Voice core, preset audit) --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        const double sr = 48000.0;
+
+        // oversampler: unity and the reported latency agrees with a measurement
+        {
+            Eng::Oversampler os; os.prepare (256, 3, sr);
+            std::vector<float> in (48128), out (48128);
+            for (size_t i = 0; i < in.size(); ++i) in[i] = 0.5f * (float) std::sin (2 * juce::MathConstants<double>::pi * 1000.0 * (double) i / sr);
+            for (size_t p = 0; p + 256 <= in.size(); p += 256) { auto o = os.up (0, in.data() + p, 256); os.down (0, o, 256, out.data() + p); }
+            double S = 0, C = 0, eo = 0, ei = 0; const double w = 2 * juce::MathConstants<double>::pi * 1000.0 / sr;
+            for (size_t i = 24000; i < 48000; ++i) { S += out[i] * std::sin (w * (double) i); C += out[i] * std::cos (w * (double) i); eo += out[i] * out[i]; ei += in[i] * in[i]; }
+            double d = std::atan2 (-C, S) / w; if (d < 0) d += 2 * juce::MathConstants<double>::pi / w;
+            check (std::abs (10 * std::log10 (eo / ei)) < 0.01 && std::abs (d - os.latencySamples()) < 0.05,
+                   "1.11 oversampler 8x: unity gain, latency " + juce::String (os.latencySamples(), 2) + " samples reported, " + juce::String (d, 2) + " measured");
+        }
+        // Wing Mod locks to the transport
+        {
+            Eng::WingMod m; m.prepare (sr); m.s.sync = true; m.s.syncIndex = 12; m.setTransport (120, 3.0, true);
+            float a, b; m.next (0, a, b); for (int i = 1; i < 6000; ++i) m.next (0, a, b); float q, r; m.next (0, q, r);
+            check (std::abs (q - 1.0f) < 1.0e-3f, "1.11 Wing Mod: a 1/4 LFO is phase-locked to the bar (peak a sixteenth after the beat: " + juce::String (q, 4) + ")");
+        }
+        // Analog Style: all seven voicings hold the level on pink noise
+        {
+            std::vector<float> l, r; Eng::TestSignals::pink (l, r, sr, 3.0); float worst = 0; juce::String worstName;
+            for (int v = 0; v < Eng::AnalogStyle::numVoicings; ++v)
+            {
+                Eng::AnalogStyle as; as.prepare (sr, 256, 2); as.setVoicing (v);
+                auto L = l, R = r; for (size_t p = 0; p + 256 <= L.size(); p += 256) { float* ch[2] = { L.data() + p, R.data() + p }; as.process (ch, 2, 256); }
+                double eo = 0, ei = 0; for (size_t i = 72000; i < L.size(); ++i) { eo += L[i] * L[i]; ei += l[i] * l[i]; }
+                const float d = (float) (10 * std::log10 (eo / ei)); if (std::abs (d) > std::abs (worst)) { worst = d; worstName = Eng::AnalogStyle::voicingName (v); }
+            }
+            check (std::abs (worst) < 1.0f, "1.11 Analog Style: seven voicings within 1 dB of the input level (worst " + worstName + " " + juce::String (worst, 2) + " dB)");
+        }
+        // Voice core on the generated sung phrase: pitch, formants, sibilance, harmonic / noise split
+        {
+            std::vector<float> l, r; Eng::TestSignals::vocal (l, r, sr, 4.0);
+            SqVoiceCore::Core vc; vc.prepare (sr, 256);
+            static const float notes[] = { 57, 59, 60, 62, 64, 62, 60, 59 };
+            std::vector<float> cents; float f1a = 0, f2a = 0, f1i = 0, f2i = 0; int nA = 0, nI = 0; bool sib = false, sibInVowel = false;
+            std::vector<float> h (256), nz (256); double hnrVowel = 0; int hnrN = 0;
+            for (size_t p = 0; p + 256 <= l.size(); p += 256)
+            {
+                vc.analyse (l.data() + p, 256); vc.split (l.data() + p, h.data(), nz.data(), 256);
+                const auto& sn = vc.latest();
+                const double t = (double) sn.position / sr; const int ni = (int) (t / 0.5) % 8; const double inNote = std::fmod (t, 0.5);
+                if (sn.voiced && sn.hz > 0 && inNote > 0.12 && inNote < 0.4) cents.push_back ((float) std::abs (1200.0 * std::log2 (sn.hz / (440.0 * std::pow (2.0, (notes[ni] - 69) / 12.0)))));
+                if (sn.voiced && inNote > 0.15 && inNote < 0.4 && sn.formants[1] > 0) { if (ni % 5 == 0) { f1a += sn.formants[0]; f2a += sn.formants[1]; ++nA; } if (ni % 5 == 2) { f1i += sn.formants[0]; f2i += sn.formants[1]; ++nI; } }
+                if (sn.sibilant && (ni == 2 || ni == 6) && inNote < 0.1) sib = true;
+                if (sn.sibilant && inNote > 0.15 && inNote < 0.4) sibInVowel = true;
+                if (inNote > 0.2 && inNote < 0.4 && t > 0.5) { hnrVowel += sn.hnrDb; ++hnrN; }
+            }
+            std::sort (cents.begin(), cents.end());
+            const float med = cents.empty() ? 999.0f : cents[cents.size() / 2];
+            check (cents.size() > 40 && med < 25.0f, "1.11 Voice core: pitch tracks the sung notes (median error " + juce::String (med, 1) + " cents over " + juce::String ((int) cents.size()) + " frames, vibrato is +-20)");
+            if (nA > 0) { f1a /= nA; f2a /= nA; } if (nI > 0) { f1i /= nI; f2i /= nI; }
+            check (nA > 5 && std::abs (f1a - 800) < 160 && std::abs (f2a - 1150) < 230, "1.11 Voice core: formants of 'ah' F1 " + juce::String (juce::roundToInt (f1a)) + " Hz, F2 " + juce::String (juce::roundToInt (f2a)) + " Hz (sung at 800 / 1150)");
+            check (nI > 5 && std::abs (f1i - 280) < 90 && std::abs (f2i - 2300) < 460, "1.11 Voice core: formants of 'ee' F1 " + juce::String (juce::roundToInt (f1i)) + " Hz, F2 " + juce::String (juce::roundToInt (f2i)) + " Hz (sung at 280 / 2300)");
+            check (sib && ! sibInVowel, "1.11 Voice core: the 's' is flagged sibilant, the vowels are not");
+            const double hnr = hnrN > 0 ? hnrVowel / hnrN : -99;
+            std::vector<float> pl, pr; Eng::TestSignals::pink (pl, pr, sr, 2.0); SqVoiceCore::Core vn; vn.prepare (sr, 256);
+            for (size_t p = 0; p + 256 <= pl.size(); p += 256) { vn.analyse (pl.data() + p, 256); vn.split (pl.data() + p, h.data(), nz.data(), 256); }
+            check (hnr > 6.0 && vn.latest().hnrDb < -6.0f, "1.11 Voice core: harmonic-to-noise " + juce::String (hnr, 1) + " dB on sung vowels, " + juce::String (vn.latest().hnrDb, 1) + " dB on pink noise");
+        }
+        // preset audit tool: runs on two plug-ins and writes its report
+        {
+            auto rep = session->sessionsDir.getChildFile ("preset-audit-test.md");
+            auto sum = PresetAudit::run (*session->edit, { "Silk Ladder", "Opto Leveler" }, {}, 0.75, rep);
+            int expect = 0; for (auto& e : Signature::entries()) if (juce::String (e.name) == "Silk Ladder" || juce::String (e.name) == "Opto Leveler") expect += (int) e.presets.size();
+            bool finite = true; for (auto& row : sum.rows) finite = finite && row.finite;
+            check (sum.plugins == 2 && sum.presets == expect && expect > 0 && finite && rep.existsAsFile() && rep.loadFileAsString().contains ("| Silk Ladder |"),
+                   "1.11 preset audit: " + juce::String (sum.presets) + " presets of 2 plug-ins rendered on 3 signals, report written (" + juce::String (sum.failed) + " flagged)");
+        }
+        // ---------------------------------------------------------------- Cinder (C1)
+        {
+            call ("add_track", R"({"kind":"audio","name":"Cin"})");
+            auto add = call ("studio_fx", R"({"track":"Cin","which":"cinder","action":"add"})");
+            auto* ct = session->findTrack ("Cin"); SqCinderPlugin* cp = nullptr;
+            if (ct != nullptr) for (auto pl : ct->pluginList) if ((cp = dynamic_cast<SqCinderPlugin*> (pl)) != nullptr) break;
+            check (cp != nullptr, "Cinder: added through studio_fx");
+            int nPresets = 0, cats = 0; juce::StringArray seen;
+            for (auto& e : Signature::entries()) if (juce::String (e.name) == "Cinder") { nPresets = (int) e.presets.size(); for (auto& p : e.presets) { auto c = juce::String (p.name).upToFirstOccurrenceOf (" | ", false, false); if (! seen.contains (c)) seen.add (c); } }
+            cats = seen.size();
+            check (nPresets >= 140 && cats >= 10, "Cinder: " + juce::String (nPresets) + " factory presets in " + juce::String (cats) + " categories");
+            auto set = call ("studio_fx", R"({"track":"Cin","which":"cinder","action":"set","settings":{"model":"Pentode Box","Drive":12,"oversample":"8x","msMode":"Mid only"}})");
+            if (cp != nullptr)
+                check (cp->modelA.get() == Cinder::pentodeBox && cp->oversample.get() == 3 && cp->msMode.get() == 2 && std::abs (cp->bank[SqCinderPlugin::drive] - 12.0f) < 0.01f,
+                       "Cinder: model, drive, oversampling and Mid/Side set by name");
+            auto got = call ("studio_fx", R"({"track":"Cin","which":"cinder","action":"get"})");
+            check (got.contains ("harmonics_h2_h10_db") && got.contains ("Pentode Box") && got.contains ("latency_ms"), "Cinder: get reports the model, latency and the harmonic profile");
+            // measured advantage (super prompt C1): every model, 10 kHz at +24 dB drive, 44.1 kHz, 8x -> aliasing below -100 dBFS
+            {
+                double worst = -999; juce::String worstName;
+                for (int m = 0; m < Cinder::numModels; ++m)
+                {
+                    Cinder::Processor c; c.p.modelA = m; c.p.driveDb = 24; c.p.oversampleLog2 = 3; c.p.dynamics = 0; c.prepare (44100.0, 512);
+                    const int n = 1 << 15; const double f0 = 44100.0 * 7431.0 / n;
+                    std::vector<float> l ((size_t) (n + 16384)), r;
+                    for (size_t i = 0; i < l.size(); ++i) l[i] = Eng::dbToGain (-18) * 1.414f * (float) std::sin (2 * juce::MathConstants<double>::pi * f0 * (double) i / 44100.0);
+                    r = l; for (size_t i = 0; i + 512 <= l.size(); i += 512) { float* ch[2] = { l.data() + i, r.data() + i }; c.process (ch, 2, nullptr, 512); }
+                    juce::dsp::FFT fft (15); std::vector<float> buf ((size_t) n * 2, 0.0f);
+                    for (int i = 0; i < n; ++i) { const double w = 0.35875 - 0.48829 * std::cos (2 * juce::MathConstants<double>::pi * i / (n - 1)) + 0.14128 * std::cos (4 * juce::MathConstants<double>::pi * i / (n - 1)) - 0.01168 * std::cos (6 * juce::MathConstants<double>::pi * i / (n - 1)); buf[(size_t) i] = (float) (l[(size_t) (16384 + i)] * w); }
+                    fft.performFrequencyOnlyForwardTransform (buf.data());
+                    const double norm = 2.0 / (0.35875 * n); double wb = 0;
+                    for (int k = 3; k < n / 2; ++k) { const double f = k * 44100.0 / n, rr = f / f0; if (std::abs (rr - std::round (rr)) * f0 < 8 * 44100.0 / n) continue; wb = juce::jmax (wb, (double) buf[(size_t) k] * norm); }
+                    const double db = 20 * std::log10 (wb + 1e-30);
+                    if (db > worst) { worst = db; worstName = Cinder::modelName (m); }
+                }
+                check (worst < -100.0, "Cinder: aliasing for 10 kHz at +24 dB drive, 44.1 kHz, 8x, all ten models: worst product " + juce::String (worst, 1) + " dBFS (" + worstName + ")");
+            }
+            // every factory preset: the audit holds each one to +-1 dB on its material, no NaN, no overs, CPU in budget
+            {
+                auto rep = session->sessionsDir.getChildFile ("preset-audit-cinder.md");
+                auto sum = PresetAudit::run (*session->edit, { "Cinder" }, { "sqmCinder" }, 3.0, rep);
+                juce::String firstFail; for (auto& row : sum.rows) if (! row.pass) { firstFail = row.preset + ": " + row.why; break; }
+                double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
+                check (sum.presets >= 140 && sum.failed == 0, "Cinder: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
+                auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11.md");
+                if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
+            }
+            call ("delete_track", R"({"track":"Cin"})");
+        }
+        std::cout << "  (1.11 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)\n";
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));

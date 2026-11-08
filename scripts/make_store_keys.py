@@ -3,7 +3,7 @@
 
   python3 scripts/make_store_keys.py "/path/to/STORE SIGNING KEY - keep private.txt" PRODUCT COUNT OUT.txt
 
-PRODUCT: CORE | COMPLETE | VOCAL | MASTER | INSTR | BEAT | CREATIVE.  Writes one key per line (97 characters each,
+PRODUCT: CORE | COMPLETE | VOCAL | MASTER | INSTR | BEAT | CREATIVE | COLOR.  Writes one key per line (97 characters each,
 the store takes up to 100), ready to paste or upload as the product's key list. Serials are random and never reused
 (a ledger of every serial issued is kept next to the signing key file as 'issued-serials.txt').
 Never commit the output: these keys are product.
@@ -11,7 +11,7 @@ Never commit the output: these keys are product.
 import sys, os, base64, secrets, re
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-CODES = {"CORE": 1, "COMPLETE": 2, "VOCAL": 3, "MASTER": 4, "INSTR": 5, "BEAT": 6, "CREATIVE": 7}
+CODES = {"CORE": 1, "COMPLETE": 2, "VOCAL": 3, "MASTER": 4, "INSTR": 5, "BEAT": 6, "CREATIVE": 7, "COLOR": 8}
 
 def main():
     if len(sys.argv) != 5 or sys.argv[2] not in CODES:

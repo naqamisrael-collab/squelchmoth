@@ -21,6 +21,7 @@
 #include "SqApex.h"
 #include "SqFx181.h"
 #include "SqColour.h"
+#include "SqCinder.h"
 
 namespace te = tracktion;
 
@@ -99,6 +100,7 @@ namespace Signature
             { "Snap Transient",   "airwindows_point", "Dynamics",   "Transient designer: more or less attack on drums, bass and plucks", 0xffd4ff3a, "snaptransient" },
             { "Pop Knock",        "airwindows_pop",   "Dynamics",   "Explosive drum compressor that brings kicks and snares forward in the mix",           0xffd4ff3a, "popknock" },
             // ---------------- Saturation, tape & console
+            { "Cinder",           "sqmCinder",       "Saturation & Tape", "Ten-model saturation: tape preamp to diode fuzz, oversampled to 16x with anti-aliased curves, Model Blend, Bias, Dynamics, Mid/Side, ducked drive, Delta and a live harmonic readout", 0xffff5a1f, "cinder" },
             { "Ember Tape",       "airwindows_totape5", "Saturation & Tape", "Full tape machine model: head bump, flutter, softness, bias - the Squelchmoth 'warm' button", 0xffff8a3a, "embertape" },
             { "Scorch Drive",     "airwindows_drive", "Saturation & Tape", "Classic overdrive with highpass and tone - from grit to fuzz",    0xffff8a3a, "scorchdrive" },
             { "Lumen Channel",    "airwindows_console6channel", "Saturation & Tape", "Console channel stage: put one on every track, Lumen Buss on the master, for analogue summing", 0xffff8a3a, "lumenchannel" },
