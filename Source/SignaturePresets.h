@@ -43,9 +43,11 @@ namespace SignaturePresets
     // 4OSC note-number helper: filter frequency is stored in MIDI note units (69 = 440 Hz)
     inline float NOTE (float hz)                    { return 69.0f + 12.0f * std::log2 (hz / 440.0f); }
 
+#include "SignaturePresets111.inl"
+
     inline const std::map<juce::String, std::vector<Preset>>& bank()
     {
-        static const std::map<juce::String, std::vector<Preset>> b {
+        static const std::map<juce::String, std::vector<Preset>> b = [] { std::map<juce::String, std::vector<Preset>> base {
         //==================================================================== Instruments
         { "Mothsynth", {
             // osc props: waveShape (1 sine 2 tri 3 saw 4 sawDown 5 square 6 noise), voices (unison)
@@ -934,7 +936,6 @@ namespace SignaturePresets
 #include "SignaturePresets18.inl"
 #include "SignaturePresets181.inl"
 #include "SignaturePresets181fx.inl"
-#include "SignaturePresets111.inl"
         { "MIDI Shaper", {
             B ("Unity",           { N ("Semitones", 0) }),
             B ("Octave Down",     { N ("Semitones", -12) }),
@@ -948,6 +949,8 @@ namespace SignaturePresets
             A ("Whole Step Up",   { N ("Semitones", 2) }),
             A ("Half Step Down",  { N ("Semitones", -1) }),
             A ("Major Sixth Up",  { N ("Semitones", 9) }) } } };
+            add111 (base);
+            return base; }();
         return b;
     }
 
