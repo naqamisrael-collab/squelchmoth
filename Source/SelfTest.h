@@ -5,6 +5,8 @@
 #include "McpServer.h"
 #include "Behaviours.h"
 #include "Licence.h"
+#include "ChatPanel.h"
+#include "MixerView.h"
 
 inline int runSelfTest()
 {
@@ -18,6 +20,7 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqStereoPanPlugin>();
     engine->getPluginManager().createBuiltInType<SqMonoSumPlugin>();
     engine->getPluginManager().createBuiltInType<SqAnalyzerPlugin>();
+    engine->getPluginManager().createBuiltInType<SqStripTapPlugin>();
     engine->getPluginManager().createBuiltInType<Sq808Plugin>();
     engine->getPluginManager().createBuiltInType<SqBlossomPlugin>();
     engine->getPluginManager().createBuiltInType<SqTunePlugin>();
@@ -1557,6 +1560,313 @@ inline int runSelfTest()
         }
 
         std::cout << "  (1.8.1 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)\n";
+    }
+
+    //==========================================================================
+    // 1.10 "Console": the console model, COMP / LIMIT slots, gain reduction, strip meters (BS.1770-4), gang,
+    // the 1.10 wished features and Squelchmoth Chat's tool loop against a local mock of the Messages API.
+    {
+        std::cout << "\n-- 1.10 console, wished features and Squelchmoth Chat --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        auto tmp = juce::File::getSpecialLocation (juce::File::tempDirectory);
+        auto writeSine = [] (const juce::File& f, double hz, double peakDb, double seconds, int channels = 2)
+        {
+            const double sr = 48000.0; const int len = (int) (sr * seconds);
+            juce::AudioBuffer<float> buf (channels, len);
+            const float a = juce::Decibels::decibelsToGain ((float) peakDb);
+            for (int i = 0; i < len; ++i) for (int c = 0; c < channels; ++c) buf.setSample (c, i, a * (float) std::sin (juce::MathConstants<double>::twoPi * hz * i / sr));
+            f.deleteFile();
+            juce::WavAudioFormat wav;
+            if (auto os = f.createOutputStream())
+                if (auto w = std::unique_ptr<juce::AudioFormatWriter> (wav.createWriterFor (os.release(), sr, (unsigned int) channels, 24, {}, 0)))
+                    w->writeFromAudioSampleBuffer (buf, 0, len);
+        };
+        auto pathOf = [] (const juce::File& f) { return f.getFullPathName().replace ("\\", "/"); };
+
+        call ("new_session", R"({"name":"Selftest Console"})");
+        for (auto& t : session->getTracks()) juce::ignoreUnused (t);
+        while (session->getTracks().size() > 0) session->edit->deleteTrack (session->getTracks().getFirst());
+        for (auto n : { "Kick", "Vox", "Gtr" }) call ("add_track", juce::String (R"({"kind":"audio","name":")") + n + "\"}");
+
+        // widths, views, layouts
+        call ("mixer_layout", R"({"action":"set_width","track":"Kick","width":"compact"})");
+        call ("mixer_layout", R"({"action":"set_width","track":"Vox","width":"expanded"})");
+        auto ml = juce::JSON::parse (call ("mixer_layout", R"({"action":"get"})"));
+        check (ml["strips"][0]["width"].toString() == "compact" && ml["strips"][1]["width"].toString() == "expanded" && ml["strips"][2]["width"].toString() == "standard",
+               "console: strip widths are stored per track (compact / expanded / standard default)");
+        call ("mixer_layout", R"({"action":"save","name":"Tracking"})");
+        call ("mixer_layout", R"({"action":"set_layout","layout":"all_compact"})");
+        ml = juce::JSON::parse (call ("mixer_layout", R"({"action":"get"})"));
+        check (ml["strips"][1]["width_shown"].toString() == "compact" && ml["strips"][1]["width"].toString() == "expanded", "console: All Compact overrides what is shown, keeps what is stored");
+        call ("mixer_layout", R"({"action":"set_width","track":"Kick","width":"expanded"})");
+        call ("mixer_layout", R"({"action":"recall","name":"Tracking"})");
+        ml = juce::JSON::parse (call ("mixer_layout", R"({"action":"get"})"));
+        check (ml["strips"][0]["width"].toString() == "compact" && ml["channel_layout"].toString() == "flexible", "console: a saved layout recalls every width and the channel layout");
+        call ("mixer_layout", R"({"action":"set_view","view":"full"})");
+        check (Console::Model::view() == Console::View::full, "console: Full view");
+        call ("mixer_layout", R"({"action":"set_view","view":"dynamics"})");
+        check (Console::Map::dbToProp (0.0f) > 0.7f && std::abs (Console::Map::propToDb (Console::Map::dbToProp (-9.0f)) + 9.0f) < 0.01f
+               && std::abs (Console::Map::propToDb (Console::Map::dbToProp (-50.0f)) + 50.0f) < 0.01f, "console: the fader / meter dB map round-trips (0 dB high on the fader, -9 and -50 exact)");
+
+        // COMP / LIMIT slots: order, replace in place, remove
+        call ("channel_dynamics", R"({"action":"set","track":"Vox","comp":"Opto Leveler","limit":"Apex Limiter"})");
+        auto* vox = session->findTrack ("Vox");
+        auto ins = vox != nullptr ? Session::getInserts (vox->pluginList, vox) : juce::Array<te::Plugin*>();
+        check (ins.size() == 2 && ins[0]->getPluginType() == "sqmOpto" && ins[1]->getPluginType() == "sqmApexLim", "COMP / LIMIT: compressor first, limiter last before the fader");
+        call ("insert_plugin", R"({"track":"Vox","plugin":"Prism EQ"})");
+        call ("channel_dynamics", R"({"action":"set","track":"Vox","comp":"Cocoon Compressor"})");
+        ins = Session::getInserts (vox->pluginList, vox);
+        int cocoonAt = -1, limAt = -1;
+        for (int i = 0; i < ins.size(); ++i) { if (ins[i]->getPluginType() == "compressor") cocoonAt = i; if (ins[i]->getPluginType() == "sqmApexLim") limAt = i; }
+        check (cocoonAt == 0 && limAt == ins.size() - 1 && ins.size() == 3, "COMP / LIMIT: replacing the compressor keeps its slot; a new insert stays before the limiter");
+        call ("channel_dynamics", R"({"action":"set","track":"Vox","limit":"Cocoon Limit"})");
+        auto dyn = juce::JSON::parse (call ("channel_dynamics", R"({"action":"get","track":"Vox"})"));
+        check (dyn["limit"]["plugin"].toString() == "Cocoon Limit" && dyn["comp"]["plugin"].toString() == "Cocoon Compressor", "COMP / LIMIT: two Cocoons, one in each role, are told apart");
+        call ("channel_dynamics", R"({"action":"set","track":"Vox","comp":"none"})");
+        dyn = juce::JSON::parse (call ("channel_dynamics", R"({"action":"get","track":"Vox"})"));
+        check (dyn["comp"]["plugin"].toString() == "None" && dyn["limit"]["plugin"].toString() == "Cocoon Limit", "COMP / LIMIT: none removes only the compressor");
+        call ("channel_dynamics", R"({"action":"set","track":"Vox","comp":"SSL Comp"})", false);
+        {
+            const auto complete = Edition::owned();
+            Edition::owned() = Edition::Owned {};
+            auto r = call ("channel_dynamics", R"({"action":"set","track":"Gtr","limit":"Apex Limiter"})", false);
+            check (r.contains ("locked") && r.contains ("Mastering Suite"), "COMP / LIMIT: a locked limiter is refused with the product that unlocks it");
+            Edition::owned() = complete;
+        }
+
+        // gain reduction: Cocoon (Tracktion patch) on a hot sine, and the Apex limiter
+        auto hot = tmp.getChildFile ("sqm110_hot.wav"); writeSine (hot, 1000.0, -1.0, 6.0);
+        call ("import_audio", "{\"track\":\"Gtr\",\"path\":\"" + pathOf (hot) + "\"}");
+        call ("channel_dynamics", R"({"action":"set","track":"Gtr","comp":"Cocoon Compressor"})");
+        auto* gtr = session->findTrack ("Gtr");
+        if (auto c = gtr != nullptr ? Console::Model::findDynamics (gtr->pluginList, gtr, false) : nullptr)
+        {
+            Console::Model::setParam (*c, "threshold", juce::Decibels::decibelsToGain (-30.0f));
+            Console::Model::setParam (*c, "ratio", 0.25f);
+        }
+        auto fGr = tmp.getChildFile ("sqm110_gr.wav"); fGr.deleteFile();
+        call ("bounce", "{\"path\":\"" + pathOf (fGr) + "\",\"tracks\":[\"Gtr\"],\"start_bar\":1,\"end_bar\":3,\"tail_seconds\":0}");
+        dyn = juce::JSON::parse (call ("channel_dynamics", R"({"action":"get","track":"Gtr"})"));
+        const double cgr = dyn["comp"]["gain_reduction_db"].toString().getDoubleValue();
+        check (cgr < -3.0, "gain reduction: Cocoon reports real GR on a hot signal (" + juce::String (cgr, 1) + " dB, threshold -30 dB, 4:1)");
+        call ("channel_dynamics", R"({"action":"set","track":"Gtr","limit":"Apex Limiter"})");
+        call ("bounce", "{\"path\":\"" + pathOf (fGr) + "\",\"tracks\":[\"Gtr\"],\"start_bar\":1,\"end_bar\":3,\"tail_seconds\":0}");
+        dyn = juce::JSON::parse (call ("channel_dynamics", R"({"action":"get","track":"Gtr"})"));
+        check (dyn["limit"]["gain_reduction_db"].isDouble() || dyn["limit"]["gain_reduction_db"].isInt(), "gain reduction: the Apex Limiter reports GR as a number (" + dyn["limit"]["gain_reduction_db"].toString() + " dB)");
+        call ("channel_dynamics", R"({"action":"set","track":"Gtr","comp":"Moth Press"})");
+        dyn = juce::JSON::parse (call ("channel_dynamics", R"({"action":"get","track":"Gtr"})"));
+        check (dyn["comp"]["gain_reduction_db"].toString().contains ("not reported"), "gain reduction: a plug-in that does not report GR says so (never a made-up number)");
+
+        // strip meter: EBU Tech 3341 test 1 - a stereo 1 kHz sine at -23 dBFS reads -23.0 LUFS
+        auto ebu = tmp.getChildFile ("sqm110_ebu.wav"); writeSine (ebu, 1000.0, -23.0, 8.0);
+        call ("add_track", R"({"kind":"audio","name":"EBU"})");
+        auto* ebuT = session->findTrack ("EBU");
+        if (ebuT) TrackOps::setTrackFormat (*session, *ebuT, true);
+        call ("import_audio", "{\"track\":\"EBU\",\"path\":\"" + pathOf (ebu) + "\"}");
+        call ("mixer_layout", R"({"action":"set_meter","track":"EBU","meter":"lufs_s"})");
+        if (ebuT) if (auto tap = Console::Model::findTap (ebuT->pluginList)) tap->resetIntegrated();
+        auto fEbu = tmp.getChildFile ("sqm110_ebu_out.wav"); fEbu.deleteFile();
+        call ("bounce", "{\"path\":\"" + pathOf (fEbu) + "\",\"tracks\":[\"EBU\"],\"start_bar\":1,\"end_bar\":4,\"tail_seconds\":0}");
+        auto tapT = ebuT != nullptr ? Console::Model::findTap (ebuT->pluginList) : nullptr;
+        const float integ = tapT != nullptr ? tapT->getIntegrated() : -100.0f, st = tapT != nullptr ? tapT->getShortTerm() : -100.0f;
+        check (tapT != nullptr && std::abs (integ + 23.0f) <= 0.5f, "strip meter: EBU 3341 test 1 integrated = " + juce::String (integ, 2) + " LUFS (expect -23.0 +/- 0.5)");
+        check (tapT != nullptr && std::abs (st + 23.0f) <= 0.5f, "strip meter: short-term = " + juce::String (st, 2) + " LUFS");
+        check (std::abs (tapT != nullptr ? tapT->getRmsMaxDb (0) + 26.01f : 99.0f) <= 0.3f, "strip meter: RMS of a -23 dBFS sine is -26.0 dB (" + juce::String (tapT != nullptr ? tapT->getRmsMaxDb (0) : 0.0f, 2) + ")");
+        check (Session::getInserts (ebuT->pluginList, ebuT).isEmpty(), "strip meter: the tap never shows as an insert");
+        auto undoName = session->edit->getUndoManager().getUndoDescription();
+        check (! undoName.containsIgnoreCase ("Strip Meter"), "strip meter: adding the tap is not an undo step");
+
+        // gang selected faders (Pro Tools wish), Alt moves one
+        {
+            TimelineState st2;
+            MixerView mv (*session, &st2);
+            mv.setSize (1400, 800);
+            auto rowsNow = session->getRows();
+            st2.selectTrack (rowsNow[0]); st2.selectTrack (rowsNow[2], true);
+            auto strips = mv.getStrips();
+            ChannelStrip* s0 = nullptr; ChannelStrip* s1 = nullptr; ChannelStrip* s2 = nullptr;
+            for (auto* sp : strips) { if (sp->getRow() == rowsNow[0]) s0 = sp; if (sp->getRow() == rowsNow[1]) s1 = sp; if (sp->getRow() == rowsNow[2]) s2 = sp; }
+            if (s0 && s1 && s2)
+            {
+                const float b1 = s1->faderDb(), b2 = s2->faderDb();
+                s0->userMoveFader (s0->faderDb() - 4.0f);
+                check (std::abs (s2->faderDb() - (b2 - 4.0f)) < 0.11f && std::abs (s1->faderDb() - b1) < 0.01f,
+                       "gang: dragging a selected fader moves the other selected strip by the same dB, not the unselected one (moved "
+                       + juce::String (s0->faderDb(), 1) + ", other selected " + juce::String (b2, 1) + " -> " + juce::String (s2->faderDb(), 1) + ", unselected " + juce::String (b1, 1) + " -> " + juce::String (s1->faderDb(), 1)
+                       + ", selected " + juce::String ((int) s0->isSelected()) + juce::String ((int) s2->isSelected()) + ")");
+                auto* gt = dynamic_cast<te::AudioTrack*> (rowsNow[2]);
+                check (gt != nullptr && std::abs (gt->getVolumePlugin()->getVolumeDb() - (b2 - 4.0f)) < 0.11f, "gang: the ganged track's volume really changed");
+            }
+            else check (false, "gang: the console built a strip for every track");
+            check (mv.getMasterStrip() == nullptr || mv.getMasterStrip()->preferredWidth() > 0, "console: the master strip lays out");
+        }
+
+        // Mono button = track format
+        if (auto* k = session->findTrack ("Kick"))
+        {
+            TrackOps::setTrackFormat (*session, *k, false);
+            const bool mono = TrackOps::isMonoFormat (*session, *k);
+            TrackOps::setTrackFormat (*session, *k, true);
+            check (mono && ! TrackOps::isMonoFormat (*session, *k), "Mono: toggles the track format both ways");
+        }
+
+        // modulate (host LFO)
+        auto mo = call ("modulate", R"({"action":"add","track":"Gtr","target":"volume","wave":"triangle","sync":"1/8","depth":0.4})");
+        auto ml2 = juce::JSON::parse (call ("modulate", R"({"action":"list","track":"Gtr"})"));
+        check (ml2.size() == 1 && ml2[0]["rate"].toString() == "1/8" && ml2[0]["moves"][0]["parameter"].toString() == "Track > Volume" && std::abs ((double) ml2[0]["moves"][0]["depth"] - 0.4) < 0.001,
+               "modulate: a tempo-synced LFO moves the track volume by the set depth (" + ml2[0]["rate"].toString() + ", " + ml2[0]["moves"][0]["parameter"].toString() + ")");
+        call ("modulate", R"({"action":"add","track":"Gtr","target":"pan","rate_hz":0.5})");
+        call ("modulate", R"({"action":"remove","track":"Gtr","all":true})");
+        check (juce::JSON::parse (call ("modulate", R"({"action":"list","track":"Gtr"})")).size() == 0, "modulate: remove all clears every LFO");
+        call ("modulate", R"({"action":"add","track":"Gtr","sync":"1/7"})", false);
+
+        // automation humanise
+        call ("write_automation", R"({"track":"Kick","target":"volume","points":[{"bar":1,"value":-6},{"bar":2,"value":-3},{"bar":3,"value":-6},{"bar":4,"value":-3},{"bar":5,"value":-6}]})");
+        auto* kick = session->findTrack ("Kick");
+        juce::Array<double> before;
+        if (kick) for (int i = 0; i < kick->getVolumePlugin()->volParam->getCurve().getNumPoints(); ++i) before.add (kick->getVolumePlugin()->volParam->getCurve().getPointTime (i).inSeconds());
+        call ("automation_humanise", R"({"track":"Kick","target":"volume","time_ms":20,"amount":1,"seed":7})");
+        bool moved = false, ordered = true; int n = 0;
+        if (kick)
+        {
+            auto& cv = kick->getVolumePlugin()->volParam->getCurve();
+            n = cv.getNumPoints();
+            for (int i = 0; i < n; ++i) { if (i < before.size() && std::abs (cv.getPointTime (i).inSeconds() - before[i]) > 1.0e-5) moved = true; if (i > 0 && cv.getPointTime (i) <= cv.getPointTime (i - 1)) ordered = false; }
+        }
+        check (n == before.size() && moved && ordered, "automation_humanise: every point nudged, none lost, order kept (" + juce::String (n) + " points)");
+
+        // sort tracks
+        call ("sort_tracks", R"({"by":"name"})");
+        juce::StringArray order; for (auto r : session->getRows()) order.add (r->getName());
+        auto sorted = order; sorted.sortNatural();
+        check (order == sorted, "sort_tracks: A-Z (" + order.joinIntoString (", ") + ")");
+
+        // aux next to its source
+        call ("add_send", R"({"track":"Gtr","bus":"new","bus_name":"Gtr Verb"})");
+        auto rowsAfter = session->getRows();
+        int gi = -1, vi = -1;
+        for (int i = 0; i < rowsAfter.size(); ++i) { if (rowsAfter[i]->getName() == "Gtr") gi = i; if (rowsAfter[i]->getName() == "Gtr Verb") vi = i; }
+        check (gi >= 0 && vi == gi + 1, "add_send new: the new aux lands right after its source track");
+
+        // commit + uncommit
+        call ("track_options", R"({"track":"Kick","commit":true})");
+        bool hasCm = false; for (auto r : session->getRows()) if (r->getName() == "Kick.cm") hasCm = true;
+        call ("uncommit", R"({"track":"Kick.cm"})");
+        bool cmGone = true; for (auto r : session->getRows()) if (r->getName() == "Kick.cm") cmGone = false;
+        auto* kickBack = session->findTrack ("Kick");
+        check (hasCm && cmGone && kickBack != nullptr && ! kickBack->isHidden() && kickBack->isProcessing (false), "uncommit: the source comes back visible and active, the .cm track goes");
+
+        // stems: skip silent; render queue
+        auto silent = tmp.getChildFile ("sqm110_silent.wav"); writeSine (silent, 1000.0, -200.0, 4.0);
+        call ("add_track", R"({"kind":"audio","name":"Silence"})");
+        call ("import_audio", "{\"track\":\"Silence\",\"path\":\"" + pathOf (silent) + "\"}");
+        auto stems = juce::JSON::parse (call ("export_stems", R"({"tracks":["Silence","Gtr"],"skip_silent":true,"tail_seconds":0})"));
+        check ((int) stems["skipped_silent"] == 1 && (int) stems["written"] == 1, "export_stems skip_silent: the silent stem is skipped, the real one written");
+        call ("render_queue", R"({"action":"clear"})");
+        call ("render_queue", R"({"action":"add","job":"bounce","label":"Hook","options":{"start_bar":1,"end_bar":2,"tail_seconds":0}})");
+        call ("render_queue", R"({"action":"add","job":"stems","options":{"tracks":["Gtr"],"tail_seconds":0}})");
+        check (juce::JSON::parse (call ("render_queue", R"({"action":"list"})")).size() == 2, "render_queue: two jobs queued (saved in the session)");
+        auto rq = juce::JSON::parse (call ("render_queue", R"({"action":"run"})"));
+        check ((int) rq["ran"] == 2 && (int) rq["succeeded"] == 2, "render_queue: run renders every job in order (" + juce::String ((int) rq["succeeded"]) + "/2)");
+        check (juce::JSON::parse (call ("render_queue", R"({"action":"list"})")).size() == 0, "render_queue: empty after a run");
+
+        // private settings
+        check (call ("set_preference", R"({"key":"cl_anthropicKey","value":"x"})", false).contains ("private")
+               && call ("set_preference", R"({"key":"chat_apiBase","value":"http://evil.example"})", false).contains ("private")
+               && call ("set_preference", R"({"key":"licenceKeys"})", false).contains ("private"), "set_preference refuses the API key, the chat endpoint and licence keys");
+
+        //======================================================================
+        // Squelchmoth Chat against a local mock of the Messages API
+        {
+            httplib::Server mock;
+            std::atomic<int> posts { 0 }, gets { 0 };
+            std::atomic<bool> sawVersion { true }, sawAuth { true }, sawTemperature { false }, resultsFirst { true }, sawIsError { false }, sawCache { false };
+            std::atomic<int> toolCount { 0 };
+            const juce::String testKey = "sk-ant-selftest-0123456789abcdefXYZ";
+            mock.Get ("/v1/models", [&] (const httplib::Request& req, httplib::Response& res)
+            {
+                ++gets;
+                if (req.get_header_value ("Authorization") != ("Bearer " + testKey).toStdString()) { res.status = 401; res.set_content (R"({"type":"error","error":{"type":"authentication_error","message":"bad key"}})", "application/json"); return; }
+                res.set_content (R"({"data":[{"type":"model","id":"claude-opus-5-5","display_name":"Claude Opus 5.5","lifecycle":"active"}],"has_more":false})", "application/json");
+            });
+            mock.Post ("/v1/messages", [&] (const httplib::Request& req, httplib::Response& res)
+            {
+                ++posts;
+                if (req.get_header_value ("anthropic-version") != Chat::apiVersion) sawVersion = false;
+                if (req.get_header_value ("Authorization") != ("Bearer " + testKey).toStdString()) sawAuth = false;
+                auto body = juce::JSON::parse (juce::String::fromUTF8 (req.body.data(), (int) req.body.size()));
+                if (body.hasProperty ("temperature") || body.hasProperty ("top_p")) sawTemperature = true;
+                toolCount = body["tools"].size();
+                if (auto tl = body["tools"].getArray()) if (! tl->isEmpty() && tl->getLast().hasProperty ("cache_control")) sawCache = true;
+                auto msgs = body["messages"];
+                auto last = msgs[msgs.size() - 1];
+                bool hasResult = false;
+                if (auto c = last["content"].getArray())
+                {
+                    for (int i = 0; i < c->size(); ++i)
+                    {
+                        if ((*c)[i]["type"].toString() == "tool_result") { hasResult = true; if ((bool) (*c)[i]["is_error"]) sawIsError = true; }
+                        else if (hasResult) resultsFirst = false;
+                    }
+                }
+                if (! hasResult)
+                    res.set_content (R"({"id":"m1","type":"message","role":"assistant","stop_reason":"tool_use","content":[
+                        {"type":"text","text":"Putting a compressor on the guitar."},
+                        {"type":"tool_use","id":"tu1","name":"channel_dynamics","input":{"action":"set","track":"Gtr","comp":"Opto Leveler"}},
+                        {"type":"tool_use","id":"tu2","name":"channel_dynamics","input":{"action":"set","track":"Nobody","comp":"Opto Leveler"}}]})", "application/json");
+                else
+                    res.set_content (R"({"id":"m2","type":"message","role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"Done: **Opto Leveler** is on Gtr."}]})", "application/json");
+            });
+            const int port = mock.bind_to_any_port ("127.0.0.1");
+            std::thread mockThread ([&] { mock.listen_after_bind(); });
+            Prefs::set ("chat_apiBase", "http://127.0.0.1:" + juce::String (port));
+            Chat::KeyStore::set (testKey);
+            check (Chat::KeyStore::get() == testKey && ! props.getValue ("cl_anthropicKey").contains ("sk-ant"), "chat: the API key round-trips and is not stored in plain text");
+            check (Chat::KeyStore::masked (testKey).endsWith ("fXYZ") && ! Chat::KeyStore::masked (testKey).contains ("0123456789"), "chat: the key is only ever shown masked");
+
+            auto models = Chat::request ("/v1/models?limit=100", testKey, nullptr, 5000);
+            check (models.ok() && models.json["data"][0]["id"].toString() == "claude-opus-5-5", "chat: GET /v1/models lists the models for the menu");
+            auto bad = Chat::request ("/v1/models", "sk-ant-wrong", nullptr, 5000);
+            check (! bad.ok() && bad.status == 401 && bad.error.contains ("refused"), "chat: a wrong key gives a clear 401 message");
+
+            Chat::Engine engineChat (tools, *session);
+            juce::StringArray texts; int calls = 0, okResults = 0, errResults = 0; bool finished = false;
+            engineChat.onEvent = [&] (const Chat::Event& e)
+            {
+                if (e.kind == Chat::Event::assistantText) texts.add (e.text);
+                else if (e.kind == Chat::Event::toolCall) ++calls;
+                else if (e.kind == Chat::Event::toolResult) (e.ok ? okResults : errResults)++;
+                else if (e.kind == Chat::Event::error) texts.add ("ERROR " + e.text);
+                else if (e.kind == Chat::Event::finished) finished = true;
+            };
+            call ("channel_dynamics", R"({"action":"set","track":"Gtr","comp":"none"})");
+            check (engineChat.send ("Put a compressor on the guitar"), "chat: a message starts a turn");
+            for (int i = 0; i < 300 && ! finished; ++i) juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+            auto* g2 = session->findTrack ("Gtr");
+            auto comp = g2 != nullptr ? Console::Model::findDynamics (g2->pluginList, g2, false) : nullptr;
+            check (finished && comp != nullptr && comp->getPluginType() == "sqmOpto", "chat: Claude's tool_use ran in the session (Opto Leveler is on Gtr)");
+            check (calls == 2 && okResults == 1 && errResults == 1, "chat: both tool calls reported, the failing one as an error (" + juce::String (okResults) + " ok, " + juce::String (errResults) + " error)");
+            check (posts == 2 && texts.size() == 2 && texts[1].contains ("Opto"), "chat: tool results went back and the final answer arrived (" + texts.joinIntoString (" | ") + ")");
+            check (sawVersion && sawAuth, "chat: every request carries anthropic-version 2026-10-21 and the Bearer key");
+            check (! sawTemperature, "chat: no temperature / top_p (rejected by API version 2026-10-21)");
+            check (resultsFirst && sawIsError, "chat: tool_result blocks come first and failures carry is_error");
+            check (toolCount == (int) tools.getTools().size() && toolCount > 100 && sawCache, "chat: every Squelchmoth tool is offered (" + juce::String (toolCount.load()) + "), with prompt caching on the tool list");
+            check (engineChat.getMessages().size() == 4, "chat: the conversation holds user, tool_use, tool_result and the answer");
+            bool leaked = false;
+            for (auto& l : session->log.getEntries()) if (l.text.contains (testKey) || l.text.contains ("0123456789abcdefXYZ")) leaked = true;
+            check (! leaked, "chat: the API key never appears in the activity log");
+            engineChat.save();
+            check (engineChat.chatFile.existsAsFile() && ! engineChat.chatFile.loadFileAsString().contains (testKey), "chat: the conversation is saved (without the key) in Squelchmoth Sessions/Chats");
+            engineChat.chatFile.deleteFile();
+
+            mock.stop();
+            mockThread.join();
+            Chat::KeyStore::forget();
+            if (auto f = Prefs::file()) f->removeValue ("chat_apiBase");
+            check (! Chat::KeyStore::has(), "chat: Forget removes the key");
+        }
+
+        std::cout << "  (1.10 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)\n";
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));

@@ -107,6 +107,7 @@ public:
         engine->getPluginManager().createBuiltInType<SqStereoPanPlugin>();           // hidden dual panner
         engine->getPluginManager().createBuiltInType<SqMonoSumPlugin>();             // hidden: makes mono tracks mono
         engine->getPluginManager().createBuiltInType<SqAnalyzerPlugin>();            // mastering meter tap
+        engine->getPluginManager().createBuiltInType<SqStripTapPlugin>();            // console strip meters (RMS / LUFS)
         engine->getPluginManager().createBuiltInType<Sq808Plugin>();                 // Moth 808
         engine->getPluginManager().createBuiltInType<SqBlossomPlugin>();             // Blossom physical-model strings
         engine->getPluginManager().createBuiltInType<SqSynth::SqMothsynth2Plugin>(); // 1.8 instrument shelf

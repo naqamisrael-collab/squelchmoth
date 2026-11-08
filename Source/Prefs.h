@@ -15,6 +15,13 @@ namespace Prefs
 
     inline juce::ChangeBroadcaster& broadcaster()   { static juce::ChangeBroadcaster b; return b; }
 
+    /** Settings that never leave the app: the MCP secret, licence keys, tunnel and Anthropic API keys, and the chat
+        endpoint (so nothing can quietly point Squelchmoth Chat somewhere else). set_preference refuses them. */
+    inline bool isPrivateKey (const juce::String& key)
+    {
+        return key == "mcpToken" || key.startsWith ("licenceKey") || key == "cl_ngrokToken" || key == "cl_anthropicKey" || key == "chat_apiBase";
+    }
+
     inline void set (const char* key, const juce::var& v)
     {
         if (file() == nullptr) return;

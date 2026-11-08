@@ -670,7 +670,8 @@ public:
         for (int i = 0; i < plugins.size(); ++i)
         {
             auto p = plugins[i].get();
-            if (dynamic_cast<SqStereoPanPlugin*> (p) != nullptr || dynamic_cast<te::AuxSendPlugin*> (p) != nullptr || (vol != nullptr && p == vol) || (meter != nullptr && p == meter))
+            if (dynamic_cast<SqStereoPanPlugin*> (p) != nullptr || dynamic_cast<te::AuxSendPlugin*> (p) != nullptr || dynamic_cast<SqStripTapPlugin*> (p) != nullptr || (vol != nullptr && p == vol) || (meter != nullptr && p == meter)
+                || p->state.getProperty ("sqmDynRole").toString() == "limit")   // 1.10: the console's LIMIT slot stays last before the fader
                 return i;
         }
         return -1;

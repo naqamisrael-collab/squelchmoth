@@ -1,5 +1,5 @@
 SQUELCHMOTH PRIVACY POLICY
-Version 1.9 - 2026. Squelchmoth is created and owned by Jamar Stewart.
+Version 1.10 - 2026. Squelchmoth is created and owned by Jamar Stewart.
 
 Short version: Squelchmoth does not collect, sell or share your personal data. Your music stays on your computer.
 
@@ -21,7 +21,14 @@ Only when you choose to:
    What you say to Claude is handled by Anthropic under Anthropic's privacy policy.
 2. If the link helper is missing, Squelchmoth downloads it once from its official publisher (Cloudflare on GitHub, or
    ngrok) over HTTPS.
-3. Help > Visit the Store, the Buy buttons in Help > Licences and Upgrades and similar items open web pages in your browser.
+3. Use Squelchmoth Chat (CHAT button, or Claude > Squelchmoth Chat). What you type, and what Claude's tools return from
+   your session (track names, plug-in settings, levels, and screenshots when Claude asks for one), is sent over an
+   encrypted connection to Anthropic's API (api.anthropic.com) under YOUR OWN Anthropic API account and key, and is
+   handled under Anthropic's terms and privacy policy. Nothing is sent to Jamar Stewart. Your API key is stored only in
+   Squelchmoth's settings file on this computer (not in plain text), is never written to logs or diagnostics, and no
+   Squelchmoth tool can read it. Saved chats stay on your computer in Documents/Squelchmoth Sessions/Chats; delete them
+   from the chat's history menu ("Delete all chats") or the folder. Forget the key with the gear button > Forget.
+4. Help > Visit the Store, the Buy buttons in Help > Licences and Upgrades and similar items open web pages in your browser.
 Third-party plug-ins you load may have their own internet features and privacy policies.
 
 BUYING AND THE WEBSITE

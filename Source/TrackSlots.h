@@ -45,7 +45,7 @@ public:
             auto inserts = Session::getInserts (list, track);
             if (slotIndex < inserts.size()) idx = list.indexOf (inserts[slotIndex]);
             else if (row != nullptr) idx = p->isSynth() && track != nullptr ? 0 : Session::insertEndIndex (list, row);
-            else idx = -1;
+            else idx = Session::insertEndIndex (list, nullptr);   // Master: before the console meter tap
         }
         list.insertPlugin (p, idx, nullptr);
         session.log.add ("You", "Inserted " + Signature::displayName (*p) + " on " + ownerName() + " (insert " + slotLetter (slotIndex) + ")");
@@ -200,7 +200,7 @@ public:
             };
             if (r == 2)
             {
-                IO::promptNewAux (session, track->getName() + " FX", [this, apply] (te::AudioTrack* bt) { if (bt) apply (session.getBusNumberOfTrack (*bt)); });
+                IO::promptNewAux (session, track->getName() + " FX", [this, apply] (te::AudioTrack* bt) { if (bt) apply (session.getBusNumberOfTrack (*bt)); }, track);
                 return;
             }
             if (busMap.count (r)) apply (busMap.at (r));

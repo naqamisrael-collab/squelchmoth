@@ -25,6 +25,7 @@
 #include "KeyLabels.h"
 #include "AudioEditor.h"
 #include "BurnToMidi.h"
+#include "Console.h"
 
 //==============================================================================
 struct ToolResult
@@ -407,6 +408,7 @@ private:
         registerEngineTools();
         registerRackTools();
         register181Tools();
+        register110Tools();
     }
 
     #include "McpToolsParity.h"
@@ -418,6 +420,7 @@ private:
     #include "McpTools17.h"
     #include "McpToolsRack.h"
     #include "McpTools181.h"
+    #include "McpTools110.h"
 
     //==============================================================================
     void registerSessionTools()
@@ -1312,6 +1315,8 @@ private:
                  if (busRef.toString().equalsIgnoreCase ("new"))
                  {
                      busTrack = session.addTrack ("bus", str (a, "bus_name"));
+                     if (busTrack == nullptr) return ToolResult::error (session.lastError.isNotEmpty() ? session.lastError : "Could not create the bus track");
+                     IO::placeAfter (session, *busTrack, t);   // the new aux sits next to its source
                      busNum = session.getBusNumberOfTrack (*busTrack);
                  }
                  else if (auto bt = session.findTrack (busRef); bt != nullptr && session.getBusNumberOfTrack (*bt) >= 0)

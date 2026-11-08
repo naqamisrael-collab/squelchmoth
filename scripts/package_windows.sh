@@ -35,7 +35,7 @@ ls -la "dist/Squelchmoth-Setup-$VERSION.exe" dist/Squelchmoth-Windows.zip
 LEAK=0
 if unzip -l dist/Squelchmoth-Windows.zip | grep -Eiq 'OWNER KEY|SIGNING KEY|store keys|issued-serials|KEYS\.txt|BUSINESS\.md|SELLING-CHECKLIST|SUPER-PROMPT|COVERAGE-MAP|PARITY|STATUS|private'; then echo "LEAK: owner file in the Windows zip"; LEAK=1; fi
 for f in "$STAGE"/*.txt "$STAGE"/*.md; do
-  if grep -IlE -e 'SQM2-[A-Za-z0-9_-]{80,}' -e 'PRIVATE:' -e 'SIGNING KEY' -e 'PRIVATE KEY' -e 'SQM1-[A-Za-z0-9_-]{40,}' "$f" >/dev/null; then echo "LEAK: key text in $f"; LEAK=1; fi
+  if grep -IlE -e 'SQM2-[A-Za-z0-9_-]{80,}' -e 'sk-ant-[A-Za-z0-9_-]{20,}' -e 'PRIVATE:' -e 'SIGNING KEY' -e 'PRIVATE KEY' -e 'SQM1-[A-Za-z0-9_-]{40,}' "$f" >/dev/null; then echo "LEAK: key text in $f"; LEAK=1; fi
 done
 for SK in /tmp/claude-0/scratch/storekey/private.hex; do [ -f "$SK" ] && grep -qaF "$(tr -d ' \n' < "$SK")" "$STAGE/Squelchmoth.exe" && { echo "LEAK: store signing key in the exe"; LEAK=1; }; done
 if [ -f docs/internal/brand-audit-binary.txt ] && strings -n 5 "$STAGE/Squelchmoth.exe" | grep -Eq "$(cat docs/internal/brand-audit-binary.txt)"; then echo "LEAK: a matched-product name in Squelchmoth.exe"; LEAK=1; fi

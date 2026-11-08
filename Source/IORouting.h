@@ -477,18 +477,26 @@ namespace IO
 
     //==========================================================================
     // Selector menus - one implementation for the Edit window, the Mix window and the track menus.
-    inline void promptNewAux (Session& s, const juce::String& suggested, std::function<void (te::AudioTrack*)> then)
+    /** Logic wish: a new Aux lands right after the track that feeds it, not at the end of the session. */
+    inline void placeAfter (Session& s, te::Track& moved, te::Track* anchor)
     {
+        if (s.edit == nullptr || anchor == nullptr || &moved == anchor) return;
+        s.edit->moveTrack (&moved, te::TrackInsertPoint (anchor->getParentFolderTrack(), anchor));
+    }
+
+    inline void promptNewAux (Session& s, const juce::String& suggested, std::function<void (te::AudioTrack*)> then, te::Track* anchor = nullptr)
+    {
+        te::Track::Ptr anchorRef (anchor);
         auto w = std::make_shared<juce::AlertWindow> ("New Track", "Creates a stereo Aux Input track and a bus with this name.", juce::MessageBoxIconType::NoIcon);
         w->addTextEditor ("name", suggested);
         w->addButton ("Create", 1, juce::KeyPress (juce::KeyPress::returnKey));
         w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-        w->enterModalState (true, juce::ModalCallbackFunction::create ([&s, w, then] (int r)
+        w->enterModalState (true, juce::ModalCallbackFunction::create ([&s, w, then, anchorRef] (int r)
         {
             w->setVisible (false);
             if (r != 1) return;
             auto aux = s.addTrack ("bus", w->getTextEditorContents ("name").trim());
-            if (aux != nullptr) { aux->state.setProperty ("sqmFormat", "stereo", nullptr); aux->state.setProperty ("sqmKind", "aux", nullptr); }
+            if (aux != nullptr) { aux->state.setProperty ("sqmFormat", "stereo", nullptr); aux->state.setProperty ("sqmKind", "aux", nullptr); placeAfter (s, *aux, anchorRef.get()); }
             if (then) then (aux);
         }));
     }
@@ -670,7 +678,7 @@ namespace IO
                     if (auto t = dynamic_cast<te::AudioTrack*> (keep.get())) t->getOutput().setOutputToTrack (aux);
                     juce::ignoreUnused (s);
                     done ({});
-                });
+                }, keep.get());
             }), "new track...");
         }
 

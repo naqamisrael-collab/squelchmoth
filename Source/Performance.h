@@ -101,7 +101,7 @@ namespace Perf
             for (auto p : list.getPlugins())
             {
                 if (dynamic_cast<te::VolumeAndPanPlugin*> (p) != nullptr || dynamic_cast<te::LevelMeterPlugin*> (p) != nullptr
-                    || dynamic_cast<SqMonoSumPlugin*> (p) != nullptr || dynamic_cast<SqStereoPanPlugin*> (p) != nullptr)
+                    || dynamic_cast<SqMonoSumPlugin*> (p) != nullptr || dynamic_cast<SqStereoPanPlugin*> (p) != nullptr || dynamic_cast<SqAnalyzerPlugin*> (p) != nullptr)
                     continue;
                 out.push_back ({ ownerName, Signature::displayName (*p), p->getCpuUsage(), p->isEnabled(), te::SafeSelectable<te::Plugin> (p), te::SafeSelectable<te::Track> (owner) });
             }

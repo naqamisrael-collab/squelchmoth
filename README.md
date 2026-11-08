@@ -20,7 +20,13 @@ built-in control server so Claude can run the whole session.
    and click **Activate**. Owner keys count as Squelchmoth Complete. (Customers start on the free Demo and buy
    keys from the Payhip store; see `docs/internal/PAYHIP-SETUP.md`.)
 
-## B. Connect Claude (about one minute)
+## B. Squelchmoth Chat (Claude inside the app)
+
+Click **CHAT** (or Cmd/Ctrl+Shift+C), paste your Anthropic API key once, and type. Claude operates the open
+session with every Squelchmoth tool and lists each step in the chat. Uses the Anthropic Messages API
+(version 2026-10-21) with your own key; the key stays on this computer.
+
+## B2. Connect Claude from claude.ai (about one minute)
 
 1. Click **CLAUDE** at the top right of the window.
 2. Click **CONNECT CLAUDE**. Wait until the second status line says **Connected** (5–20 seconds).

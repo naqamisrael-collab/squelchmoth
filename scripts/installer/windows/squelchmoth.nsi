@@ -6,7 +6,7 @@ Target amd64-unicode
 !include "x64.nsh"
 
 !ifndef VERSION
-  !define VERSION "1.9.0"
+  !define VERSION "1.10.0"
 !endif
 !ifndef SRC
   !define SRC "stage"

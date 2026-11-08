@@ -123,7 +123,7 @@ for z in dist/Squelchmoth-macOS.zip dist/Squelchmoth-Mac-Intel.zip dist/Squelchm
     T=$(mktemp -d); unzip -q "$z" -d "$T"
     if grep -rIl --exclude='*.icns' -e 'PRIVATE KEY' -e 'owner-keygen' -e 'SQM1-[A-Za-z0-9_-]\{40,\}' "$T" 2>/dev/null | head -1 | grep -q .; then echo "LEAK: key text inside $z"; LEAK=1; fi
     # 1.9 store keys: no SQM2 key, store signing key or key batch in any text file (the binary holds self-test vectors only)
-    if grep -rIlE --include='*.txt' --include='*.md' --include='*.rtf' --include='*.json' --include='*.xml' --include='*.plist' --include='*.html' -e 'SQM2-[A-Za-z0-9_-]{80,}' -e 'PRIVATE:' -e 'SIGNING KEY' "$T" 2>/dev/null | head -1 | grep -q .; then echo "LEAK: store key text inside $z"; LEAK=1; fi
+    if grep -rIlE --include='*.txt' --include='*.md' --include='*.rtf' --include='*.json' --include='*.xml' --include='*.plist' --include='*.html' -e 'SQM2-[A-Za-z0-9_-]{80,}' -e 'sk-ant-[A-Za-z0-9_-]{20,}' -e 'PRIVATE:' -e 'SIGNING KEY' "$T" 2>/dev/null | head -1 | grep -q .; then echo "LEAK: store key text inside $z"; LEAK=1; fi
     for SK in /tmp/claude-0/scratch/storekey/private.hex; do [ -f "$SK" ] && grep -rIlaF "$(tr -d ' \n' < "$SK")" "$T" 2>/dev/null | head -1 | grep -q . && { echo "LEAK: the store signing key is inside $z"; LEAK=1; }; done
     # no matched-product name in the guides or the app's strings (Jamar, Nov 6 2026); the name lists live in docs/internal (never shipped)
     if [ -f docs/internal/brand-audit-docs.txt ]; then

@@ -363,6 +363,131 @@ public:
 };
 
 //==============================================================================
+/** Hidden post-fader tap behind a mixer strip (1.10 console). Real-time safe: no allocation, no locks.
+    Publishes peak and RMS per channel plus BS.1770-4 momentary (400 ms) and short-term (3 s) loudness, and keeps a
+    0.1 LU histogram of every 400 ms block (100 ms hop) so the integrated loudness (absolute -70 LUFS gate, relative
+    -10 LU gate) can be computed exactly on the message thread. Passes audio through untouched.
+    Derives from SqAnalyzerPlugin so every place that hides helper plug-ins (insert slots, chains) hides it too. */
+class SqStripTapPlugin : public SqAnalyzerPlugin
+{
+public:
+    SqStripTapPlugin (te::PluginCreationInfo info) : SqAnalyzerPlugin (info) {}
+    ~SqStripTapPlugin() override   { notifyListenersOfDeletion(); }
+
+    static const char* getPluginName()                  { return NEEDS_TRANS("Strip Meter"); }
+    static constexpr const char* xmlTypeName = "sqmStripTap";
+    juce::String getName() const override               { return "Strip Meter"; }
+    juce::String getPluginType() override               { return xmlTypeName; }
+    juce::String getShortName (int) override            { return "Mtr"; }
+    juce::String getSelectableDescription() override    { return "Squelchmoth strip meter tap"; }
+
+    static constexpr int histBins = 800;            // -70 .. +10 LUFS in 0.1 LU steps
+    static float toLufs (double ms)                 { return ms > 1.0e-12 ? (float) (-0.691 + 10.0 * std::log10 (ms)) : -100.0f; }
+
+    void initialise (const te::PluginInitialisationInfo& info) override
+    {
+        sr = info.sampleRate > 0 ? info.sampleRate : 44100.0;
+        kw.prepare (sr);
+        blockLen = juce::jmax (1, (int) (sr * 0.1));
+        rmsCoeff = (float) std::exp (-1.0 / (0.3 * sr));   // 300 ms RMS integration (console RMS ballistics)
+        acc = 0.0; accN = 0; ringPos = 0; ringFill = 0;
+        for (auto& r : ring) r = 0.0;
+        ms[0] = ms[1] = 0.0f;
+    }
+
+    void applyToBuffer (const te::PluginRenderContext& fc) override
+    {
+        if (fc.destBuffer == nullptr || fc.destBuffer->getNumChannels() == 0) return;
+        SCOPED_REALTIME_CHECK
+        if (resetRequest.exchange (false)) { for (int i = 0; i < histBins; ++i) { histCount[i] = 0; histEnergy[i] = 0.0; } histTotal = 0; rmsMax[0] = rmsMax[1] = -100.0f; }
+        const int nch = juce::jmin (2, fc.destBuffer->getNumChannels());
+        const float* x[2] = { fc.destBuffer->getReadPointer (0, fc.bufferStartSample),
+                              fc.destBuffer->getReadPointer (nch > 1 ? 1 : 0, fc.bufferStartSample) };
+        float pk[2] = { 0.0f, 0.0f };
+        for (int i = 0; i < fc.bufferNumSamples; ++i)
+        {
+            for (int c = 0; c < 2; ++c)
+            {
+                const float s = x[c][i];
+                pk[c] = juce::jmax (pk[c], std::abs (s));
+                ms[c] = s * s + rmsCoeff * (ms[c] - s * s);
+                const float k = kw.process (c, s);
+                acc += (double) k * k;
+            }
+            if (++accN >= blockLen) finishSubBlock();
+        }
+        for (int c = 0; c < 2; ++c)
+        {
+            auto cur = peakLin[c].load (std::memory_order_relaxed);
+            while (pk[c] > cur && ! peakLin[c].compare_exchange_weak (cur, pk[c])) {}
+            const float r = ms[c] > 1.0e-12f ? 10.0f * std::log10 (ms[c]) : -100.0f;
+            rmsDb[c].store (r, std::memory_order_relaxed);
+            if (r > rmsMax[c].load (std::memory_order_relaxed)) rmsMax[c].store (r, std::memory_order_relaxed);
+        }
+    }
+
+    /** Message thread: max peak since the last call, in dB (per channel). */
+    float takePeakDb (int ch)                   { auto v = peakLin[ch].exchange (0.0f); return v > 0.0f ? juce::Decibels::gainToDecibels (v) : -100.0f; }
+    float getRmsDb (int ch) const               { return rmsDb[ch].load (std::memory_order_relaxed); }
+    float getRmsMaxDb (int ch) const            { return rmsMax[ch].load (std::memory_order_relaxed); }   // highest RMS since resetIntegrated()
+    float getMomentary() const                  { return momentary.load (std::memory_order_relaxed); }
+    float getShortTerm() const                  { return shortTerm.load (std::memory_order_relaxed); }
+    void resetIntegrated()                      { resetRequest = true; }
+
+    /** Message thread: exact BS.1770-4 gated integrated loudness from the block histogram (-100 = not enough audio). */
+    float getIntegrated() const
+    {
+        double sum = 0.0; long long n = 0;
+        for (int i = 0; i < histBins; ++i) { sum += histEnergy[i]; n += histCount[i]; }
+        if (n == 0) return -100.0f;
+        const float relGate = toLufs (sum / (double) n) - 10.0f;
+        double s2 = 0.0; long long n2 = 0;
+        for (int i = 0; i < histBins; ++i)
+            if (histCount[i] > 0 && -70.0f + (float) i * 0.1f + 0.05f > relGate) { s2 += histEnergy[i]; n2 += histCount[i]; }
+        return n2 > 0 ? toLufs (s2 / (double) n2) : -100.0f;
+    }
+
+private:
+    double sr = 44100.0;
+    KWeighting kw;
+    int blockLen = 4410, accN = 0;
+    double acc = 0.0;
+    float rmsCoeff = 0.9999f, ms[2] = { 0, 0 };
+    std::array<double, 30> ring {};
+    int ringPos = 0, ringFill = 0;
+    std::atomic<float> peakLin[2] { 0.0f, 0.0f }, rmsDb[2] { -100.0f, -100.0f }, rmsMax[2] { -100.0f, -100.0f }, momentary { -100.0f }, shortTerm { -100.0f };
+    std::atomic<bool> resetRequest { false };
+    long long histCount[histBins] {};
+    double histEnergy[histBins] {};
+    long long histTotal = 0;
+
+    void finishSubBlock()
+    {
+        ring[(size_t) ringPos] = acc / (double) accN;   // sum of both channels' K-weighted mean squares (G = 1, 1)
+        ringPos = (ringPos + 1) % 30; ringFill = juce::jmin (30, ringFill + 1);
+        acc = 0.0; accN = 0;
+        auto meanOf = [this] (int count)
+        {
+            double s = 0.0;
+            for (int k = 1; k <= count; ++k) s += ring[(size_t) ((ringPos - k + 30) % 30)];
+            return s / (double) count;
+        };
+        if (ringFill >= 4)
+        {
+            const double m = meanOf (4);
+            const float l = toLufs (m);
+            momentary.store (l, std::memory_order_relaxed);
+            if (l > -70.0f)
+            {
+                const int bin = juce::jlimit (0, histBins - 1, (int) ((l + 70.0f) * 10.0f));
+                ++histCount[bin]; histEnergy[bin] += m; ++histTotal;
+            }
+        }
+        shortTerm.store (ringFill >= 30 ? toLufs (meanOf (30)) : -100.0f, std::memory_order_relaxed);
+    }
+};
+
+//==============================================================================
 struct FileLoudness { float integrated = -100.0f, range = 0.0f, truePeak = -100.0f, rms = -100.0f, samplePeak = -100.0f; double seconds = 0.0; bool ok = false; };
 
 /** Offline EBU R128 measurement of an audio file. */

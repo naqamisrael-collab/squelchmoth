@@ -197,11 +197,12 @@ public:
 
     void setPatternMode (bool on)
     {
+        // Choosing PAT / SONG only sets the mode. Playback never starts by itself: the user presses Play (or Space).
         Rack::setPatternMode (edit(), on);
         auto& tr = edit().getTransport();
         if (on)
         {
-            if (! tr.isPlaying()) { tr.setPosition (te::TimePosition()); tr.play (false); }
+            if (! tr.isPlaying()) tr.setPosition (te::TimePosition());
             launchBeat = edit().tempoSequence.toBeats (tr.getPosition()).inBeats();
         }
         refresh();

@@ -64,7 +64,7 @@ presets and full control from Claude.
 | **Vari-Mu Tube** | Variable-mu tube compressor model |
 | **Clamp Limiter** | Transparent brickwall clipper/limiter (Master Loud) |
 | **Veil Gate** | Gate with tone-shaping release |
-| **Nectar De-Ess** | Zero-latency de-esser |
+| **Hush De-Ess** | Zero-latency de-esser |
 | **Snap Transient** | Transient designer |
 | **Pop Knock** | Explosive drum compressor |
 | **Ember Tape** | Full tape machine: head bump, flutter, softness, bias (Mix Bus Tape, Drum Smash) |
@@ -156,7 +156,7 @@ display that fits the job, knobs in the plugin's style, and the header controls.
 | Lantern Tilt, Antenna Air, Deep Sub | Tilt / air / sub response curves |
 | Cocoon, Moth Press, Pupa, Vari-Mu, Clamp | Transfer curve with threshold marker, input meter and gain-reduction meter |
 | Veil Gate | Open / closed lamp, level history and threshold |
-| Nectar De-Ess | Sibilance band on a frequency plot |
+| Hush De-Ess | Sibilance band on a frequency plot |
 | Snap Transient, Pop Knock | Transient envelope |
 | Scorch Drive, Ashen Desk, Furnace Density, Triode Glow | Waveshaper curve plus wave before / after |
 | Ember Tape | Spinning reels, flutter wobble and a VU |

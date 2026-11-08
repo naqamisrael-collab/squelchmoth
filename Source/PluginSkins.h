@@ -1553,7 +1553,7 @@ namespace Skins
         else if (name == "Vari-Mu Tube")  { s.family = Family::dyn; s.knob = KnobStyle::vintage; s.groups = { G ("TUBE COMPRESSOR", { "Intensty", "Speed", "Output" }, true) }; }
         else if (name == "Clamp Limiter") { s.family = Family::dyn; s.knob = KnobStyle::flat; s.groups = { G ("LIMITER", { "Boost", "Soften", "Enhance" }, true), G ("MODE", { "Mode" }) }; }
         else if (name == "Veil Gate")     { s.family = Family::gate; s.knob = KnobStyle::ring; s.groups = { G ("GATE", { "Thresh", "AttackS" }, true), G ("RELEASE TONE", { "TrebSus", "BassSus" }) }; }
-        else if (name == "Nectar De-Ess") { s.family = Family::deess; s.knob = KnobStyle::slim; s.groups = { G ("DE-ESSER", { "Intense", "Max DS", "Freq" }, true) }; }
+        else if (name == "Hush De-Ess") { s.family = Family::deess; s.knob = KnobStyle::slim; s.groups = { G ("DE-ESSER", { "Intense", "Max DS", "Freq" }, true) }; }
         else if (name == "Snap Transient") { s.family = Family::transient; s.knob = KnobStyle::flat; s.groups = { G ("TRANSIENT", { "Point", "Reaction Speed" }, true), G ("INPUT", { "Input Trim" }) }; }
         else if (name == "Pop Knock")     { s.family = Family::transient; s.knob = KnobStyle::chicken; s.groups = { G ("KNOCK", { "Intenst", "Output" }, true) }; }
         else if (name == "Ember Tape")    { s.family = Family::tape; s.knob = KnobStyle::vintage; s.width = 700; s.groups = { G ("TAPE", { "Louder", "Softer", "Fatter", "Flutter" }, true), G ("OUTPUT", { "Output" }) }; }

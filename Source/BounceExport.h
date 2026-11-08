@@ -80,6 +80,7 @@ namespace BounceExport
         juce::Array<te::Track*> explicitTracks;     // overrides source when not empty
         juce::String nameTemplate = "{n} {track}";
         bool withSendEffects = false;               // also play the aux returns the track sends to (stems "with FX")
+        bool skipSilent = false;                    // 1.10: delete stems that rendered silent (peak below -90 dBFS)
         juce::File folder;                          // default: Bounces/<session> Stems <date>
     };
 
@@ -148,6 +149,22 @@ namespace BounceExport
 
     struct StemResult { int written = 0, silent = 0, failed = 0; juce::File folder; juce::StringArray lines; };
 
+    /** Sample peak of a rendered file in dBFS (-100 = silent or unreadable). */
+    inline float peakDbOfFile (Session& s, const juce::File& f)
+    {
+        std::unique_ptr<juce::AudioFormatReader> r (s.getEngine().getAudioFileFormatManager().readFormatManager.createReaderFor (f));
+        if (r == nullptr || r->lengthInSamples <= 0) return -100.0f;
+        float peak = 0.0f;
+        juce::AudioBuffer<float> buf ((int) r->numChannels, 65536);
+        for (juce::int64 pos = 0; pos < r->lengthInSamples; pos += 65536)
+        {
+            const int n = (int) juce::jmin ((juce::int64) 65536, r->lengthInSamples - pos);
+            r->read (&buf, 0, n, pos, true, true);
+            for (int c = 0; c < buf.getNumChannels(); ++c) peak = juce::jmax (peak, buf.getMagnitude (c, 0, n));
+        }
+        return peak > 0.0f ? juce::Decibels::gainToDecibels (peak) : -100.0f;
+    }
+
     inline StemResult exportStems (Session& s, const StemOptions& o, const std::function<bool (te::Track*)>& isSelected = {})
     {
         StemResult res;
@@ -173,6 +190,13 @@ namespace BounceExport
             p.checkNodesForAudio = false;   // a silent stem is still written so every file lines up
             auto f = te::Renderer::renderToFile ("Stem " + t->getName(), p);
             if (! f.existsAsFile()) { ++res.failed; res.lines.add ("FAILED  " + t->getName()); continue; }
+            if (o.skipSilent && peakDbOfFile (s, f) < -90.0f)
+            {
+                f.deleteFile();
+                ++res.silent;
+                res.lines.add ("SKIPPED (silent)  " + t->getName());
+                continue;
+            }
             ++res.written;
             res.lines.add (f.getFileName());
         }

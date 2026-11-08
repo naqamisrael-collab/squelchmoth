@@ -95,7 +95,7 @@ namespace Signature
             { "Vari-Mu Tube",     "airwindows_varimu", "Dynamics",  "Variable-mu tube compressor model with dual-stage saturation - vintage warmth", 0xffd4ff3a, "varimu" },
             { "Clamp Limiter",    "airwindows_adclip7", "Dynamics", "Transparent brickwall clipper/limiter for loud masters without smear",            0xffd4ff3a, "clamplimiter" },
             { "Veil Gate",        "airwindows_gatelope", "Dynamics", "Gate with tone-shaping release - cleans drums and tightens tails", 0xffd4ff3a, "veilgate" },
-            { "Nectar De-Ess",    "airwindows_deess", "Dynamics",   "Zero-latency de-esser with frequency-select - tames sibilance without lisping", 0xffd4ff3a, "nectardeess" },
+            { "Hush De-Ess",    "airwindows_deess", "Dynamics",   "Zero-latency de-esser with frequency-select - tames sibilance without lisping", 0xffd4ff3a, "nectardeess" },
             { "Snap Transient",   "airwindows_point", "Dynamics",   "Transient designer: more or less attack on drums, bass and plucks", 0xffd4ff3a, "snaptransient" },
             { "Pop Knock",        "airwindows_pop",   "Dynamics",   "Explosive drum compressor that brings kicks and snares forward in the mix",           0xffd4ff3a, "popknock" },
             // ---------------- Saturation, tape & console

@@ -370,6 +370,64 @@ index 9000b7e20b4..37c30eec594 100644
  
      //==============================================================================
      void initialisePlugin (double sampleRateToUse, int blockSizeToUse);
+diff --git a/modules/tracktion_engine/plugins/effects/tracktion_Compressor.cpp b/modules/tracktion_engine/plugins/effects/tracktion_Compressor.cpp
+index a361e94e723..04cad21f8da 100644
+--- a/modules/tracktion_engine/plugins/effects/tracktion_Compressor.cpp
++++ b/modules/tracktion_engine/plugins/effects/tracktion_Compressor.cpp
+@@ -98,6 +98,7 @@ void CompressorPlugin::applyToBuffer (const PluginRenderContext& fc)
+     const float sidechainGain = dbToGain (sidechainDb.getCurrentValue());
+ 
+     float* b1 = fc.destBuffer->getWritePointer (0, fc.bufferStartSample);
++    float minReduction = 1.0f;   // Squelchmoth: deepest compression factor in this block (before output gain)
+ 
+     if (fc.destBuffer->getNumChannels() >= 2)
+     {
+@@ -137,8 +138,10 @@ void CompressorPlugin::applyToBuffer (const PluginRenderContext& fc)
+ 
+             if (currentLevel > thresh)
+             {
+-                r *= (float)((thresh + (currentLevel - thresh) * rat)
+-                              / currentLevel);
++                const float red = (float)((thresh + (currentLevel - thresh) * rat)
++                                           / currentLevel);
++                r *= red;
++                minReduction = std::min (minReduction, red);
+             }
+ 
+             *b1++ = samp1 * r;
+@@ -164,12 +167,17 @@ void CompressorPlugin::applyToBuffer (const PluginRenderContext& fc)
+             float r = outputGain;
+ 
+             if (currentLevel > thresh)
+-                r *= (float)((thresh + (currentLevel - thresh) * rat) / currentLevel);
++            {
++                const float red = (float)((thresh + (currentLevel - thresh) * rat) / currentLevel);
++                r *= red;
++                minReduction = std::min (minReduction, red);
++            }
+ 
+             *b1++ = samp * r;
+         }
+     }
+ 
++    gainReductionDb.store (minReduction < 0.99999f ? juce::Decibels::gainToDecibels (minReduction, -60.0f) : 0.0f, std::memory_order_relaxed);
+     clearChannels (*fc.destBuffer, 2, -1, fc.bufferStartSample, fc.bufferNumSamples);
+ }
+ 
+diff --git a/modules/tracktion_engine/plugins/effects/tracktion_Compressor.h b/modules/tracktion_engine/plugins/effects/tracktion_Compressor.h
+index 6859f6d83ea..5804b811391 100644
+--- a/modules/tracktion_engine/plugins/effects/tracktion_Compressor.h
++++ b/modules/tracktion_engine/plugins/effects/tracktion_Compressor.h
+@@ -48,6 +48,9 @@ public:
+     static float getMinThreshold()      { return 0.01f; }
+     static float getMaxThreshold()      { return 1.0f; }
+ 
++    /** Squelchmoth: the deepest gain reduction of the last processed block, in dB (0 = none, negative = reducing). */
++    std::atomic<float> gainReductionDb { 0.0f };
++
+ private:
+     double currentLevel = 0.0;
+     float lastSamp = 0.0f;
 diff --git a/modules/tracktion_engine/plugins/tracktion_PluginManager.cpp b/modules/tracktion_engine/plugins/tracktion_PluginManager.cpp
 index 8b10702a9e5..c3cb5fac122 100644
 --- a/modules/tracktion_engine/plugins/tracktion_PluginManager.cpp

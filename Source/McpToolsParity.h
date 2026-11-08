@@ -638,12 +638,12 @@ void registerParityTools()
              if (flag (a, "list"))
              {
                  juce::String s;
-                 if (auto f = Prefs::file()) for (auto& k : f->getAllProperties().getAllKeys()) if (! k.startsWith ("win_") && k != "mcpToken" && k != "licenceKey" && k != "cl_ngrokToken") s << k << " = " << f->getValue (k) << "\n";
+                 if (auto f = Prefs::file()) for (auto& k : f->getAllProperties().getAllKeys()) if (! k.startsWith ("win_") && ! Prefs::isPrivateKey (k)) s << k << " = " << f->getValue (k) << "\n";
                  return ToolResult::ok (s);
              }
              if (! has (a, "key")) return ToolResult::error ("Give key (and value to change it)");
              auto key = str (a, "key");
-             if (key == "mcpToken" || key == "licenceKey" || key == "cl_ngrokToken") return ToolResult::error ("That setting is private.");
+             if (Prefs::isPrivateKey (key)) return ToolResult::error ("That setting is private.");
              if (has (a, "value")) Prefs::set (key.toRawUTF8(), a["value"]);
              return ToolResult::ok (key + " = " + Prefs::getString (key.toRawUTF8()));
          });

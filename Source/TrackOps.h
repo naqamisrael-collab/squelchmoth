@@ -356,7 +356,7 @@ namespace TrackOps
                     auto type = child.getProperty (te::IDs::type).toString();
                     bool isSend = type == te::AuxSendPlugin::xmlTypeName;
                     bool core = type == te::VolumeAndPanPlugin::xmlTypeName || type == te::LevelMeterPlugin::xmlTypeName || type == te::AuxReturnPlugin::xmlTypeName
-                                || type == SqMonoSumPlugin::xmlTypeName || type == SqStereoPanPlugin::xmlTypeName;
+                                || type == SqMonoSumPlugin::xmlTypeName || type == SqStereoPanPlugin::xmlTypeName || type == SqStripTapPlugin::xmlTypeName;
                     if ((! o.sends && isSend) || (! o.inserts && ! isSend && ! core)) st.removeChild (c, nullptr);
                     else if (! o.automation)
                         for (int pc = child.getNumChildren(); --pc >= 0;)
@@ -442,6 +442,7 @@ namespace TrackOps
         te::EditItemID::remapIDs (st, nullptr, *s.edit);
         st.setProperty (te::IDs::name, t.getName() + ".cm", nullptr);
         st.setProperty ("sqmKind", "audio", nullptr);
+        st.setProperty ("sqmCommittedFrom", t.itemID.toString(), nullptr);   // 1.10: Uncommit finds its source
         auto nt = s.edit->insertTrack (te::TrackInsertPoint (t.getParentFolderTrack(), &t), st, nullptr);
         auto at = dynamic_cast<te::AudioTrack*> (nt.get());
         if (at == nullptr) { err = "Could not create the committed track"; return nullptr; }
@@ -451,6 +452,34 @@ namespace TrackOps
         setInactive (t, true);
         s.log.add ("You", "Committed " + t.getName() + " to " + at->getName() + " (source hidden and made inactive)");
         return at;
+    }
+
+    /** 1.10 (FL wish: reversible commit): brings the source of a committed track back (visible, active) and removes
+        the rendered ".cm" track unless keepRendered. Accepts either the committed track or its source. */
+    inline te::Track* uncommit (Session& s, te::Track& either, bool keepRendered, juce::String& err)
+    {
+        if (s.edit == nullptr) { err = "No session"; return nullptr; }
+        te::Track* rendered = nullptr; te::Track* source = nullptr;
+        auto all = te::getAllTracks (*s.edit);
+        auto sourceOf = [&] (te::Track& r) -> te::Track*
+        {
+            auto id = r.state.getProperty ("sqmCommittedFrom").toString();
+            for (auto t : all) if (id.isNotEmpty() && t->itemID.toString() == id) return t;
+            if (r.getName().endsWith (".cm"))
+                for (auto t : all) if (t != &r && t->getName() == r.getName().dropLastCharacters (3) && t->isHidden()) return t;
+            return nullptr;
+        };
+        if (auto src = sourceOf (either)) { rendered = &either; source = src; }
+        else
+            for (auto t : all)
+                if (t != &either && sourceOf (*t) == &either) { rendered = t; source = &either; break; }
+        if (source == nullptr) { err = either.getName() + " is not a committed track (and no committed copy of it was found)"; return nullptr; }
+        source->setHidden (false);
+        setInactive (*source, false);
+        juce::String what = "Uncommitted " + source->getName();
+        if (rendered != nullptr && ! keepRendered) { s.edit->deleteTrack (rendered); what << " (removed the rendered track)"; }
+        s.log.add ("You", what);
+        return source;
     }
 
     inline juce::File bounceTrack (Session& s, te::AudioTrack& t, juce::String& err)

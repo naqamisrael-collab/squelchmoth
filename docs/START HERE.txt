@@ -27,7 +27,7 @@ INSTALL ON MAC
 4. Open Squelchmoth from Applications or Launchpad.
 5. If macOS asks for microphone access, click OK (needed to record).
 Squelchmoth works completely offline: recording, editing, mixing, plugins, kits, mastering, the
-Demo and your licence keys never need the internet. Only the Claude connection needs a connection, and
+Demo and your licence keys never need the internet. Only Squelchmoth Chat and the Claude connection need a connection, and
 it simply waits (status bar: "Offline") until you are online again.
 
 UNINSTALL
@@ -53,7 +53,24 @@ FIRST LAUNCH
 - Change the look (Edit/Mix window backgrounds, track colours, text size):
   Setup > Preferences > Display.  Window > Color Palette recolours selected tracks and clips.
 
-CONNECT CLAUDE
+SQUELCHMOTH CHAT (talk to Claude inside the app)
+1. Click CHAT (top right) or press Ctrl+Shift+C (Cmd+Shift+C on a Mac). The chat opens beside your session.
+2. Paste your Anthropic API key (console.anthropic.com > API keys) and press Verify. It is stored only on
+   this computer. Anthropic bills API use to that account; a claude.ai Pro or Max plan does not cover it.
+3. Type what you want and press Enter ("put a compressor on the vocal and level it to -14 LUFS"). Claude does
+   it in the session and lists every tool it used; click a row to see the details. STOP halts it.
+   Shift+Enter starts a new line. Earlier chats are under the hourglass button; + starts a new one.
+
+THE CONSOLE (Mix window)
+- Each strip has a width selector: Compact, Standard or Expanded. Channel Layout sets them all at once and
+  saves named layouts with the session. View: Dynamics (the console), Full (adds inserts, sends, I/O, pan,
+  R / I / polarity / mono) or Overview (every strip Compact).
+- COMP (cyan) and LIMIT (pink) choose the channel's compressor and limiter; their meters show real gain
+  reduction (n/a when a plug-in does not report it). Expanded strips choose the meter: Peak, RMS or LUFS.
+- Select several strips (Shift-click) and drag one fader: they all move by the same amount. Hold Alt
+  (Opt on a Mac) to move just one. Drag a strip's name sideways to reorder tracks.
+
+CONNECT CLAUDE (use Squelchmoth from claude.ai instead)
 1. Click CLAUDE (top right). Five status lights show each step.
 2. Click CONNECT CLAUDE. Wait until the fourth light is green ("verified: the internet can
    reach Squelchmoth").

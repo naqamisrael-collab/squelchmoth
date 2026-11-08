@@ -11,6 +11,7 @@
 #include "ChannelRack.h"
 #include "BeatPage.h"
 #include "ClaudePanel.h"
+#include "ChatPanel.h"
 #include "Licence.h"
 #include "SqWindows.h"
 #include "Performance.h"
@@ -62,6 +63,10 @@ public:
         status.setColour (juce::Label::textColourId, Theme::dim());
 
         transport.onShowView = [this] (const juce::String& v) { showView (v); };
+        transport.onToggleChat = [this] { toggleChat(); };
+        addChildComponent (chat);
+        chat.onClose = [this] { setChatOpen (false); };
+        if (Prefs::getBool ("chat_open", false)) juce::MessageManager::callAsync ([sp = juce::Component::SafePointer<MainComponent> (this)] { if (sp) sp->setChatOpen (true); });
         claude.onStatus = [this] (const juce::String& st, bool live) { transport.setClaudeStatus (st, live); };
         timeline.onOpenMidiClip = [this] (te::MidiClip& c) { openPianoRoll (c); };
         timeline.onOpenStepClip = [this] (te::StepClip& c) { openStepGrid (c); };
@@ -360,6 +365,8 @@ public:
         transport.setBounds (r.removeFromTop (64));
         status.setBounds (r.removeFromBottom (22).reduced (10, 0));
         if (menuBar != nullptr && menuBar->isVisible()) menuBar->setBounds (r.removeFromTop (22));
+        chat.setVisible (chatOpen);
+        if (chatOpen) chat.setBounds (r.removeFromRight (juce::jlimit (340, juce::jmax (340, getWidth() / 2), chatWidth)));
         const bool split = layoutMode != "single" && (currentView == "edit" || currentView == "mix") && ! isTornOff ("mix");
         for (auto* c : std::initializer_list<juce::Component*> { &timeline, &mixer, &claude, &beat }) if (c->getParentComponent() == this) c->setVisible (false);
         splitDivider.setVisible (split);
@@ -396,6 +403,7 @@ public:
         }
         if (code == juce::KeyPress::F12Key || code == juce::KeyPress::numberPad3 || (cmd && shift && code == 'R')) { transportCtl.toggleRecord(); return true; }
         if (cmd && shift && code == 'M') { toggleWindow ("mastering", true); return true; }
+        if (cmd && shift && code == 'C') { toggleChat(); return true; }
         if (k == juce::KeyPress::returnKey && plain)   { transportCtl.returnToZero(); return true; }
         if (plain && code == juce::KeyPress::numberPad1) { transportCtl.skipBars (-1); return true; }
         if (plain && code == juce::KeyPress::numberPad2) { transportCtl.skipBars (1); return true; }
@@ -818,6 +826,8 @@ public:
         }
         else if (index == 10)   // Claude
         {
+            m.addItem (66, "Squelchmoth Chat  (" SQ_CMD "+Shift+C)", true, chatOpen);
+            m.addSeparator();
             m.addItem (60, tunnel.isActive() ? "Disconnect Claude" : "Connect Claude");
             m.addItem (61, "Copy Claude Link", claude.getConnectorUrl().isNotEmpty());
             m.addItem (62, "Open claude.ai Connectors page");
@@ -1116,6 +1126,7 @@ public:
         else if (id == 924) openCutLabGated ({});
 
         // ---- Claude
+        else if (id == 66) toggleChat();
         else if (id == 60) { tunnel.isActive() ? tunnel.stopTunnel() : tunnel.startTunnel (server.getPort()); showView ("claude"); }
         else if (id == 61) juce::SystemClipboard::copyTextToClipboard (claude.getConnectorUrl());
         else if (id == 62) juce::URL (ClaudePanel::connectorsPage).launchInDefaultBrowser();
@@ -1424,6 +1435,18 @@ public:
         menuItemsChanged();
     }
 
+    /** Squelchmoth Chat: a panel docked on the right of every page. */
+    void toggleChat()   { setChatOpen (! chatOpen); }
+    void setChatOpen (bool on)
+    {
+        chatOpen = on;
+        Prefs::set ("chat_open", on);
+        transport.setChatOpen (on);
+        resized();
+        if (on) chat.focusInput();
+        menuItemsChanged();
+    }
+
     void closeAllWindows()
     {
         for (auto& [n, w] : windows) if (w->isVisible()) w->closeButtonPressed();
@@ -1444,6 +1467,9 @@ private:
     TransportBar transport;
     MixerView mixer;
     ClaudePanel claude;
+    Chat::Panel chat { session, tools };
+    bool chatOpen = false;
+    int chatWidth = 420;
     BeatPage beat;
     MasteringProject mastering;
     juce::Label status;
@@ -1747,7 +1773,7 @@ private:
 
     static juce::StringArray builtinTemplates()   { return { "Empty", "Songwriter (4 audio + synth)", "Beat Making (drums + bass + keys + 2 vocals)", "Band Recording (8 inputs + 2 busses)", "Podcast / Voice (2 mics + music bed)", "Film Score (strings, brass, perc, 2 fx busses)", "Mixing (16 audio + 4 aux)" }; }
 
-    /** Make a Beat: the 60-second flow - a new session, an 8-channel kit in the rack, Pattern mode looping, click on, the Beat page. */
+    /** Make a Beat: the 60-second flow - a new session, an 8-channel kit in the rack, Pattern mode, the Beat page. Silent until Play. */
     void makeABeat (const juce::String& genre = "Trap", bool newSession = true)
     {
         if (newSession)
@@ -1760,10 +1786,9 @@ private:
         for (auto& gg : genres) if (juce::String (gg.name).equalsIgnoreCase (genre)) g = &gg;
         if (Rack::channels (*session.edit).isEmpty()) Rack::addKitChannels (session, g->kit, 8);
         if (auto ts = session.edit->tempoSequence.getTempo (0)) ts->setBpm ((g->bpmLo + g->bpmHi) / 2.0);
-        session.edit->clickTrackEnabled = true;
-        showView ("beat");
+        showView ("beat");   // nothing plays and the click stays as it was until the user presses Play
         if (auto rk = beat.getRack()) { rk->refresh(); rk->setPatternMode (true); }
-        session.log.add ("Squelchmoth", "Make a Beat: " + juce::String (g->name) + " kit, pattern looping - click steps, Beat Starter for a groove, + CHANNEL for instruments");
+        session.log.add ("Squelchmoth", "Make a Beat: " + juce::String (g->name) + " kit in Pattern mode - press Play (Space) to hear it, click steps, Beat Starter for a groove, + CHANNEL for instruments");
     }
 
     void newSessionDialog (bool withTemplate)

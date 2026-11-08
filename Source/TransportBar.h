@@ -166,6 +166,10 @@ public:
         beatTab.onClick = [this] { if (onShowView) onShowView ("beat"); };
         beatTab.setTooltip ("Beat page (" SQ_CMD "+Shift+B): browser, Channel Rack, instrument, playlist - the FL workspace");
         claudeTab.onClick = [this] { if (onShowView) onShowView ("claude"); };
+        addAndMakeVisible (chatTab);
+        chatTab.setClickingTogglesState (false);
+        chatTab.setTooltip ("Squelchmoth Chat (" SQ_CMD "+Shift+C): type to Claude and it works in this session");
+        chatTab.onClick = [this] { if (onToggleChat) onToggleChat(); };
 
         startTimerHz (20);
         applyTheme();
@@ -175,6 +179,8 @@ public:
 
     std::function<void (const juce::String&)> onShowView;
     std::function<void()> onCpuClicked;   // opens Window > System Usage
+    std::function<void()> onToggleChat;   // Squelchmoth Chat panel
+    void setChatOpen (bool on)   { chatTab.setToggleState (on, juce::dontSendNotification); }
 
     void mouseUp (const juce::MouseEvent& e) override
     {
@@ -195,6 +201,8 @@ public:
         loop.setColour (juce::TextButton::buttonOnColourId, Theme::mint().darker (0.4f));
         click.setColour (juce::TextButton::buttonOnColourId, Theme::violet());
         for (auto* b : { &editTab, &mixTab, &beatTab, &claudeTab }) b->setColour (juce::TextButton::buttonOnColourId, Theme::violet());
+        chatTab.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff1d6f86));
+        chatTab.setColour (juce::TextButton::textColourOffId, juce::Colour (0xff38e1ff));
         repaint();
     }
 
@@ -237,6 +245,8 @@ public:
 
         juce::Array<juce::TextButton*> shown;
         for (auto* b : { &editTab, &mixTab, &beatTab, &claudeTab }) if (b->isVisible()) shown.add (b);
+        chatTab.setBounds (r.removeFromRight (78).reduced (3, 8));
+        r.removeFromRight (6);
         auto tabs = r.removeFromRight (shown.size() * 92);
         auto tw = tabs.getWidth() / juce::jmax (1, shown.size());
         for (int i = 0; i < shown.size(); ++i) shown[i]->setBounds ((i + 1 == shown.size() ? tabs : tabs.removeFromLeft (tw)).reduced (3, 8));
@@ -322,7 +332,7 @@ private:
 
     IconButton rtz { "|<" }, rew { "<<" }, stop { "[]" }, play { ">" }, ffwd { ">>" }, toEnd { ">|" }, rec { "O" }, loop { "LOOP" }, click { "CLICK" }, patSong { "PAT" };
     juce::TextButton preBtn { "PRE" }, postBtn { "POST" }, modeBtn { "NORMAL" };
-    juce::TextButton editTab { "EDIT" }, mixTab { "MIX" }, beatTab { "BEAT" }, claudeTab { "CLAUDE" };
+    juce::TextButton editTab { "EDIT" }, mixTab { "MIX" }, beatTab { "BEAT" }, claudeTab { "CLAUDE" }, chatTab { "CHAT" };
 
     te::Edit* edit()    { return session.edit.get(); }
 

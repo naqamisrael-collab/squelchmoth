@@ -357,8 +357,8 @@ void register17Tools()
     add ("export_stems", "Export stems (offline): every track - or the selected tracks, the routing folders, or a list - as its own file, all starting at the "
          "same point and the same length so they line up in any DAW. Defaults: WAV 24-bit dithered at the session sample rate, no master inserts, name "
          "template '{n} {track}' ({n} {track} {session} {bpm} {date} {sr}), into Bounces/<session> Stems <date>. with_send_effects=true also prints the "
-         "reverbs / delays each track sends to.",
-         R"json({"type":"object","properties":{"source":{"type":"string","enum":["all","selected","folders"]},"tracks":{"type":"array","items":{"type":["string","integer"]}},"name_template":{"type":"string"},"format":{"type":"string","enum":["wav","aiff","flac"]},"bit_depth":{"type":"integer","enum":[16,24,32]},"sample_rate":{"type":"number"},"dither":{"type":"boolean"},"master_inserts":{"type":"boolean"},"with_send_effects":{"type":"boolean"},"tail_seconds":{"type":"number"},"use_selection":{"type":"boolean"},"folder":{"type":"string"}},"required":[]})json",
+         "reverbs / delays each track sends to. skip_silent=true deletes stems that rendered silent.",
+         R"json({"type":"object","properties":{"source":{"type":"string","enum":["all","selected","folders"]},"tracks":{"type":"array","items":{"type":["string","integer"]}},"name_template":{"type":"string"},"format":{"type":"string","enum":["wav","aiff","flac"]},"bit_depth":{"type":"integer","enum":[16,24,32]},"sample_rate":{"type":"number"},"dither":{"type":"boolean"},"master_inserts":{"type":"boolean"},"with_send_effects":{"type":"boolean"},"skip_silent":{"type":"boolean","description":"delete stems that rendered silent"},"tail_seconds":{"type":"number"},"use_selection":{"type":"boolean"},"folder":{"type":"string"}},"required":[]})json",
          [this] (const juce::var& a)
          {
              BounceExport::StemOptions o;
@@ -368,6 +368,7 @@ void register17Tools()
              o.dither = flag (a, "dither", true);
              o.masterInserts = flag (a, "master_inserts", false);
              o.withSendEffects = flag (a, "with_send_effects", false);
+             o.skipSilent = flag (a, "skip_silent", false);
              o.tailSeconds = num (a, "tail_seconds", 2.0);
              o.nameTemplate = str (a, "name_template", "{n} {track}");
              if (has (a, "folder")) o.folder = juce::File (str (a, "folder"));
@@ -381,6 +382,7 @@ void register17Tools()
              out->setProperty ("folder", res.folder.getFullPathName());
              out->setProperty ("written", res.written);
              out->setProperty ("failed", res.failed);
+             if (res.silent > 0) out->setProperty ("skipped_silent", res.silent);
              juce::Array<juce::var> files; for (auto& l : res.lines) files.add (l);
              out->setProperty ("files", files);
              return ToolResult::ok (juce::var (out));

@@ -284,7 +284,7 @@ namespace SignaturePresets
             A ("Slow Swell",      { { "Thresh", 0.35f }, { "TrebSus", 0.6f }, { "BassSus", 0.6f }, { "AttackS", 0.8f } }),
             A ("Room Mic Killer", { { "Thresh", 0.45f }, { "TrebSus", 0.4f }, { "BassSus", 0.3f }, { "AttackS", 0.0f } }) } },
 
-        { "Nectar De-Ess", {
+        { "Hush De-Ess", {
             B ("Female Vocal",    { { "Intense", 0.45f }, { "Max DS", 0.5f }, { "Freq", 0.62f } }),
             B ("Male Vocal",      { { "Intense", 0.45f }, { "Max DS", 0.5f }, { "Freq", 0.5f } }),
             B ("Gentle",          { { "Intense", 0.25f }, { "Max DS", 0.4f }, { "Freq", 0.55f } }),

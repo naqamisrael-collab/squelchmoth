@@ -138,9 +138,11 @@ struct TimelineState
     void selectTrack (te::Track* t, bool add = false)
     {
         if (! add) selectedTrackIDs.clear();
+        // record the ID first: isTrackSelected() also answers true for selectedRow, so checking after setting it would
+        // never store the ID and the previous track would drop out of a Shift / Cmd multi-selection
+        if (t != nullptr && std::find (selectedTrackIDs.begin(), selectedTrackIDs.end(), t->itemID) == selectedTrackIDs.end()) selectedTrackIDs.push_back (t->itemID);
         selectedRow = t;
         selectedTrack = dynamic_cast<te::AudioTrack*> (t);
-        if (t != nullptr && ! isTrackSelected (t)) selectedTrackIDs.push_back (t->itemID);
     }
 
     void dropReferencesTo (te::Track* t)

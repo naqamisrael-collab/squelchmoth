@@ -18,7 +18,7 @@ public:
             auto i = trackMenu.getSelectedId() - 1;
             if (i >= 0 && i < rows.size()) showTrack (rows[i]);
         };
-        setSize (150, 560);
+        setSize (168, 760);
         startTimerHz (2);
     }
 
@@ -28,6 +28,7 @@ public:
         current = t;
         strip = std::make_unique<ChannelStrip> (session, t->isMasterTrack() ? nullptr : t, state);
         strip->outputWindowStyle = true;
+        strip->forcedWidth = Console::Width::standard;
         strip->buildSlots();
         addAndMakeVisible (*strip);
         fillMenu();
