@@ -187,7 +187,7 @@ dB scale and peak-hold meter, the level and peak readouts, R / S / M.
 Every plug-in menu (insert slots, AudioSuite, the Mastering racks, new instrument tracks) is organised like Pro Tools:
 **EQ, Dynamics, Pitch Shift, Reverb, Delay, Modulation, Harmonic, Dither, Sound Field, Noise Reduction, Channel Strip,
 Instrument, Effect, Other**, each with Squelchmoth's own plug-ins first and yours below, plus the AirWindows collection.
-Categories come from the plug-in itself, then a catalogue of well-known products (Waves, FabFilter, UAD, Soundtoys,
+Categories come from the plug-in itself, then a catalogue of well-known products (Waves, FabFilter, UAD,
 iZotope, Plugin Alliance, Slate, Valhalla, Native Instruments...), then the name.
 
 * **Waves and other shell plug-ins** show each plug-in once - not separate Mono, Stereo and Mono/Stereo copies. The right

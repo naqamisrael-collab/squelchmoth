@@ -1,5 +1,5 @@
 #pragma once
-// Squelchmoth Signature Bundle - the 87 flagship built-in instruments and processors: Squelchmoth's own engines
+// Squelchmoth Signature Bundle - the flagship built-in instruments and processors: Squelchmoth's own engines
 // plus curated builds of Tracktion core DSP and AirWindows algorithms, each with factory presets.
 // Squelchmoth's own bundle: every entry is an original Squelchmoth design with its own name, artwork and presets.
 //

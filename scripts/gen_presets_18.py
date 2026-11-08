@@ -101,7 +101,7 @@ M('Pad', 'Choir Vowel', o1Wave=SAW, o2Wave=SAW, o2Fine=5, f1Type=BP, f1Cut=800, 
 M('Pad', 'Evolving Space', True, o1Wave=SAW, o2Wave=TRI, o2Semi=7, o3Wave=SINE, o3Level=0.5, o3Semi=12, ring=0.2, f1Cut=900, f1Env=0.6, fA=3.5, fD=3.0, fS=0.4, aA=2.0, aS=1, aR=4.0, props={'unison': 3}, mods=[(LFO1, 'cutoff', 0.4), (LFO2, 'pan', 0.5)], lfo1Rate=0.05, lfo2Rate=0.09, fxDelay=0.3, fxDelayTime=1.5, fxDelayFb=0.55, fxReverb=0.55, fxSize=0.9, level=-12)
 M('Keys', 'Soft EP', o1Wave=SINE, o2Wave=SINE, o2Semi=24, o2Level=0.25, fmAmt=0.2, f1Cut=5000, aD=1.8, aS=0.3, aR=0.4, ampVel=1, mods=[(VEL, 'fm', 0.5), (ENV2, 'fm', 0.3)], fD=0.4, fS=0, fxChorus=0.15, fxReverb=0.15, level=-6)
 M('Keys', 'Analog Keys', o1Wave=SAW, o2Wave=TRI, o2Semi=12, o2Level=0.4, f1Cut=1800, f1Env=0.5, fD=0.7, fS=0.2, aD=1.5, aS=0.5, aR=0.5, ampVel=0.9, fxChorus=0.2, level=-7)
-M('Keys', 'Clavinet', o1Wave=PULSE, o1Pw=0.1, o2Wave=SAW, o2Level=0.35, f1Cut=2000, f1Res=0.3, f1Env=0.6, fD=0.12, fS=0.1, aD=0.6, aS=0.2, aR=0.08, ampVel=0.9, level=-7)
+M('Keys', 'Funk Keys', o1Wave=PULSE, o1Pw=0.1, o2Wave=SAW, o2Level=0.35, f1Cut=2000, f1Res=0.3, f1Env=0.6, fD=0.12, fS=0.1, aD=0.6, aS=0.2, aR=0.08, ampVel=0.9, level=-7)
 M('Keys', 'Organ', o1Wave=SINE, o2Wave=SINE, o2Semi=12, o2Level=0.6, o3Wave=SINE, o3Level=0.4, o3Semi=19, subLevel=0.5, f1Cut=20000, f1Env=0, aA=0.003, aS=1, aR=0.04, fxChorus=0.4, level=-7)
 M('Keys', 'Harpsichord', True, o1Wave=SAW, o2Wave=PULSE, o2Pw=0.15, o2Semi=12, o2Level=0.5, f1Cut=4000, f1Env=0.5, fD=0.1, fS=0.2, aD=1.0, aS=0.0, aR=0.2, level=-7)
 M('Keys', 'Vibraphone', True, o1Wave=SINE, o2Wave=SINE, o2Semi=24, o2Level=0.3, f1Cut=6000, aD=2.0, aS=0, aR=1.0, lfo2Rate=5, lfo2Amp=0.4, fxReverb=0.3, level=-6)

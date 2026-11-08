@@ -5,7 +5,7 @@
 //    EQ, Dynamics, Pitch Shift, Reverb, Delay, Modulation, Harmonic, Dither, Sound Field, Noise Reduction,
 //    Channel Strip, Instrument, Effect, Other.
 //    The category comes from the plug-in's own VST3 sub-category when it gives one, then from a catalogue of
-//    well-known products (Waves, FabFilter, Universal Audio, Soundtoys, iZotope, Plugin Alliance, Slate,
+//    well-known products (Waves, FabFilter, Universal Audio, iZotope, Plugin Alliance, Slate,
 //    Valhalla, Native Instruments...), then from words in the name.
 //  * Shell plug-ins that publish one entry per channel layout ("H-Reverb Mono", "H-Reverb Stereo",
 //    "H-Reverb Mono/Stereo"...) are shown once; the right layout is picked for the track it goes on.

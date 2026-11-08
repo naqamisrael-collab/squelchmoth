@@ -1388,7 +1388,11 @@ public:
         g.setColour (juce::Colour (0xffd4ff3a)); g.setFont (Theme::font (30.0f, true));
         g.drawText ("SQUELCHMOTH", 124, 156, 460, 40, juce::Justification::left);
         g.setColour (juce::Colour (0xffece6ff)); g.setFont (Theme::font (13.5f));
-        g.drawFittedText ("Pro Tools editing, Studio One mastering, the FL Studio Channel Rack - and Claude at the controls. 27 instruments, 87 Signature plug-ins, 186 more effects, 27 kits, the Cut Lab editor, patterns, pages and a live link to claude.ai.", 124, 194, 600, 40, juce::Justification::topLeft, 2);
+        {
+            int inst = 0, fx = 0; for (auto& e : Signature::entries()) (juce::String (e.category) == "Instruments" ? inst : fx)++;
+            g.drawFittedText ("Pro Tools editing, Studio One mastering, the FL Studio Channel Rack - and Claude at the controls. " + juce::String (inst) + " instruments, "
+                              + juce::String (fx) + " Signature effects, 186 more effects, 27 kits, the Cut Lab editor, patterns, pages and a live link to claude.ai.", 124, 194, 600, 40, juce::Justification::topLeft, 2);
+        }
         g.setColour (juce::Colour (0xff8f84aa)); g.setFont (Theme::font (11.0f));
         g.drawText ("Created and owned by Jamar Stewart", 124, 234, 460, 16, juce::Justification::left);
         g.drawFittedText ("Keys: Space play  |  " SQ_CMD "+Space record  |  F1-F4 edit modes  |  F5-F10 tools  |  " SQ_CMD "+Shift+B Beat page  |  " SQ_CMD "+6 Channel Rack  |  " SQ_CMD "+= next page  |  " SQ_CMD "+, Preferences",
