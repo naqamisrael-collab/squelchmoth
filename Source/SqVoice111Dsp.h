@@ -494,16 +494,46 @@ namespace Voice
 
             // ---- Vocal Learning: long-term spectrum + pitch range -> suggested bands (audition with p.preview)
             bool learning = false;
-            void learnReset() { ltas.assign (2048, 0.0); lbuf.assign (4096, 0.0f); lpos = 0; lframes = 0; f0Lo = 1e9f; f0Hi = 0; }
-            void learnPitch (float hz) { if (learning && hz > 50 && hz < 1500) { f0Lo = std::min (f0Lo, hz); f0Hi = std::max (f0Hi, hz); } }
+            void learnReset() { frameH.clear(); frameH.reserve (800); ltas.assign (2048, 0.0); hEnv.assign (2048, 0.0); hCnt.assign (2048, 0); lbuf.assign (4096, 0.0f); lpos = 0; lframes = 0; voicedFrames = 0; f0Lo = 1e9f; f0Hi = 0; f0Now = 0; }
+            void learnPitch (float hz) { f0Now = (hz > 50 && hz < 1500) ? hz : 0.0f; if (learning && f0Now > 0) { f0Lo = std::min (f0Lo, hz); f0Hi = std::max (f0Hi, hz); } }
             Learned learnResult () const
             {
                 Learned r; if (lframes < 8) return r;
                 r.ok = true; r.lowHz = f0Lo < 1e8f ? f0Lo : 0; r.highHz = f0Hi;
-                // 1/3-octave smoothed LTAS; resonances = narrow peaks 3 dB above it, 200 Hz .. 8 kHz
-                const int N = 4096; std::vector<double> db (N / 2), sm (N / 2);
-                for (int k = 1; k < N / 2; ++k) db[(size_t) k] = 10 * std::log10 (ltas[(size_t) k] / lframes + 1e-20);
-                for (int k = 1; k < N / 2; ++k) { const int w = std::max (2, k / 8); double a = 0; int c = 0; for (int j = std::max (1, k - w); j <= std::min (N / 2 - 1, k + w); ++j) { a += db[(size_t) j]; ++c; } sm[(size_t) k] = a / c; }
+                // Long-term spectrum, first smoothed wider than the voice's harmonic spacing (so a held note's harmonics are
+                // never mistaken for resonances), then compared with a much wider (about an octave) average: resonances are
+                // the bumps that stand 3 dB above it, 200 Hz .. 8 kHz.
+                const int N = 4096; std::vector<double> env (N / 2, 0.0), db (N / 2), sm (N / 2);
+                const bool sung = voicedFrames >= 4 && voicedFrames * 2 >= lframes;
+                if (sung)
+                {
+                    // the harmonic-sampled envelope, gaps filled by interpolation (in dB)
+                    int last = -1;
+                    for (int k = 1; k < N / 2; ++k)
+                        if (hCnt[(size_t) k] > 0)
+                        {
+                            env[(size_t) k] = 10 * std::log10 (hEnv[(size_t) k] / hCnt[(size_t) k] + 1e-20);
+                            if (last < 0) for (int j = 1; j < k; ++j) env[(size_t) j] = env[(size_t) k];
+                            else for (int j = last + 1; j < k; ++j) env[(size_t) j] = env[(size_t) last] + (env[(size_t) k] - env[(size_t) last]) * (j - last) / (double) (k - last);
+                            last = k;
+                        }
+                    if (last < 0) return r;
+                    for (int j = last + 1; j < N / 2; ++j) env[(size_t) j] = env[(size_t) last];
+                    for (int k = 1; k < N / 2; ++k) { const int w = std::max (1, k / 16); double a = 0; int c = 0; for (int j = std::max (1, k - w); j <= std::min (N / 2 - 1, k + w); ++j) { a += env[(size_t) j]; ++c; } db[(size_t) k] = a / c; }
+                }
+                else
+                    for (int k = 1; k < N / 2; ++k)
+                    {
+                        const int w = std::max (2, k / 12); double a = 0; int c = 0;
+                        for (int j = std::max (1, k - w); j <= std::min (N / 2 - 1, k + w); ++j) { a += ltas[(size_t) j] / lframes + 1e-20; ++c; }
+                        db[(size_t) k] = 10 * std::log10 (a / c);
+                    }
+                for (int k = 1; k < N / 2; ++k)
+                {
+                    const int w = std::max (4, k / 3); double a = 0; int c = 0;
+                    for (int j = std::max (1, k - w); j <= std::min (N / 2 - 1, k + w); ++j) { a += db[(size_t) j]; ++c; }
+                    sm[(size_t) k] = a / c;
+                }
                 struct Pk { double hz, ex, q; }; std::vector<Pk> peaks;
                 for (int k = 2; k < N / 2 - 2; ++k)
                 {
@@ -512,14 +542,16 @@ namespace Voice
                     if (ex > 3 && db[(size_t) k] >= db[(size_t) k - 1] && db[(size_t) k] >= db[(size_t) k + 1])
                     {
                         int l = k, u = k; while (l > 1 && db[(size_t) l] > db[(size_t) k] - 3) --l; while (u < N / 2 - 1 && db[(size_t) u] > db[(size_t) k] - 3) ++u;
-                        peaks.push_back ({ hz, ex, clamp (hz / std::max (1.0, (u - l) * sr / N), 1.0, 12.0) });
+                        const double q = hz / std::max (1.0, (u - l) * sr / N);
+                        // a resonance to cut is narrow (Q 3.5 and up); the broad bumps are the vowels' own formants
+                        if (q >= 3.5 && persistence (hz) >= 0.55) peaks.push_back ({ hz, ex, clamp (q, 1.0, 12.0) });
                     }
                 }
                 std::sort (peaks.begin(), peaks.end(), [] (const Pk& a, const Pk& b) { return a.ex > b.ex; });
                 for (size_t i = 0; i < peaks.size() && r.bands.size() < 3; ++i)
                 {
-                    bool near = false; for (auto& b : r.bands) near = near || std::abs (std::log2 (b.freq / peaks[i].hz)) < 0.33;
-                    if (near) continue;
+                    bool tooClose = false; for (auto& b : r.bands) tooClose = tooClose || std::abs (std::log2 (b.freq / peaks[i].hz)) < 0.33;
+                    if (tooClose) continue;
                     Band b; b.on = true; b.type = bell; b.freq = (float) peaks[i].hz; b.gainDb = (float) -std::min (6.0, peaks[i].ex * 0.6); b.q = (float) peaks[i].q; b.mode = fixed;
                     r.bands.push_back (b);
                 }
@@ -531,7 +563,25 @@ namespace Voice
             Biquad bq[2][6], det[2][6], hp[2][2], lp[2][2], air[2], tl[2], th[2]; OnePole hp1[2], lp1[2];
             int hpStages = 1, lpStages = 1, hpSlopeNow = 1;
             float envC[2][6] {}, dynG[6] {}, curFreq[6] {};
-            std::vector<double> ltas; std::vector<float> lbuf; int lpos = 0; int lframes = 0; float f0Lo = 1e9f, f0Hi = 0;
+            struct FrameH { float f0 = 0; float db[61] {}; };
+            std::vector<FrameH> frameH;
+            /** How often (fraction of sung frames) the harmonic nearest hz stands 3 dB above the harmonics around it: a
+                fixed resonance lifts it on every note and vowel; a vowel's own formant only while that vowel is sung. */
+            float persistence (double hz) const
+            {
+                if (frameH.empty()) return 1.0f;   // noise / instruments: nothing to tell apart
+                int n = 0, hit = 0;
+                for (auto& f : frameH)
+                {
+                    const int h = (int) std::lround (hz / f.f0); if (h < 1 || h > 58 || std::abs (h * f.f0 - hz) > 0.5 * f.f0) continue;
+                    double ref = 0; int c = 0;
+                    for (int j = 1; j <= 60; ++j) if (std::abs (j - h) >= 2 && std::abs (std::log2 ((double) j / h)) < 0.45 && f.db[j] != 0) { ref += f.db[j]; ++c; }
+                    if (c == 0 || f.db[h] == 0) continue;
+                    ++n; if (f.db[h] - ref / c > 3.0) ++hit;
+                }
+                return n > 0 ? (float) hit / (float) n : 0.0f;
+            }
+            std::vector<double> ltas, hEnv; std::vector<int> hCnt; std::vector<float> lbuf; int lpos = 0; int lframes = 0, voicedFrames = 0; float f0Lo = 1e9f, f0Hi = 0, f0Now = 0;
             void learnPush (float x)
             {
                 lbuf[(size_t) lpos++] = x;
@@ -540,6 +590,24 @@ namespace Voice
                     lpos = 0; std::vector<std::complex<float>> a (4096); std::vector<float> pw;
                     for (int i = 0; i < 4096; ++i) a[(size_t) i] = lbuf[(size_t) i] * (0.5f - 0.5f * (float) std::cos (2 * pi * i / 4095));
                     fftPower (a, pw); for (int k = 0; k < 2048; ++k) ltas[(size_t) k] += pw[(size_t) k]; ++lframes;
+                    // sung frames: sample the envelope at the harmonics (wherever they fall on this note); over the notes
+                    // of a take the samples cover the axis finely, and a fixed resonance lifts all of them
+                    if (f0Now > 0)
+                    {
+                        ++voicedFrames;
+                        FrameH fh; fh.f0 = f0Now;
+                        const double fb = f0Now * 4096.0 / sr; const int halfW = std::max (1, (int) (fb * 0.25));
+                        for (int h = 1; h * f0Now < 9000.0 && h < 120; ++h)
+                        {
+                            const int c = (int) std::lround (h * fb); int best = c; float bp = -1;
+                            for (int k = std::max (1, c - halfW); k <= std::min (2046, c + halfW); ++k) if (pw[(size_t) k] > bp) { bp = pw[(size_t) k]; best = k; }
+                            if (best < 2 || best > 2045) continue;
+                            const double hp = (double) pw[(size_t) best - 1] + pw[(size_t) best] + pw[(size_t) best + 1];
+                            hEnv[(size_t) best] += hp; hCnt[(size_t) best]++;
+                            if (h <= 60) fh.db[h] = (float) (10 * std::log10 (hp + 1e-20));
+                        }
+                        if (frameH.size() < 800) frameH.push_back (fh);
+                    }
                 }
             }
             void configure (const std::array<Band, 6>& bands, bool anySolo)

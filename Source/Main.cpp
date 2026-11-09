@@ -34,7 +34,7 @@ public:
     bool moreThanOneInstanceAllowed() override
     {
         auto cl = getCommandLineParameters();
-        return cl.contains ("--selftest") || cl.contains ("--preset-audit") || cl.contains ("--make-") || cl.contains ("--check-key") || cl.contains ("PluginScan");
+        return cl.contains ("--selftest") || cl.contains ("--preset-audit") || cl.contains ("--render-faces") || cl.contains ("--make-") || cl.contains ("--check-key") || cl.contains ("PluginScan");
     }
 
     void initialise (const juce::String& commandLine) override
@@ -42,7 +42,7 @@ public:
        #if JUCE_MAC
         // Plug-in scanning and the command-line modes are extra copies of this binary: on macOS each would
         // otherwise add its own Squelchmoth icon to the Dock next to the real app.
-        if (commandLine.contains ("PluginScan") || commandLine.contains ("--selftest") || commandLine.contains ("--preset-audit")
+        if (commandLine.contains ("PluginScan") || commandLine.contains ("--selftest") || commandLine.contains ("--preset-audit") || commandLine.contains ("--render-faces")
             || commandLine.contains ("--make-") || commandLine.contains ("--check-key"))
             juce::Process::setDockIconVisible (false);
        #endif
@@ -98,6 +98,22 @@ public:
             for (int i = 0; i < args.size(); ++i)
             {
                 if (args[i].text == "--preset-audit" && i + 1 < args.size() && ! args[i + 1].text.startsWith ("--")) SelfTestMode::reportPath = args[i + 1].text.unquoted();
+                if (args[i].text == "--only" && i + 1 < args.size()) SelfTestMode::only = juce::StringArray::fromTokens (args[i + 1].text.unquoted(), ",", "\"");
+            }
+            for (auto& o : SelfTestMode::only) o = o.trim();
+            setApplicationReturnValue (runSelfTest());
+            quit();
+            return;
+        }
+
+        if (commandLine.contains ("--render-faces"))
+        {
+            // Squelchmoth --render-faces [dir] [--only "Plug-in Name,Other Name"]   (design QA: every face to a PNG)
+            auto args = juce::ArgumentList ("Squelchmoth", commandLine);
+            SelfTestMode::renderFaces = true;
+            for (int i = 0; i < args.size(); ++i)
+            {
+                if (args[i].text == "--render-faces" && i + 1 < args.size() && ! args[i + 1].text.startsWith ("--")) SelfTestMode::facesDir = args[i + 1].text.unquoted();
                 if (args[i].text == "--only" && i + 1 < args.size()) SelfTestMode::only = juce::StringArray::fromTokens (args[i + 1].text.unquoted(), ",", "\"");
             }
             for (auto& o : SelfTestMode::only) o = o.trim();
@@ -183,6 +199,10 @@ public:
         engine->getPluginManager().createBuiltInType<SqRadiantPrePlugin>();
         engine->getPluginManager().createBuiltInType<SqMawPlugin>();
         engine->getPluginManager().createBuiltInType<SqMawLitePlugin>();
+        engine->getPluginManager().createBuiltInType<SqMothKeyPlugin>();
+        engine->getPluginManager().createBuiltInType<SqSirenCompPlugin>();
+        engine->getPluginManager().createBuiltInType<SqSirenEqPlugin>();
+        engine->getPluginManager().createBuiltInType<SqHushDeEss2Plugin>();
         engine->getPluginManager().createBuiltInType<SqRingPlugin>();
         engine->getPluginManager().createBuiltInType<SqPhase12Plugin>();
         engine->getPluginManager().createBuiltInType<SqBucketPlugin>();

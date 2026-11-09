@@ -69,6 +69,7 @@ namespace Edition
     {
         static const std::map<juce::String, Pack> m {
             { "sqmTune", Pack::vocal }, { "sqmTuneFx", Pack::vocal }, { "airwindows_adt", Pack::vocal },
+            { "sqmMothKey", Pack::vocal }, { "sqmSirenComp", Pack::vocal }, { "sqmSirenEq", Pack::vocal }, { "sqmHushDeEss2", Pack::vocal },
             { "sqmApexDyn", Pack::mastering }, { "sqmApexLim", Pack::mastering }, { "sqmApexMB", Pack::mastering }, { "sqmApexSub", Pack::mastering },
             { "sqmApexTriad", Pack::mastering }, { "sqmPulse", Pack::mastering }, { "sqmOpto", Pack::mastering },
             { "sqmHexwing", Pack::instruments }, { "sqmToxin", Pack::instruments }, { "sqmLantern", Pack::instruments }, { "sqmLanternExo", Pack::instruments },

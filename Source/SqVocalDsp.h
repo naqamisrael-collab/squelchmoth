@@ -387,6 +387,7 @@ namespace SqVocal
             orderOut = juce::jmin (Lpc::maxOrder, order + Lpc::whitenOrderExtra);
             frame = juce::jmax (512, juce::roundToInt (sr * 0.02));
             hopLen = juce::jmax (64, juce::roundToInt (sr * 0.004));
+            eA = (float) std::exp (-1.0 / (0.005 * sr)); gK = (float) (1.0 - std::exp (-1.0 / (0.002 * sr))); pkR = (float) std::exp (-1.0 / (0.040 * sr));
             yHist.prepare (frame * 2 + 8);
             fx.assign ((size_t) frame, 0.0f); fy.assign ((size_t) frame, 0.0f);
             reset();
@@ -396,7 +397,7 @@ namespace SqVocal
             yHist.clear(); an.reset(); sy.reset(); count = 0; pos = 0;
             std::fill (std::begin (kIn), std::end (kIn), 0.0f); std::fill (std::begin (kOut), std::end (kOut), 0.0f);
             std::fill (std::begin (kInCur), std::end (kInCur), 0.0f); std::fill (std::begin (kOutCur), std::end (kOutCur), 0.0f);
-            gain = 1; gainTarget = 1;
+            gain = 1; gainTarget = 1; yE = zE = 0; yPk = 0;
         }
         /** x: the original input ring (newest index 'newest'); y: the shifted sample to correct. */
         float process (const Ring& xRing, int64 newest, float y, float warp)
@@ -420,18 +421,20 @@ namespace SqVocal
             for (int m = 0; m < orderOut; ++m) kOutCur[m] += dOut[m];
             const float e = an.analysis (y, kOutCur, orderOut);
             float z = sy.synthesis (e, kInCur, order);
-            // keep the loudness of y
-            yE = yE * 0.999f + y * y * 0.001f; zE = zE * 0.999f + z * z * 0.001f;
-            gainTarget = zE > 1e-10f ? juce::jlimit (0.1f, 4.0f, std::sqrt (yE / zE)) : 1.0f;
-            gain += (gainTarget - gain) * 0.002f;
-            return z * gain;
+            // keep the loudness of y (over ~5 ms), and never let the re-coloured signal peak far above y's own peaks
+            yE = yE * eA + y * y * (1.0f - eA); zE = zE * eA + z * z * (1.0f - eA);
+            gainTarget = zE > 1e-12f ? juce::jlimit (0.25f, 2.0f, std::sqrt (yE / zE)) : 1.0f;
+            gain += (gainTarget - gain) * gK;
+            const float ay = std::abs (y); yPk = ay > yPk ? ay : yPk * pkR;
+            const float lim = 2.0f * yPk + 1.0e-4f;
+            return juce::jlimit (-lim, lim, z * gain);
         }
     private:
         double sr = 44100; int order = 20, orderOut = 28, frame = 1024, hopLen = 64, count = 0; int64 pos = 0;
         Ring yHist; std::vector<float> fx, fy, tmp;
         float kIn[Lpc::maxOrder] {}, kOut[Lpc::maxOrder] {}, kInCur[Lpc::maxOrder] {}, kOutCur[Lpc::maxOrder] {}, dIn[Lpc::maxOrder] {}, dOut[Lpc::maxOrder] {};
         Lattice an, sy;
-        float gain = 1, gainTarget = 1, yE = 0, zE = 0;
+        float gain = 1, gainTarget = 1, yE = 0, zE = 0, yPk = 0, eA = 0.995f, gK = 0.01f, pkR = 0.9995f;
     };
 
     //==========================================================================
@@ -459,7 +462,7 @@ namespace SqVocal
         {
             for (int c = 0; c < maxCh; ++c) in[c].clear();
             mono.clear();
-            for (auto& s : streams) { for (int c = 0; c < maxCh; ++c) s.acc[c].clear(); s.ts = 0; s.started = false; }
+            for (auto& s : streams) { for (int c = 0; c < maxCh; ++c) s.acc[c].clear(); s.ts = 0; s.started = false; s.unity = 0; }
             for (auto& r : readPos) r = 0;
             markW = 0; lastMarkPos = 0; inPos = 0; lp1 = lp2 = 0; lpState.clear();
         }
@@ -503,10 +506,22 @@ namespace SqVocal
                     if (! mk.voiced) gr.ratio = 1.0f;
                     // with no pitch change, lock the synthesis mark to the analysis mark so the output stays
                     // sample-aligned with the input (clean dry/wet mixing, untouched consonants)
+                    // sample-aligned with the input (clean dry/wet mixing, untouched consonants). Only after the ratio has
+                    // stayed at 1 for a few periods, and by gliding (3 % of a period per grain): a correction that merely
+                    // passes through 1 - every vibrato cycle when vibrato is cut or hard-tuned - must never make the
+                    // synthesis time jump, which would leave a gap in the output.
                     if (std::abs (gr.ratio - 1.0f) < 0.0015f && std::abs (gr.formant - 1.0f) < 0.0015f)
-                        st.ts = juce::jmax ((double) readPos[s], (double) mk.pos + L);
-                    if (! gr.silent) addGrain (st, mk, spacing, gr, readPos[s]);
-                    st.ts += mk.voiced ? spacing / juce::jlimit (0.25f, 4.0f, gr.ratio) : spacing;
+                    {
+                        if (++st.unity >= 6)
+                        {
+                            const double want = juce::jmax ((double) readPos[s], (double) mk.pos + L), d = want - st.ts;
+                            st.ts += std::abs (d) < 1.0 || st.unity == 6 && std::abs (d) < 0.03 * spacing ? d : juce::jlimit (-0.03 * spacing, 0.03 * spacing, d);
+                        }
+                    }
+                    else st.unity = 0;
+                    const float hop = mk.voiced ? spacing / juce::jlimit (0.25f, 4.0f, gr.ratio) : spacing;
+                    if (! gr.silent) addGrain (st, mk, spacing, gr, readPos[s], hop);
+                    st.ts += hop;
                 }
             }
         }
@@ -519,7 +534,7 @@ namespace SqVocal
         void restartStream (int s) { streams[(size_t) s].started = false; }
 
     private:
-        struct Stream { double ts = 0; bool started = false; Ring acc[maxCh]; };
+        struct Stream { double ts = 0; bool started = false; int unity = 0; Ring acc[maxCh]; };
         double sr = 44100; int nch = 1, L = 1024; float Tmax = 800, Tu = 200;
         Ring in[maxCh], mono;
         std::array<Stream, maxStreams> streams;
@@ -577,10 +592,35 @@ namespace SqVocal
             }
             return m.period;
         }
-        void addGrain (Stream& st, const Mark& mk, float T, const Grain& gr, int64 firstWritable)
+        /** Power of a train of Hann grains (half-length 1) spaced x apart, relative to x = 1 (where they sum to exactly 1). */
+        static float olaPower (float x)
+        {
+            static const std::array<float, 129> table = []
+            {
+                std::array<float, 129> t {};
+                for (int i = 0; i <= 128; ++i)
+                {
+                    const double H = 1.0 + 3.0 * i / 128.0; double acc = 0; const int n = 400;
+                    for (int j = 0; j < n; ++j)
+                    {
+                        const double tt = H * j / n; double sum = 0;
+                        for (int k = -3; k <= 3; ++k) { const double d = tt - k * H; if (std::abs (d) < 1.0) sum += 0.5 + 0.5 * std::cos (juce::MathConstants<double>::pi * d); }
+                        acc += sum * sum;
+                    }
+                    t[(size_t) i] = (float) (acc / n);
+                }
+                return t;
+            }();
+            const float f = juce::jlimit (0.0f, 128.0f, (x - 1.0f) / 3.0f * 128.0f); const int i = (int) f; const float fr = f - (float) i;
+            return i >= 128 ? table[128] : table[(size_t) i] + fr * (table[(size_t) i + 1] - table[(size_t) i]);
+        }
+        void addGrain (Stream& st, const Mark& mk, float T, const Grain& gr, int64 firstWritable, float hop)
         {
             const float g = juce::jlimit (0.4f, 2.5f, gr.formant);
             const double Lo = juce::jlimit ((double) T * 0.5, (double) T * 1.25, (double) T / g);
+            // lowering the pitch spreads the grains further apart than they are long: the gaps between them would lose
+            // up to 5 dB at an octave down - restore the power the overlap-add loses
+            const float gainOla = hop > Lo * 1.001 ? 1.0f / std::sqrt (juce::jmax (0.05f, olaPower ((float) (hop / Lo)))) : 1.0f;
             const int64 k0 = juce::jmax (firstWritable, (int64) std::ceil (st.ts - Lo)), k1 = (int64) std::floor (st.ts + Lo);
             const double inv = 1.0 / Lo;
             for (int64 k = k0; k <= k1; ++k)
@@ -588,8 +628,8 @@ namespace SqVocal
                 const double u = ((double) k - st.ts) * inv;
                 const float w = 0.5f + 0.5f * (float) std::cos (juce::MathConstants<double>::pi * u);
                 const double ip = (double) mk.pos + ((double) k - st.ts) * g;
-                if (gr.monoSource) st.acc[0].at (k) += w * gr.gain * mono.cubic (ip);
-                else for (int c = 0; c < nch; ++c) st.acc[c].at (k) += w * gr.gain * in[c].cubic (ip);
+                if (gr.monoSource) st.acc[0].at (k) += w * gr.gain * gainOla * mono.cubic (ip);
+                else for (int c = 0; c < nch; ++c) st.acc[c].at (k) += w * gr.gain * gainOla * in[c].cubic (ip);
             }
         }
     };
@@ -613,6 +653,12 @@ namespace SqVocal
         int allowedMask = 0xfff, bypassMask = 0, keyRoot = 0;
         std::array<Harm, 4> harm {};
         float harmDetune = 6, harmTimingMs = 12;
+        // ---- Moth Tune 2: dynamic vibrato (0 off = Vibrato Keep as before, 1 Preserve, 2 Cut, 3 Boost)
+        int dvMode = 0;
+        float dvThresholdCents = 15, dvDelay = 0.1f, dvAttack = 0.15f, dvVariation = 0;   // detection and how it fades in
+        float dvPitch = 1, dvAmp = 0, dvTimbre = 0;                                         // separate depths, 0..1 (Boost up to 2)
+        bool vibFxStraightOnly = false;   // created vibrato only where the singer holds a straight note
+        float harmGate = 1;               // harmony trigger (MIDI / CC / latch), smoothed in the processor
     };
 
     struct FrameResult
@@ -620,6 +666,8 @@ namespace SqVocal
         bool voiced = false, hOn[4] {};
         float inNote = -1, outNote = -1, target = -1, ratio = 1, formant = 1, corrCents = 0;
         float hRatio[4] { 1, 1, 1, 1 }, hFormant[4] { 1, 1, 1, 1 }, hNote[4] { -1, -1, -1, -1 };
+        float gain = 1;                                        // lead amplitude (dynamic vibrato's amplitude depth)
+        float vibRateHz = 0, vibDepthCents = 0, vibAmount = 0; // the vibrato visualiser: measured rate / depth, how much is being acted on
     };
 
     inline float shapeLfo (int shape, float ph)   // ph 0..1
@@ -664,6 +712,7 @@ namespace SqVocal
             for (auto& d : drift) d = 0;
             for (auto& d : driftTarget) d = 0;
             rateNoise = depthNoise = 0;
+            vibEnv = 0; vibOnT = 0; dvAmt = 0; rmsFast = rmsSlow1 = rmsSlow2 = 0; dvNoise = 0;
         }
 
         FrameResult process (const PitchTracker::Frame& f, const TuneSettings& s, const std::array<bool, 128>& held, const GraphNote* gn)
@@ -674,6 +723,7 @@ namespace SqVocal
             {
                 c *= std::exp (-dt / 0.03f); cv = 0;
                 haveCentre = false; target = -1000; noteTime = 0; vibAmp = 0;
+                vibEnv = 0; vibOnT = 0; dvAmt *= 0.9f; rmsSlow1 = rmsSlow2 = 0;
                 r.voiced = false; r.ratio = 1.0f; r.formant = formantFor (s, 1.0f);
                 for (int i = 0; i < 4; ++i) { r.hOn[i] = s.harm[(size_t) i].mode != 0; r.hRatio[i] = 1.0f; r.hFormant[i] = 1.0f; }
                 return r;
@@ -697,7 +747,23 @@ namespace SqVocal
                 lastVibSign = sgn; vibZcT = 0;
             }
             const float vib = vibRaw * vibCompensation (vibHz);
-            const float pt = nIn - s.vibKeep * vib;
+            // ---- dynamic vibrato: is the singer making vibrato right now, and how far into it are we?
+            {
+                const float av = std::abs (vib);
+                vibEnv += (av > vibEnv ? 0.25f : dt / 0.35f) * (av - vibEnv);              // peak depth (semitones), ~0.35 s memory
+                const bool present = vibEnv * 100.0f >= juce::jmax (1.0f, s.dvThresholdCents) && vibHz > 2.8f && vibHz < 9.5f;
+                vibOnT = present ? vibOnT + dt : juce::jmax (0.0f, vibOnT - 2.0f * dt);
+                const float want = juce::jlimit (0.0f, 1.0f, (vibOnT - s.dvDelay) / juce::jmax (0.005f, s.dvAttack));
+                dvAmt += (want - dvAmt) * (want > dvAmt ? 1.0f - std::exp (-dt / juce::jmax (0.005f, s.dvAttack * 0.35f)) : 0.05f);
+                // amplitude: the voice's own level wobble (frame rms against a 2 Hz average of it)
+                const float rmsNow = juce::jmax (1.0e-6f, f.rms);
+                const float ka = 1.0f - std::exp (-juce::MathConstants<float>::twoPi * 2.0f * dt);
+                if (rmsSlow2 <= 0) rmsSlow1 = rmsSlow2 = rmsNow;
+                rmsSlow1 += ka * (rmsNow - rmsSlow1); rmsSlow2 += ka * (rmsSlow1 - rmsSlow2);
+                rmsFast = rmsNow;
+            }
+            const float keepVib = s.dvMode > 0 ? 1.0f : s.vibKeep;   // dynamic vibrato decides on its own; the target never chases the wobble
+            const float pt = nIn - keepVib * vib;
 
             // ---- choose the target note
             float desired = 0; float tauMs = s.retuneMs; float vibScale = 1.0f + s.natVib; float extraFormant = 0;
@@ -761,7 +827,30 @@ namespace SqVocal
                 c += cv * dt;
                 if (! std::isfinite (c)) { c = desired; cv = 0; }
             }
-            float out = nIn + c + (vibScale - 1.0f) * vib;
+            // Preserve: while the singer holds a vibrato, apply the correction averaged over exactly one vibrato period,
+            // so not a trace of the vibrato's own rate leaks into the correction (rate and depth pass untouched in both
+            // engines). The average restarts on every new target note, so note changes still snap at Retune 0.
+            float cUse = c;
+            if (s.dvMode == 1 && gn == nullptr)
+            {
+                const int want = juce::jlimit (8, 255, juce::roundToInt ((float) fr / juce::jmax (3.0f, vibHz)));
+                if (noteTime <= dt * 1.5f || std::abs (want - cLen) > 4) {   // (the measured rate wobbles by a frame or two: keep the length)
+                     cLen = want; cSum = 0; for (int k = 0; k < cLen; ++k) cHist[k] = c; cSum = (double) c * cLen; cW = 0; }
+                cSum += (double) c - cHist[cW]; cHist[cW] = c; cW = (cW + 1) % cLen;
+                cUse = c + dvAmt * ((float) (cSum / cLen) - c);
+            }
+            float out = nIn + cUse + (vibScale - 1.0f) * vib;
+            float dvGain = 1.0f;
+            if (s.dvMode >= 2 && gn == nullptr)
+            {
+                const float sign = s.dvMode == 2 ? -1.0f : 1.0f;
+                if (s.dvVariation > 0) dvNoise += ((juce::Random::getSystemRandom().nextFloat() * 2 - 1) * 0.06f - dvNoise * 0.02f);
+                const float depth = s.dvPitch * dvAmt * (s.dvMode == 3 ? 1.0f + s.dvVariation * juce::jlimit (-0.5f, 0.5f, dvNoise) : 1.0f);
+                out += sign * depth * vib;
+                if (s.dvAmp > 0 && rmsSlow2 > 0)
+                    dvGain = juce::jlimit (0.5f, 2.0f, std::pow (rmsFast / rmsSlow2, sign * s.dvAmp * dvAmt));
+                if (s.dvTimbre > 0) extraFormant += sign * s.dvTimbre * dvAmt * vib;
+            }
 
             // ---- transpose (optionally conformed to the scale)
             float shift = s.transpose;
@@ -782,7 +871,7 @@ namespace SqVocal
             out += shift;
 
             // ---- create vibrato
-            if (s.vibDepth > 0.01f)
+            if (s.vibDepth > 0.01f && ! (s.vibFxStraightOnly && dvAmt > 0.5f))
             {
                 rateNoise += (juce::Random::getSystemRandom().nextFloat() * 2 - 1) * 0.08f - rateNoise * 0.01f;
                 depthNoise += (juce::Random::getSystemRandom().nextFloat() * 2 - 1) * 0.08f - depthNoise * 0.01f;
@@ -795,6 +884,7 @@ namespace SqVocal
             }
 
             r.voiced = true; r.inNote = nIn; r.outNote = out; r.target = target + shift;
+            r.gain = dvGain; r.vibRateHz = vibHz; r.vibDepthCents = vibEnv * 100.0f; r.vibAmount = dvAmt;
             r.ratio = juce::jlimit (0.25f, 4.0f, std::pow (2.0f, (out - nIn) / 12.0f));
             r.corrCents = (out - nIn) * 100.0f;
             r.formant = formantFor (s, r.ratio, extraFormant);
@@ -842,6 +932,8 @@ namespace SqVocal
             return 1.0f / juce::jmax (0.5f, std::abs (1.0f - h));
         }
         float c = 0, cv = 0, centre1 = 0, centre2 = 0, target = -1000, noteTime = 0, vibPhase = 0, vibAmp = 0, rateNoise = 0, depthNoise = 0;
+        float vibEnv = 0, vibOnT = 0, dvAmt = 0, rmsFast = 0, rmsSlow1 = 0, rmsSlow2 = 0, dvNoise = 0;
+        float cHist[256] {}; int cW = 0, cLen = 0; double cSum = 0;
         bool haveCentre = false;
         std::array<float, 4> drift {}, driftTarget {};
 
@@ -898,18 +990,20 @@ namespace SqVocal
             for (auto& l : lpcHarm) l.prepare (sr);
             for (auto& d : harmDelay) d.prepare ((int) (sr * 0.06) + 8);
             results.assign (2048, {});
+            gateK = (float) (1.0 - std::exp (-1.0 / (0.012 * sr)));
+            lpcK = (float) (1.0 - std::exp (-1.0 / (0.006 * sr)));
             reset();
         }
         void reset()
         {
             tracker.reset(); brain.reset(); psola.reset();
-            for (int c = 0; c < 2; ++c) { liveIn[c].clear(); lpcLead[c].reset(); lpcActive[c] = false; }
+            for (int c = 0; c < 2; ++c) { liveIn[c].clear(); lpcLead[c].reset(); }
             liveMono.clear();
             for (auto& l : lpcHarm) l.reset();
             for (auto& d : harmDelay) d.clear();
             livePos = 0; lead = {}; for (auto& h : harmSp) h = {};
             std::fill (results.begin(), results.end(), Stored {}); resultW = 0;
-            rSm = 1; for (auto& h : hrSm) h = 1;
+            rSm = 1; for (auto& h : hrSm) h = 1; gSm = 1; gateSm = 1; lpcMix = 0; for (auto& m : lpcHMix) m = 0;
             lastPeriod = (float) (sr / 200.0); lastVoiced = false; lastHz = 0; hdW = 0;
             for (int i = 0; i < 4; ++i) timingPhase[(size_t) i] = 0.25f * (float) i;
         }
@@ -956,6 +1050,7 @@ namespace SqVocal
                 }
 
                 float outL = 0, outR = 0, dryL, dryR;
+                gateSm += (s.harmGate - gateSm) * gateK;
                 if (eng == 1)
                 {
                     psola.pushInput (frame, 2, lastPeriod, lastVoiced, lastVoiced ? lastHz : 0.0f);
@@ -964,7 +1059,7 @@ namespace SqVocal
                     {
                         Psola::Grain g;
                         const auto& r = resultAt (mk.pos);
-                        if (st == 0) { g.ratio = r.voiced ? r.ratio : 1.0f; g.formant = r.voiced ? r.formant : 1.0f; return g; }
+                        if (st == 0) { g.ratio = r.voiced ? r.ratio : 1.0f; g.formant = r.voiced ? r.formant : 1.0f; g.gain = r.voiced ? r.gain : 1.0f; return g; }
                         const int h = st - 1;
                         g.monoSource = true;
                         if (s.harm[(size_t) h].mode == 0) { g.silent = true; return g; }
@@ -977,7 +1072,7 @@ namespace SqVocal
                     if (anyHarm)
                         for (int h = 0; h < 4; ++h)
                         {
-                            const float v = harmTime (h, psola.readAndClear (h + 1, 0, n), s.harmTimingMs);
+                            const float v = harmTime (h, psola.readAndClear (h + 1, 0, n), s.harmTimingMs) * gateSm;
                             outL += v * hGain[h] * hPanL[h]; outR += v * hGain[h] * hPanR[h];
                         }
                     dryL = psola.input (0).at (n - L); dryR = psola.input (1).at (n - L);
@@ -993,19 +1088,21 @@ namespace SqVocal
                     lead.advance (livePos, rSm, period, L, sr);
                     if (! lastVoiced && std::abs (rSm - 1.0f) < 0.001f) { rSm = 1.0f; lead.recentre (livePos, L, sr); }
                     const float warp = r.voiced ? r.formant : 1.0f;
-                    const bool needLpc = std::abs (warp - rSm) > 0.004f;
+                    // the formant stage runs all the time (its filters stay warm) and is crossfaded in by how far the
+                    // formant has to move from the pitch shift: switching it on and off per sample - as a hard-tuned
+                    // vibrato crosses ratio 1 - restarted the lattices from stale state and burst
+                    const float lpcWant = juce::jlimit (0.0f, 1.0f, (std::abs (warp - rSm) - 0.002f) * 250.0f);
+                    lpcMix += (lpcWant - lpcMix) * lpcK;
                     for (int c = 0; c < 2; ++c)
                     {
                         float y = lead.read (liveIn[c]);
-                        if (needLpc || lpcActive[c])
-                        {
-                            const float z = lpcLead[c].process (liveIn[c], livePos, y, warp);
-                            if (needLpc) y = z;
-                            lpcActive[c] = needLpc;
-                        }
+                        const float z = lpcLead[c].process (liveIn[c], livePos, y, warp);
+                        if (lpcMix > 1.0e-4f) y += lpcMix * (z - y);
                         (c == 0 ? outL : outR) = y;
                     }
                     lead.endSample();
+                    gSm += ((r.voiced ? r.gain : 1.0f) - gSm) * 0.08f;
+                    outL *= gSm; outR *= gSm;
                     if (anyHarm)
                         for (int h = 0; h < 4; ++h)
                         {
@@ -1016,9 +1113,14 @@ namespace SqVocal
                             float v = harmSp[(size_t) h].read (liveMono);
                             harmSp[(size_t) h].endSample();
                             const float hw = r.voiced ? r.hFormant[h] : 1.0f;
-                            if (std::abs (hw - hrSm[h]) > 0.004f) v = lpcHarm[(size_t) h].process (liveMono, livePos, v, hw);
+                            {   // same as the lead: always running, crossfaded (unison doubles sit right at ratio 1)
+                                const float z = lpcHarm[(size_t) h].process (liveMono, livePos, v, hw);
+                                const float want = juce::jlimit (0.0f, 1.0f, (std::abs (hw - hrSm[h]) - 0.002f) * 250.0f);
+                                lpcHMix[h] += (want - lpcHMix[h]) * lpcK;
+                                if (lpcHMix[h] > 1.0e-4f) v += lpcHMix[h] * (z - v);
+                            }
                             if (! on) v = 0; else if (! r.voiced) v *= 0.35f;
-                            v = harmTime (h, v, s.harmTimingMs);
+                            v = harmTime (h, v, s.harmTimingMs) * gateSm;
                             outL += v * hGain[h] * hPanL[h]; outR += v * hGain[h] * hPanR[h];
                         }
                     dryL = liveIn[0].at (livePos - L); dryR = liveIn[1].at (livePos - L);
@@ -1044,11 +1146,10 @@ namespace SqVocal
         Ring liveIn[2], liveMono;
         Splice lead; std::array<Splice, 4> harmSp;
         LpcFormant lpcLead[2]; std::array<LpcFormant, 4> lpcHarm;
-        bool lpcActive[2] { false, false };
         std::array<Ring, 4> harmDelay; int64 hdW = 0;
         std::array<float, 4> timingPhase {};
         int64 livePos = 0;
-        float rSm = 1, hrSm[4] { 1, 1, 1, 1 };
+        float rSm = 1, hrSm[4] { 1, 1, 1, 1 }, gSm = 1, gateSm = 1, gateK = 0.002f, lpcMix = 0, lpcK = 0.004f, lpcHMix[4] {};
         float lastPeriod = 220, lastHz = 0; bool lastVoiced = false;
         struct Stored { int64 pos = 0; FrameResult r; };
         std::vector<Stored> results; int64 resultW = 0;

@@ -123,7 +123,20 @@ juce_add_binary_data (${TARGET_NAME}BinaryData SOURCES
     Resources/plugart/pa_chrysalissf.jpg
     Resources/plugart/pa_mandible.jpg
     Resources/plugart/pa_mandiblelite.jpg
-    Resources/plugart/pa_pollen.jpg)
+    Resources/plugart/pa_pollen.jpg
+    Resources/plugart/pa_cinder.jpg
+    Resources/plugart/pa_wingbeat.jpg
+    Resources/plugart/pa_wingbeatjr.jpg
+    Resources/plugart/pa_foilplate.jpg
+    Resources/plugart/pa_foilplatelite.jpg
+    Resources/plugart/pa_radiant.jpg
+    Resources/plugart/pa_radiantpre.jpg
+    Resources/plugart/pa_maw.jpg
+    Resources/plugart/pa_mawlite.jpg
+    Resources/plugart/pa_mothkey.jpg
+    Resources/plugart/pa_sirencomp.jpg
+    Resources/plugart/pa_sireneq.jpg
+    Resources/plugart/pa_hushdeess2.jpg)
 
 target_sources (${TARGET_NAME} PRIVATE
     Source/Main.cpp)

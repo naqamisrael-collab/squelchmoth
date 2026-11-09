@@ -44,6 +44,7 @@ namespace SignaturePresets
     inline float NOTE (float hz)                    { return 69.0f + 12.0f * std::log2 (hz / 440.0f); }
 
 #include "SignaturePresets111.inl"
+#include "SignaturePresets111v.inl"
 
     inline const std::map<juce::String, std::vector<Preset>>& bank()
     {
@@ -950,6 +951,7 @@ namespace SignaturePresets
             A ("Half Step Down",  { N ("Semitones", -1) }),
             A ("Major Sixth Up",  { N ("Semitones", 9) }) } } };
             add111 (base);
+            add111v (base);   // 1.11 Voice, first wave (Moth Tune 2 presets go in front of the 1.6 ones)
             return base; }();
         return b;
     }

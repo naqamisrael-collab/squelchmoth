@@ -103,6 +103,34 @@
             auto item = [&] (const juce::String& t, juce::Colour c) { auto b = leg.removeFromLeft (75.0f); g.setColour (c); g.fillRoundedRectangle (b.removeFromLeft (10.0f).reduced (0, 3), 2.0f); g.setColour (juce::Colours::white.withAlpha (0.7f)); g.drawText (t, b.withTrimmedLeft (4), juce::Justification::centredLeft); };
             item ("INPUT", juce::Colours::white.withAlpha (0.5f)); item ("TUNED", acc); item ("TARGET", juce::Colours::white.withAlpha (0.7f)); item ("HARMONY", hc[0]);
 
+            // Moth Tune 2 vibrato visualiser: the singer's vibrato depth (filled) and rate (line) over the same time,
+            // with the part dynamic vibrato is acting on brightened
+            {
+                auto vs = ga.reduced (6.0f).removeFromBottom (42.0f);
+                g.setColour (juce::Colours::black.withAlpha (0.45f)); g.fillRoundedRectangle (vs, 4.0f);
+                juce::Path depth, rate, act; bool pr = false;
+                depth.startNewSubPath (vs.getRight() - 4.0f, vs.getBottom());
+                for (int k = 0; k < count; ++k)
+                {
+                    const auto& d = tune->disp[(size_t) ((w - 1 - k) & (SqTunePlugin::dispSize - 1))];
+                    const float x = vs.getRight() - 4.0f - (float) k * dx;
+                    if (x < vs.getX()) break;
+                    const float yd = vs.getBottom() - juce::jlimit (0.0f, 1.0f, d.vibDepth / 120.0f) * (vs.getHeight() - 4.0f);
+                    depth.lineTo (x, yd);
+                    if (d.vibAmt > 0.05f) act.addRectangle (x - dx * 0.5f, yd, dx + 0.5f, vs.getBottom() - yd);
+                    if (d.vibRate > 0 && d.in > 0) { const float yr = vs.getBottom() - juce::jlimit (0.0f, 1.0f, (d.vibRate - 2.0f) / 8.0f) * (vs.getHeight() - 4.0f); if (! pr) { rate.startNewSubPath (x, yr); pr = true; } else rate.lineTo (x, yr); }
+                    else pr = false;
+                }
+                depth.lineTo (juce::jmax (vs.getX(), vs.getRight() - 4.0f - (float) count * dx), vs.getBottom()); depth.closeSubPath();
+                g.setColour (acc.withAlpha (0.22f)); g.fillPath (depth);
+                g.setColour (acc.withAlpha (0.55f)); g.fillPath (act);
+                g.setColour (juce::Colour (0xff3ad1ff).withAlpha (0.8f)); g.strokePath (rate, juce::PathStrokeType (1.2f));
+                g.setColour (juce::Colours::white.withAlpha (0.7f)); g.setFont (Theme::font (8.5f, true));
+                const auto mode = SqTunePlugin::dvModeNames()[juce::jlimit (0, 3, tune->dvMode.get())];
+                g.drawText ("VIBRATO  " + juce::String (tune->liveVibRate.load(), 1) + " Hz  " + juce::String (juce::roundToInt (tune->liveVibDepth.load())) + " ct"
+                            + (tune->dvMode.get() > 0 ? "   DYNAMIC " + mode : juce::String()), vs.reduced (6.0f, 2.0f), juce::Justification::topLeft);
+            }
+
             // readout
             auto ra = readoutArea();
             g.setGradientFill (juce::ColourGradient (acc.darker (1.6f).withAlpha (0.9f), ra.getX(), ra.getY(), juce::Colour (0xff120a1e).withAlpha (0.92f), ra.getRight(), ra.getBottom(), false));

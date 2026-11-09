@@ -1508,13 +1508,14 @@ namespace Skins
     #include "SkinsApex.inl"
     #include "SkinsColour.inl"
     #include "SkinsColor111.inl"
+    #include "SkinsVoice111.inl"
     #include "SkinsSynths.inl"
     #include "SkinsSynths2.inl"
     #include "SkinsFx181.inl"
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -1735,18 +1736,19 @@ namespace Skins
                                                          G ("LAYER", { "Layer Mode" }) }; }
         else if (name == "Hive Pads")     { s.family = Family::hivepads; s.knob = KnobStyle::chicken; s.width = 1240; s.height = 820; s.vizH = 560;
                                             s.groups = { G ("MASTER", { "Level", "Tune", "Velocity" }, true), G ("ALL PADS", { "Attack", "Decay", "Cutoff", "Resonance" }) }; }
-        else if (name == "Moth Tune")     { s.family = Family::tune; s.knob = KnobStyle::ring; s.width = 1280; s.height = 880; s.vizH = 330; s.rowSplit = 5;
+        else if (name == "Moth Tune")     { s.family = Family::tune; s.knob = KnobStyle::ring; s.width = 1400; s.height = 960; s.vizH = 340; s.rowSplit = 5;
                                             s.groups = { G ("CORRECTION", { "Retune Speed", "Humanize", "Flex Tune", "Correction" }, true),
                                                          G ("VIBRATO", { "Vibrato Keep", "Natural Vibrato" }, true),
-                                                         G ("ENGINE", { "Engine", "Character", "Voice Type", "Tracking" }),
+                                                         G ("ENGINE", { "Engine", "Character", "Voice Type", "Auto Range", "Tracking" }),
                                                          G ("KEY & SCALE", { "Key", "Scale", "Auto-Key", "Learn Scale", "Detect Key" }),
-                                                         G ("PITCH & FORMANT", { "Transpose", "Conform", "Detune", "Formant", "Throat", "Formant Preserve" }),
-                                                         G ("CREATE VIBRATO", { "Vibrato Shape", "Vibrato Rate", "Vibrato Depth", "Vibrato Delay", "Vibrato Onset", "Vibrato Variation" }, false, 3),
+                                                         G ("PITCH & FORMANT", { "Transpose", "Conform", "Detune", "Formant", "Formant Link", "Throat", "Formant Preserve" }),
+                                                         G ("DYNAMIC VIBRATO", { "Dynamic Vibrato", "Vibrato Threshold", "Vibrato Detect Delay", "Vibrato Attack", "Vibrato Irregularity", "Pitch Depth", "Amplitude Depth", "Timbre Depth" }, false, 4),
+                                                         G ("CREATE VIBRATO", { "Vibrato Shape", "Vibrato Rate", "Vibrato Depth", "Vibrato Delay", "Vibrato Onset", "Vibrato Variation", "Straight Notes Only" }, false, 4),
                                                          G ("HARMONY VOICES", { "Voice 1 Mode", "Voice 1 Interval", "Voice 1 Level", "Voice 1 Pan", "Voice 1 Formant",
                                                                                 "Voice 2 Mode", "Voice 2 Interval", "Voice 2 Level", "Voice 2 Pan", "Voice 2 Formant",
                                                                                 "Voice 3 Mode", "Voice 3 Interval", "Voice 3 Level", "Voice 3 Pan", "Voice 3 Formant",
                                                                                 "Voice 4 Mode", "Voice 4 Interval", "Voice 4 Level", "Voice 4 Pan", "Voice 4 Formant" }, false, 5),
-                                                         G ("HARMONY FEEL", { "Harmony Detune", "Harmony Timing" }, false, 1),
+                                                         G ("HARMONY FEEL", { "Harmony Detune", "Harmony Timing", "Harmony Trigger", "Harmony CC", "Harmony Latch" }, false, 2),
                                                          G ("MIDI & GRAPH", { "MIDI Targets", "MIDI Track", "Lead Follows MIDI", "All Octaves", "Graph Notes", "Graph Mode" }, false, 2),
                                                          G ("OUTPUT", { "Mix", "Output" }, true, 1) }; }
         else if (name == "Moth Tune FX")  { s.family = Family::tunefx; s.knob = KnobStyle::ring; s.width = 1240; s.height = 870; s.vizH = 480;
@@ -1818,6 +1820,28 @@ namespace Skins
                                                          G ("OUT", { "Mix", "Output", "Key Input", "Key HPF" }, false, 2) }; }
         else if (name == "Maw Lite")      { s.family = Family::maw; s.knob = KnobStyle::chicken; s.width = 760; s.height = 520; s.vizH = 200;
                                             s.groups = { G ("CRUSH", { "Crush", "Crunch", "Output" }, true, 3) }; }
+        else if (name == "Moth Key")      { s.family = Family::mothkey; s.knob = KnobStyle::ring; s.width = 1080; s.height = 560; s.vizH = 300;
+                                            s.groups = { G ("LISTEN", { "Listen", "Listen Length", "Clear" }, true, 3), G ("ANALYSE", { "Analyse", "Auto Apply", "Set Tempo", "Apply to Session" }, false, 4) }; }
+        else if (name == "Siren Comp")    { s.family = Family::sirencomp; s.knob = KnobStyle::vintage; s.width = 1320; s.height = 820; s.vizH = 250; s.rowSplit = 3; s.row1Share = 0.5f;
+                                            s.groups = { G ("STAGE 1", { "Model 1", "FET 1", "Threshold 1", "Attack 1", "Release 1", "Ratio 1", "Knee" }, true, 4),
+                                                         G ("STAGE 2", { "Dual", "Model 2", "FET 2", "Threshold 2", "Attack 2", "Release 2", "Ratio 2" }, false, 4),
+                                                         G ("OUTPUT", { "Warm", "Mix", "Make-Up", "Auto Make-Up", "Output" }, false, 3),
+                                                         G ("PUNCH", { "Punch", "Punch Gain", "Impact", "Ceiling" }, false, 4),
+                                                         G ("PITCH DUCK", { "Key Input", "Duck Depth" }, false, 2),
+                                                         G ("ASSIST", { "Learn", "Amount", "Preview", "Apply" }, false, 4) }; }
+        else if (name == "Siren EQ")      { s.family = Family::sireneq; s.knob = KnobStyle::ring; s.width = 1560; s.height = 900; s.vizH = 250; s.rowSplit = 3; s.row1Share = 0.45f;
+                                            s.groups = { G ("BAND 1", { "B1 On", "B1 Type", "B1 Mode", "B1 Harmonic", "Band 1 Freq", "Band 1 Gain", "Band 1 Q", "Band 1 Threshold", "Band 1 Range", "B1 Expand", "B1 Solo", "B1 Mute" }, false, 6),
+                                                         G ("BAND 2", { "B2 On", "B2 Type", "B2 Mode", "B2 Harmonic", "Band 2 Freq", "Band 2 Gain", "Band 2 Q", "Band 2 Threshold", "Band 2 Range", "B2 Expand", "B2 Solo", "B2 Mute" }, false, 6),
+                                                         G ("BAND 3", { "B3 On", "B3 Type", "B3 Mode", "B3 Harmonic", "Band 3 Freq", "Band 3 Gain", "Band 3 Q", "Band 3 Threshold", "Band 3 Range", "B3 Expand", "B3 Solo", "B3 Mute" }, false, 6),
+                                                         G ("BAND 4", { "B4 On", "B4 Type", "B4 Mode", "B4 Harmonic", "Band 4 Freq", "Band 4 Gain", "Band 4 Q", "Band 4 Threshold", "Band 4 Range", "B4 Expand", "B4 Solo", "B4 Mute" }, false, 6),
+                                                         G ("BAND 5", { "B5 On", "B5 Type", "B5 Mode", "B5 Harmonic", "Band 5 Freq", "Band 5 Gain", "Band 5 Q", "Band 5 Threshold", "Band 5 Range", "B5 Expand", "B5 Solo", "B5 Mute" }, false, 6),
+                                                         G ("BAND 6", { "B6 On", "B6 Type", "B6 Mode", "B6 Harmonic", "Band 6 Freq", "Band 6 Gain", "Band 6 Q", "Band 6 Threshold", "Band 6 Range", "B6 Expand", "B6 Solo", "B6 Mute" }, false, 6),
+                                                         G ("FILTERS", { "Low Cut", "Low Slope", "High Cut", "High Slope" }, false, 2), G ("AIR & TILT", { "Air Freq", "Air", "Tilt", "Output" }, false, 2),
+                                                         G ("VOCAL LEARNING", { "Learn", "Preview", "Apply" }, false, 3) }; }
+        else if (name == "Hush De-Ess 2") { s.family = Family::hushdeess2; s.knob = KnobStyle::slim; s.width = 1080; s.height = 640; s.vizH = 250;
+                                            s.groups = { G ("DETECT", { "Split", "Sensitivity" }, true, 2), G ("HARD  T K CH", { "Hard Threshold", "Hard Range" }, true, 2),
+                                                         G ("SOFT  S SH Z", { "Soft Threshold", "Soft Range" }, true, 2),
+                                                         G ("LISTEN", { "Link", "Solo", "Output" }, false, 3), G ("ASSIST", { "Learn", "Preview", "Apply" }, false, 3) }; }
         else if (name == "Silk Ladder")   { s.family = Family::ladder; s.knob = KnobStyle::chicken; s.width = 940; s.height = 580; s.vizH = 220;
                                             s.groups = { G ("FILTER", { "Cutoff", "Resonance" }, true, 2), G ("ENVELOPE", { "Env Amount", "Fast Envelope" }, false, 1), G ("DRIVE", { "Poles", "Drive" }, false, 1), G ("OUTPUT", { "Output", "Mix" }, false, 1) }; }
         else if (name == "Halo Ring")     { s.family = Family::ring; s.knob = KnobStyle::chicken; s.width = 900; s.height = 560; s.vizH = 220;
@@ -2115,6 +2139,19 @@ namespace Skins
                 for (int i = 0; i < 4; ++i) ci (("Voice " + juce::String (i + 1) + " Mode").toRawUTF8(), SqTunePlugin::harmModeNames(), tu->harmMode[(size_t) i]);
                 tb ("Formant Preserve", tu->preserve); tb ("Conform", tu->conform); tb ("Auto-Key", tu->autoKey); tb ("Learn Scale", tu->learnScale);
                 tb ("All Octaves", tu->allOctaves); tb ("Graph Notes", tu->graphOn); tb ("Lead Follows MIDI", tu->midiLead);
+                // Moth Tune 2
+                ci ("Dynamic Vibrato", SqTunePlugin::dvModeNames(), tu->dvMode);
+                ci ("Harmony Trigger", SqTunePlugin::triggerNames(), tu->harmTrigger);
+                { juce::StringArray ccs; for (int c = 0; c < 128; ++c) ccs.add ("CC " + juce::String (c)); ci ("Harmony CC", ccs, tu->harmCC); }
+                tb ("Harmony Latch", tu->harmLatch); tb ("Formant Link", tu->formantLink); tb ("Auto Range", tu->autoRange); tb ("Straight Notes Only", tu->vibFxStraight);
+                {
+                    const std::pair<const char*, const char*> shortNames[] { { "Vibrato Threshold", "Threshold" }, { "Vibrato Detect Delay", "Detect" }, { "Vibrato Attack", "Attack" },
+                        { "Vibrato Irregularity", "Irregular" }, { "Pitch Depth", "Pitch" }, { "Amplitude Depth", "Amplitude" }, { "Timbre Depth", "Timbre" }, { "Dynamic Vibrato", "Mode" },
+                        { "Harmony Trigger", "Trigger" }, { "Harmony CC", "CC" }, { "Harmony Latch", "Latch" }, { "Straight Notes Only", "Straight Only" },
+                        { "Vibrato Shape", "Shape" }, { "Vibrato Rate", "Rate" }, { "Vibrato Depth", "Depth" }, { "Vibrato Delay", "Delay" }, { "Vibrato Onset", "Onset" }, { "Vibrato Variation", "Variation" },
+                        { "Harmony Detune", "Detune" }, { "Harmony Timing", "Timing" } };
+                    for (auto& hs : handleStore) for (auto& sn : shortNames) if (hs->name == sn.first) hs->label = sn.second;
+                }
                 // MIDI track: every track that holds MIDI clips
                 juce::StringArray tracks { "(none)" };
                 for (auto t : te::getAudioTracks (plugin.edit))
@@ -2277,6 +2314,70 @@ namespace Skins
                 auto um = &plugin.edit.getUndoManager();
                 add (toggle ("Bias", [rpr] { return rpr->bias.get(); }, [rpr, um] (bool b) { rpr->bias.setValue (b, um); }));
                 add (toggle ("Noisy", [rpr] { return rpr->noisy.get(); }, [rpr, um] (bool b) { rpr->noisy.setValue (b, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output") hs->bipolar = true;
+            }
+            else if (auto mk = dynamic_cast<SqMothKeyPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (toggle ("Listen", [mk] { return mk->listen.get(); }, [mk, um] (bool b) { mk->listen.setValue (b, um); }));
+                add (toggle ("Clear", [] { return false; }, [mk] (bool) { mk->clearListening(); }));
+                add (toggle ("Analyse", [mk] { return mk->isAnalysing(); }, [mk] (bool) { mk->analyseHeard(); }));
+                add (toggle ("Auto Apply", [mk] { return mk->autoApply.get(); }, [mk, um] (bool b) { mk->autoApply.setValue (b, um); }));
+                add (toggle ("Set Tempo", [mk] { return mk->applyTempo.get(); }, [mk, um] (bool b) { mk->applyTempo.setValue (b, um); }));
+                add (toggle ("Apply to Session", [] { return false; }, [mk, um] (bool) { um->beginNewTransaction ("Moth Key: apply"); mk->applyToSession(); }));
+            }
+            else if (auto scp = dynamic_cast<SqSirenCompPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Model 1", SqSirenCompPlugin::modelNames(), [scp] { return scp->model1.get(); }, [scp, um] (int i) { scp->model1.setValue (i, um); }));
+                add (choice ("Model 2", SqSirenCompPlugin::modelNames(), [scp] { return scp->model2.get(); }, [scp, um] (int i) { scp->model2.setValue (i, um); }));
+                add (choice ("FET 1", SqSirenCompPlugin::fetNames(), [scp] { return scp->fet1.get(); }, [scp, um] (int i) { scp->fet1.setValue (i, um); }));
+                add (choice ("FET 2", SqSirenCompPlugin::fetNames(), [scp] { return scp->fet2.get(); }, [scp, um] (int i) { scp->fet2.setValue (i, um); }));
+                add (toggle ("Dual", [scp] { return scp->dual.get(); }, [scp, um] (bool b) { scp->dual.setValue (b, um); }));
+                add (toggle ("Auto Make-Up", [scp] { return scp->autoMakeup.get(); }, [scp, um] (bool b) { scp->autoMakeup.setValue (b, um); }));
+                add (toggle ("Punch", [scp] { return scp->punch.get(); }, [scp, um] (bool b) { scp->punch.setValue (b, um); }));
+                add (toggle ("Key Input", [scp] { return scp->keyOn.get(); }, [scp, um] (bool b) { scp->keyOn.setValue (b, um); }));
+                add (toggle ("Learn", [scp] { return scp->learning.load(); }, [scp] (bool b) { if (b) scp->startLearning(); else { scp->stopLearning(); scp->makeSuggestion (scp->amount.get()); scp->preview.setValue (true, nullptr); } }));
+                add (choice ("Amount", SqSirenCompPlugin::amountNames(), [scp] { return scp->amount.get(); }, [scp] (int i) { scp->makeSuggestion (i); }));
+                add (toggle ("Preview", [scp] { return scp->preview.get(); }, [scp] (bool b) { scp->preview.setValue (b && scp->hasSuggestion(), nullptr); }));
+                add (toggle ("Apply", [] { return false; }, [scp, um] (bool) { um->beginNewTransaction ("Siren Comp: apply Assist"); scp->applySuggestion(); }));
+                for (auto& hs : handleStore) if (hs->name == "Make-Up" || hs->name == "Output") hs->bipolar = true;
+            }
+            else if (auto seq = dynamic_cast<SqSirenEqPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                juce::StringArray harmN; for (int hN = 1; hN <= 16; ++hN) harmN.add ("H" + juce::String (hN));
+                for (int b = 0; b < 6; ++b)
+                {
+                    const auto pre = "B" + juce::String (b + 1) + " ";
+                    add (toggle (pre + "On", [seq, b] { return seq->on[(size_t) b].get(); }, [seq, um, b] (bool v) { seq->on[(size_t) b].setValue (v, um); }));
+                    add (choice (pre + "Type", SqSirenEqPlugin::typeNames(), [seq, b] { return seq->type[(size_t) b].get(); }, [seq, um, b] (int i) { seq->type[(size_t) b].setValue (i, um); }));
+                    add (choice (pre + "Mode", SqSirenEqPlugin::modeNames(), [seq, b] { return seq->mode[(size_t) b].get(); }, [seq, um, b] (int i) { seq->mode[(size_t) b].setValue (i, um); }));
+                    add (choice (pre + "Harmonic", harmN, [seq, b] { return seq->harm[(size_t) b].get() - 1; }, [seq, um, b] (int i) { seq->harm[(size_t) b].setValue (i + 1, um); }));
+                    add (toggle (pre + "Expand", [seq, b] { return seq->expand[(size_t) b].get(); }, [seq, um, b] (bool v) { seq->expand[(size_t) b].setValue (v, um); }));
+                    add (toggle (pre + "Solo", [seq, b] { return seq->solo[(size_t) b].get(); }, [seq, b] (bool v) { seq->solo[(size_t) b].setValue (v, nullptr); }));
+                    add (toggle (pre + "Mute", [seq, b] { return seq->mute[(size_t) b].get(); }, [seq, um, b] (bool v) { seq->mute[(size_t) b].setValue (v, um); }));
+                }
+                add (choice ("Low Slope", SqSirenEqPlugin::slopeNames(), [seq] { return seq->hpSlope.get(); }, [seq, um] (int i) { seq->hpSlope.setValue (i, um); }));
+                add (choice ("High Slope", SqSirenEqPlugin::slopeNames(), [seq] { return seq->lpSlope.get(); }, [seq, um] (int i) { seq->lpSlope.setValue (i, um); }));
+                add (toggle ("Learn", [seq] { return seq->learning.load(); }, [seq] (bool b) { if (b) seq->startLearning(); else { seq->finishLearning(); if (seq->hasSuggestion()) seq->preview.setValue (true, nullptr); } }));
+                add (toggle ("Preview", [seq] { return seq->preview.get(); }, [seq] (bool b) { seq->preview.setValue (b && seq->hasSuggestion(), nullptr); }));
+                add (toggle ("Apply", [] { return false; }, [seq, um] (bool) { um->beginNewTransaction ("Siren EQ: apply Vocal Learning"); seq->applySuggestion(); }));
+                for (auto& hs : handleStore)
+                {
+                    if (hs->name.startsWith ("Band ")) hs->label = hs->name.fromFirstOccurrenceOf (" ", false, false).fromFirstOccurrenceOf (" ", false, false);
+                    else if (hs->name.length() > 3 && hs->name[0] == 'B' && hs->name[1] >= '1' && hs->name[1] <= '6' && hs->name[2] == ' ') hs->label = hs->name.substring (3);
+                    if (hs->name.endsWith ("Gain") || hs->name == "Air" || hs->name == "Tilt" || hs->name == "Output") hs->bipolar = true;
+                }
+            }
+            else if (auto hd = dynamic_cast<SqHushDeEss2Plugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (toggle ("Link", [hd] { return hd->link.get(); }, [hd, um] (bool b) { hd->link.setValue (b, um); }));
+                add (toggle ("Solo", [hd] { return hd->solo.get(); }, [hd] (bool b) { hd->solo.setValue (b, nullptr); }));
+                add (toggle ("Learn", [hd] { return hd->learning.load(); }, [hd] (bool b) { if (b) hd->startLearning(); else { hd->finishLearning(); hd->preview.setValue (true, nullptr); } }));
+                add (toggle ("Preview", [hd] { return hd->preview.get(); }, [hd] (bool b) { hd->preview.setValue (b && hd->hasSuggestion(), nullptr); }));
+                add (toggle ("Apply", [] { return false; }, [hd, um] (bool) { um->beginNewTransaction ("Hush: apply Assist"); hd->applySuggestion(); }));
                 for (auto& hs : handleStore) if (hs->name == "Output") hs->bipolar = true;
             }
             else if (auto mwp = dynamic_cast<SqMawPlugin*> (&plugin))
@@ -2492,6 +2593,10 @@ namespace Skins
                 case Family::foilplate: viz = std::make_unique<FoilPlateViz> (handles, plugin, accent); break;
                 case Family::radiant:   viz = std::make_unique<RadiantViz> (handles, plugin, accent); break;
                 case Family::maw:       viz = std::make_unique<MawViz> (handles, plugin, accent); break;
+                case Family::mothkey:   viz = std::make_unique<MothKeyViz> (handles, plugin, accent); break;
+                case Family::sirencomp: viz = std::make_unique<SirenCompViz> (handles, plugin, accent); break;
+                case Family::sireneq:   viz = std::make_unique<SirenEqViz> (handles, plugin, accent); break;
+                case Family::hushdeess2: viz = std::make_unique<HushViz> (handles, plugin, accent); break;
                 case Family::ring:      viz = std::make_unique<RingViz> (handles, plugin, accent); break;
                 case Family::phase12:   viz = std::make_unique<Phase12Viz> (handles, plugin, accent); break;
                 case Family::bbd:       viz = std::make_unique<BucketViz> (handles, plugin, accent); break;

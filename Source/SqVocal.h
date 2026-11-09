@@ -26,7 +26,9 @@ public:
              vibRate, vibDepth, vibDelay, vibOnset, vibVar,
              h1Level, h1Pan, h1Interval, h1Formant, h2Level, h2Pan, h2Interval, h2Formant,
              h3Level, h3Pan, h3Interval, h3Formant, h4Level, h4Pan, h4Interval, h4Formant,
-             harmDetune, harmTiming, numParams };
+             harmDetune, harmTiming,
+             // Moth Tune 2 (appended: older sessions keep their parameter ids)
+             dvThreshold, dvDelay, dvAttack, dvVariation, dvPitch, dvAmp, dvTimbre, numParams };
 
     static const std::vector<SqDsp::ParamSpec>& paramSpecs()
     {
@@ -63,6 +65,13 @@ public:
         }
         specs.push_back ({ "harmDetune", "Harmony Detune", 0.0f, 30.0f, 6.0f, 1.0f, " ct", 0 });
         specs.push_back ({ "harmTiming", "Harmony Timing", 0.0f, 40.0f, 12.0f, 1.0f, " ms", 0 });
+        specs.push_back ({ "dvThreshold", "Vibrato Threshold", 2.0f, 100.0f, 15.0f, 0.6f, " ct", 0 });
+        specs.push_back ({ "dvDelay",     "Vibrato Detect Delay", 0.0f, 1.0f, 0.1f, 0.6f, " s", 2 });
+        specs.push_back ({ "dvAttack",    "Vibrato Attack", 0.0f, 1.0f, 0.15f, 0.6f, " s", 2 });
+        specs.push_back ({ "dvVariation", "Vibrato Irregularity", 0.0f, 100.0f, 0.0f, 1.0f, " %", 0 });
+        specs.push_back ({ "dvPitch",     "Pitch Depth", 0.0f, 100.0f, 100.0f, 1.0f, " %", 0 });
+        specs.push_back ({ "dvAmp",       "Amplitude Depth", 0.0f, 100.0f, 0.0f, 1.0f, " %", 0 });
+        specs.push_back ({ "dvTimbre",    "Timbre Depth", 0.0f, 100.0f, 0.0f, 1.0f, " %", 0 });
             return specs;
         }();
         return specs;
@@ -92,6 +101,8 @@ public:
         learnScale.referTo (state, "learnScale", um, false);
         graphOn.referTo (state, "graphOn", um, true);
         for (int i = 0; i < 4; ++i) harmMode[(size_t) i].referTo (state, juce::Identifier ("harmMode" + juce::String (i + 1)), um, 0);
+        dvMode.referTo (state, "dvMode", um, 0); vibFxStraight.referTo (state, "vibFxStraight", um, false); formantLink.referTo (state, "formantLink", um, false);
+        autoRange.referTo (state, "autoRange", um, false); harmTrigger.referTo (state, "harmTrigger", um, 0); harmCC.referTo (state, "harmCC", um, 64); harmLatch.referTo (state, "harmLatch", um, false);
         startTimerHz (5);
         rebuildGraph();
     }
@@ -119,6 +130,8 @@ public:
     static juce::StringArray harmModeNames()   { return { "OFF", "INTERVAL", "SCALE", "MIDI" }; }
     static juce::StringArray vibShapeNames()   { return { "SINE", "TRI", "SQUARE", "SAW" }; }
     static juce::StringArray midiModeNames()   { return { "OFF", "THIS TRACK", "NAMED TRACK" }; }
+    static juce::StringArray dvModeNames()     { return { "OFF", "PRESERVE", "CUT", "BOOST" }; }
+    static juce::StringArray triggerNames()    { return { "ALWAYS", "MIDI NOTE", "MIDI CC" }; }
 
     static int latencyFor (int eng, int vt, double sr)   { return SqVocal::TuneProcessor::latencyFor (eng, vt, sr); }
 
@@ -127,6 +140,7 @@ public:
     juce::CachedValue<int> engine, character, voiceType, keyRoot, scaleIndex, customMask, removeMask, bypassMask, midiMode, vibShape;
     juce::CachedValue<juce::String> midiTrack;
     juce::CachedValue<bool> allOctaves, preserve, conform, autoKey, learnScale, graphOn, midiLead;
+    juce::CachedValue<int> dvMode, harmTrigger, harmCC; juce::CachedValue<bool> vibFxStraight, formantLink, autoRange, harmLatch;
 
     SqDsp::ParamBank& getBank() override   { return bank; }
     void resetProps (juce::UndoManager* um) override
@@ -135,6 +149,7 @@ public:
         midiMode.setValue (0, um); midiLead.setValue (true, um); allOctaves.setValue (true, um); preserve.setValue (true, um); conform.setValue (false, um);
         vibShape.setValue (0, um); learnScale.setValue (false, um);
         for (auto& h : harmMode) h.setValue (0, um);
+        dvMode.setValue (0, um); vibFxStraight.setValue (false, um); formantLink.setValue (false, um); harmTrigger.setValue (0, um); harmCC.setValue (64, um); harmLatch.setValue (false, um);
     }
     std::array<juce::CachedValue<int>, 4> harmMode;
 
@@ -148,12 +163,38 @@ public:
 
     //==========================================================================
     // Display data for the editor (written on the audio thread, read by the UI)
-    struct Disp { float in = -1, out = -1, target = -1; float h[4] { -1, -1, -1, -1 }; float corr = 0; };
+    struct Disp { float in = -1, out = -1, target = -1; float h[4] { -1, -1, -1, -1 }; float corr = 0; float vibRate = 0, vibDepth = 0, vibAmt = 0; };
     static constexpr int dispSize = 1024;
     std::array<Disp, dispSize> disp {};
     std::atomic<int> dispWrite { 0 };
     std::atomic<float> liveIn { -1 }, liveOut { -1 }, liveTarget { -1 }, liveCents { 0 }, liveLevel { 0 };
     std::atomic<int> heldMaskUi { 0 };
+    std::atomic<float> liveVibRate { 0 }, liveVibDepth { 0 }, liveVibAmount { 0 };
+    std::atomic<bool> harmGateOpen { true };
+
+    //==========================================================================
+    // Auto Range Detect: the voice's range from what it actually sings (5th / 95th percentile of voiced frames)
+    std::array<std::atomic<int>, 96> rangeHist {};   // MIDI notes 24..119
+    std::atomic<int> rangeCount { 0 };
+    void clearRange()   { for (auto& h : rangeHist) h = 0; rangeCount = 0; }
+    bool detectedRange (float& loNote, float& hiNote) const
+    {
+        const int n = rangeCount.load(); if (n < 150) return false;
+        int acc = 0; loNote = hiNote = -1;
+        for (int i = 0; i < 96; ++i) { acc += rangeHist[(size_t) i].load(); if (loNote < 0 && acc >= n * 0.05) loNote = (float) (i + 24); if (acc >= n * 0.95) { hiNote = (float) (i + 24); break; } }
+        return loNote > 0 && hiNote > 0;
+    }
+    /** Voice type for the detected range: Soprano / Alto-Tenor / Low Male (Baritone-Bass) / Bass Instrument. */
+    int suggestedVoiceType() const
+    {
+        float lo, hi; if (! detectedRange (lo, hi)) return -1;
+        const float loHz = SqVocal::noteToHz (lo), hiHz = SqVocal::noteToHz (hi);
+        if (hiHz > 1100.0f) return 3;              // instrument range
+        if (loHz >= 165.0f) return 0;
+        if (loHz >= 98.0f) return 1;
+        if (loHz >= 62.0f) return 2;
+        return 4;
+    }
 
     //==========================================================================
     // Graph notes (Graph mode). Stored in the plugin state, published to the audio thread as a snapshot.
@@ -227,16 +268,27 @@ public:
             if (l.isLocked()) { gnotes = graphSnap; tnotes = trackSnap; }
         }
         // MIDI from this track
+        const int trig = harmTrigger.get(); const bool latch = harmLatch.get();
         if (fc.bufferForMidiMessages != nullptr)
         {
             if (fc.bufferForMidiMessages->isAllNotesOff) heldIn.fill (false);
             for (auto& m : *fc.bufferForMidiMessages)
             {
-                if (m.isNoteOn()) { heldIn[(size_t) m.getNoteNumber()] = true; if (learnScale.get()) learnedMask |= 1 << (m.getNoteNumber() % 12); }
+                if (m.isNoteOn()) { heldIn[(size_t) m.getNoteNumber()] = true; if (learnScale.get()) learnedMask |= 1 << (m.getNoteNumber() % 12); if (trig == 1 && latch) latched = ! latched; }
                 else if (m.isNoteOff()) heldIn[(size_t) m.getNoteNumber()] = false;
                 else if (m.isAllNotesOff() || m.isAllSoundOff()) heldIn.fill (false);
+                else if (m.isController() && m.getControllerNumber() == juce::jlimit (0, 127, harmCC.get()))
+                {
+                    const bool high = m.getControllerValue() >= 64;
+                    if (latch) { if (high && ! ccHigh) latched = ! latched; } else ccOpen = high;
+                    ccHigh = high;
+                }
             }
         }
+        bool gate = true;
+        if (trig == 1) { bool any = false; for (bool h : heldIn) any = any || h; gate = latch ? latched : any; }
+        else if (trig == 2) gate = latch ? latched : ccOpen;
+        harmGateOpen = gate;
         SqVocal::TuneProcessor::Context ctx;
         ctx.editStart = fc.editTime.getStart().inSeconds() + inputTimeOffset.load();
         ctx.playing = fc.isPlaying;
@@ -247,7 +299,8 @@ public:
 
         float* io[2] = { buf.getWritePointer (0, fc.bufferStartSample), buf.getWritePointer (nch > 1 ? 1 : 0, fc.bufferStartSample) };
         liveLevel = buf.getMagnitude (fc.bufferStartSample, fc.bufferNumSamples);
-        proc.process (io, nch, fc.bufferNumSamples, gatherSettings(), ctx);
+        auto st = gatherSettings(); st.harmGate = gate ? 1.0f : 0.0f;
+        proc.process (io, nch, fc.bufferNumSamples, st, ctx);
     }
 
     /** The settings the audio thread uses (also used by Claude to report what Moth Tune is doing). */
@@ -274,6 +327,10 @@ public:
             h.formantSt = bank[(size_t) (h1Formant + i * 4)];
         }
         s.harmDetune = bank[harmDetune]; s.harmTimingMs = bank[harmTiming];
+        s.dvMode = juce::jlimit (0, 3, dvMode.get()); s.dvThresholdCents = bank[dvThreshold]; s.dvDelay = bank[dvDelay]; s.dvAttack = bank[dvAttack];
+        s.dvVariation = bank[dvVariation] / 100.0f; s.dvPitch = bank[dvPitch] / 100.0f; s.dvAmp = bank[dvAmp] / 100.0f; s.dvTimbre = bank[dvTimbre] / 100.0f;
+        s.vibFxStraightOnly = vibFxStraight.get();
+        if (formantLink.get()) s.formantSt = juce::jlimit (-12.0f, 12.0f, s.transpose);   // Formant Designer: formant follows transpose
         return s;
     }
 
@@ -282,6 +339,7 @@ private:
     SqVocal::TuneProcessor proc;
     std::array<bool, 128> heldIn {};
     int learnedMask = 0;
+    bool latched = false, ccOpen = false, ccHigh = false;
     juce::SpinLock snapLock;
     std::shared_ptr<const std::vector<SqVocal::GraphNote>> graphSnap;
     std::shared_ptr<const std::vector<SqVocal::TimedNote>> trackSnap;
@@ -292,6 +350,9 @@ private:
         if ((++dispDecim & 3) != 0) return;   // ~115 points per second
         Disp d;
         d.in = r.voiced ? r.inNote : -1; d.out = r.voiced ? r.outNote : -1; d.target = r.voiced ? r.target : -1; d.corr = r.corrCents;
+        d.vibRate = r.voiced ? r.vibRateHz : 0; d.vibDepth = r.voiced ? r.vibDepthCents : 0; d.vibAmt = r.voiced ? r.vibAmount : 0;
+        liveVibRate = d.vibRate; liveVibDepth = d.vibDepth; liveVibAmount = d.vibAmt;
+        if (r.voiced && r.inNote > 24 && r.inNote < 120) { rangeHist[(size_t) juce::jlimit (0, 95, juce::roundToInt (r.inNote) - 24)]++; rangeCount++; }
         for (int i = 0; i < 4; ++i) d.h[i] = r.voiced && r.hOn[i] ? r.hNote[i] : -1;
         const int w = dispWrite.load();
         disp[(size_t) (w & (dispSize - 1))] = d;
@@ -313,12 +374,29 @@ private:
             auto es = edit.state;
             if (es.hasProperty ("sqmKeyRoot"))
             {
-                const int r = (int) es["sqmKeyRoot"], sc = (int) es.getProperty ("sqmKeyScale", 1);
+                int r = (int) es["sqmKeyRoot"], sc = (int) es.getProperty ("sqmKeyScale", 1);
+                // Moth Key's key changes over time: follow the key in force at the playhead
+                const auto map = es.getProperty ("sqmKeyMap").toString();
+                if (map.isNotEmpty())
+                {
+                    const double t = edit.getTransport().getPosition().inSeconds();
+                    for (auto& e : juce::StringArray::fromTokens (map, ";", ""))
+                    {
+                        auto p = juce::StringArray::fromTokens (e, ":", ""); if (p.size() < 3) continue;
+                        if (p[0].getDoubleValue() <= t + 1e-6) { r = p[1].getIntValue(); sc = p[2].getIntValue() ? 2 : 1; }
+                    }
+                }
                 if (keyRoot.get() != r) keyRoot.setValue (r, nullptr);
                 if (scaleIndex.get() != sc) scaleIndex.setValue (sc, nullptr);
             }
         }
         if (midiMode.get() == 2) rebuildTrackSnap();
+        // Auto Range Detect: switch the voice type to the detected range (only while stopped - it changes the latency)
+        if (autoRange.get() && ! edit.getTransport().isPlaying())
+        {
+            const int v = suggestedVoiceType();
+            if (v >= 0 && v != voiceType.get()) voiceType.setValue (v, nullptr);
+        }
     }
     void rebuildTrackSnap()
     {

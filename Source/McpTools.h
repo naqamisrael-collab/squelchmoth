@@ -411,12 +411,14 @@ private:
         registerRackTools();
         register181Tools();
         register110Tools();
+        registerVoice111Tools();
     }
 
     #include "McpToolsParity.h"
     #include "McpToolsBeat.h"
     #include "McpToolsVocal.h"
     #include "McpToolsApex.h"
+    #include "McpToolsVoice111.h"
     #include "McpToolsMastering.h"
     #include "McpToolsTracks.h"
     #include "McpTools17.h"

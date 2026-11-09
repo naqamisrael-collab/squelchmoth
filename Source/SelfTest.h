@@ -10,7 +10,7 @@
 #include "SqEngine111.h"
 
 /** Set by Main for "--preset-audit [report.md]": the self-test sets up the engine, runs the audit and returns. */
-struct SelfTestMode { static inline bool presetAuditOnly = false; static inline juce::String reportPath; static inline juce::StringArray only; };
+struct SelfTestMode { static inline bool presetAuditOnly = false, renderFaces = false; static inline juce::String reportPath, facesDir; static inline juce::StringArray only; };
 
 inline int runSelfTest()
 {
@@ -47,6 +47,10 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqRadiantPrePlugin>();
     engine->getPluginManager().createBuiltInType<SqMawPlugin>();
     engine->getPluginManager().createBuiltInType<SqMawLitePlugin>();
+    engine->getPluginManager().createBuiltInType<SqMothKeyPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSirenCompPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSirenEqPlugin>();
+    engine->getPluginManager().createBuiltInType<SqHushDeEss2Plugin>();
     engine->getPluginManager().createBuiltInType<SqRingPlugin>();
     engine->getPluginManager().createBuiltInType<SqPhase12Plugin>();
     engine->getPluginManager().createBuiltInType<SqBucketPlugin>();
@@ -111,6 +115,49 @@ inline int runSelfTest()
                   << juce::String (sum.seconds, 1) << " s) ==\nReport: " << report.getFullPathName() << "\n";
         scannerOwner.reset(); session.reset(); engine.reset();
         return sum.failed == 0 ? 0 : 1;
+    }
+
+    if (SelfTestMode::renderFaces)
+    {
+        // Design QA: every face (or the --only ones) rendered to a PNG after a few seconds of the sung vocal went through it
+        auto dir = juce::File::getCurrentWorkingDirectory().getChildFile (SelfTestMode::facesDir.isNotEmpty() ? SelfTestMode::facesDir : juce::String ("faces"));
+        dir.createDirectory();
+        Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+        if (session->edit == nullptr) session->newSession ("Faces");
+        session->edit->ensureNumberOfAudioTracks (1);
+        auto* track = te::getAudioTracks (*session->edit)[0];
+        std::vector<float> vl, vr; Eng::TestSignals::vocal (vl, vr, 48000.0, 4.0);
+        int made = 0;
+        for (auto& e : Signature::entries())
+        {
+            if (! SelfTestMode::only.isEmpty() && ! SelfTestMode::only.contains (e.name)) continue;
+            if (SelfTestMode::only.isEmpty() && juce::String (e.category) == "Instruments") continue;
+            auto p = Signature::create (*session->edit, e);
+            if (p == nullptr) continue;
+            track->pluginList.insertPlugin (p, 0, nullptr);
+            p->baseClassInitialise ({ te::TimePosition(), 48000.0, 256 });
+            juce::AudioBuffer<float> buf (2, 256); te::MidiMessageArray midi;
+            for (size_t q = 0; q + 256 <= vl.size(); q += 256)
+            {
+                buf.copyFrom (0, 0, vl.data() + q, 256); buf.copyFrom (1, 0, vr.data() + q, 256);
+                te::PluginRenderContext fc (&buf, 0, 256, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / 48000.0), te::TimePosition::fromSeconds ((q + 256) / 48000.0)), true, false, true, false);
+                p->applyToBuffer (fc);
+                if ((q / 256) % 40 == 0) juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+            }
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = p->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*p);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (400);
+                auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                auto f = dir.getChildFile (juce::File::createLegalFileName (e.name) + ".png"); f.deleteFile();
+                if (auto os = f.createOutputStream()) { juce::PNGImageFormat png; png.writeImageToStream (img, *os); ++made; }
+                std::cout << "  " << e.name << " -> " << f.getFullPathName() << " (" << img.getWidth() << " x " << img.getHeight() << ")\n";
+            }
+            p->baseClassDeinitialise();
+            for (auto pl : track->pluginList.getPlugins()) pl->deleteFromParent();
+        }
+        scannerOwner.reset(); session.reset(); engine.reset();
+        return made > 0 ? 0 : 1;
     }
 
     auto rpc = [&] (const juce::String& method, const juce::var& params) -> juce::var
@@ -2183,6 +2230,259 @@ inline int runSelfTest()
             double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
             check (sum.presets >= 270 && sum.failed == 0, "Radiant / Maw: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
             auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-radiant-maw.md");
+            if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
+        }
+        // ---------------------------------------------------------------- Phase C: Moth Tune 2, Moth Key, Siren Comp, Siren EQ, Hush De-Ess 2
+        {
+            std::cout << "  -- 1.11 Voice, first wave --\n";
+            const double twoPi = juce::MathConstants<double>::twoPi;
+            // a sung-like tone (glottal-ish harmonics) following a pitch curve in Hz
+            auto voiceTone = [&] (double sr, double secs, std::function<double (double)> hzAt)
+            {
+                std::vector<float> v ((size_t) (sr * secs)); double ph = 0;
+                for (size_t i = 0; i < v.size(); ++i)
+                {
+                    ph += hzAt (i / sr) / sr; ph -= std::floor (ph);
+                    double s = 0; for (int h = 1; h <= 12; ++h) s += std::sin (twoPi * ph * h) / (h * (1.0 + 0.15 * h));
+                    v[i] = (float) (0.25 * s * std::min (1.0, i / (0.02 * sr)));
+                }
+                return v;
+            };
+            // the pitch track of a signal (cents relative to ref), voiced frames only
+            auto centsTrack = [] (const std::vector<float>& x, double sr, double ref, double from, double to)
+            {
+                SqVocal::PitchTracker tr; tr.prepare (sr); tr.setRange (80.0f, 1000.0f); tr.setTracking (50.0f);
+                std::vector<std::pair<double, double>> out;
+                for (size_t i = 0; i < x.size(); ++i)
+                    if (tr.push (x[i]))
+                    {
+                        const auto& f = tr.latest(); const double t = (double) f.pos / sr;
+                        if (f.voiced && f.hz > 0 && t >= from && t <= to) out.push_back ({ t, 1200.0 * std::log2 (f.hz / ref) });
+                    }
+                return out;
+            };
+            auto runTune = [] (const std::vector<float>& in, double sr, int eng, const SqVocal::TuneSettings& s)
+            {
+                SqVocal::TuneProcessor tp; tp.prepare (sr, eng, 1);
+                SqVocal::TuneProcessor::Context ctx; auto l = in, r = in;
+                for (size_t i = 0; i < l.size(); i += 256) { const int n = (int) std::min ((size_t) 256, l.size() - i); float* io[2] = { l.data() + i, r.data() + i }; tp.process (io, 2, n, s, ctx); }
+                return l;
+            };
+            // 1. Live latency under 1 ms at 44.1-192 kHz (every voice type)
+            {
+                double worst = 0;
+                for (double sr : { 44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0 })
+                    for (int vt = 0; vt < 6; ++vt) worst = juce::jmax (worst, SqVocal::TuneProcessor::latencyFor (0, vt, sr) * 1000.0 / sr);
+                check (worst < 1.0, "Moth Tune 2 Live engine: latency " + juce::String (worst, 3) + " ms worst case at 44.1-192 kHz (under 1 ms)");
+            }
+            // 2. Pitch error under 2 cents RMS on a held note (225 Hz is 39 ct sharp of A3)
+            {
+                const double sr = 44100;
+                const auto in = voiceTone (sr, 3.0, [] (double) { return 225.0; });
+                SqVocal::TuneSettings s; s.retuneMs = 0; s.allowedMask = 0xfff; s.vibKeep = 1; s.humanize = 0; s.flex = 0;
+                const auto out = runTune (in, sr, 1, s);
+                const auto tr = centsTrack (out, sr, 220.0, 0.6, 2.8);
+                double e2 = 0; for (auto& p : tr) e2 += p.second * p.second;
+                const double rms = tr.empty() ? 999.0 : std::sqrt (e2 / (double) tr.size());
+                check (tr.size() > 50 && rms < 2.0, "Moth Tune 2: held note pitch error " + juce::String (rms, 2) + " cents RMS (" + juce::String ((int) tr.size()) + " frames, under 2)");
+            }
+            // 3. Dynamic vibrato: Preserve keeps rate and depth within 5 % even at Retune 0; Cut removes it; Boost widens it
+            {
+                const double sr = 44100;
+                const auto in = voiceTone (sr, 4.0, [&] (double t) { return 220.0 * std::pow (2.0, 40.0 / 1200.0 * std::sin (twoPi * 5.5 * t)); });
+                int outliers = 0;
+                auto measure = [&] (const std::vector<float>& x, double& rate, double& depth)
+                {
+                    // depth: peak of the deviation (RMS x sqrt 2); rate: crossings (8 ct hysteresis) from the first to the last
+                    const auto tr = centsTrack (x, sr, 220.0, 1.2, 3.8);
+                    double m = 0; for (auto& p : tr) m += p.second; m /= juce::jmax ((size_t) 1, tr.size());
+                    double e2 = 0; int zc = 0, sg = 0; double t0c = -1, t1c = -1; outliers = 0;
+                    for (size_t i = 0; i < tr.size(); ++i)
+                    {
+                        const double d = tr[i].second - m; e2 += d * d; if (std::abs (d) > 200) ++outliers;
+                        const int ns = d > 8 ? 1 : d < -8 ? -1 : 0;
+                        if (ns != 0 && ns != sg) { if (sg != 0) { ++zc; if (t0c < 0) t0c = tr[i].first; t1c = tr[i].first; } sg = ns; }
+                    }
+                    depth = std::sqrt (e2 / juce::jmax ((size_t) 1, tr.size())) * std::sqrt (2.0);
+                    rate = zc > 2 ? (zc - 1) / 2.0 / (t1c - t0c) : 0;
+                };
+                double ri, di, rp, dp, rl, dl, rc, dc, rb, db, rh, dh;
+                measure (in, ri, di);
+                SqVocal::TuneSettings s; s.retuneMs = 0; s.allowedMask = 0xfff; s.dvMode = 1;
+                measure (runTune (in, sr, 1, s), rp, dp);
+                measure (runTune (in, sr, 0, s), rl, dl);
+                check (std::abs (rp / ri - 1) < 0.05 && std::abs (dp / di - 1) < 0.05 && std::abs (rl / ri - 1) < 0.05 && std::abs (dl / di - 1) < 0.05,
+                       "Moth Tune 2 Preserve at Retune 0: vibrato in " + juce::String (ri, 2) + " Hz / " + juce::String (di, 1) + " ct, out Studio " + juce::String (rp, 2) + " Hz / " + juce::String (dp, 1)
+                       + " ct, Live " + juce::String (rl, 2) + " Hz / " + juce::String (dl, 1) + " ct (within 5 %)");
+                SqVocal::TuneSettings hard; hard.retuneMs = 0; hard.allowedMask = 0xfff; hard.vibKeep = 0; hard.classic = true;
+                measure (runTune (in, sr, 1, hard), rh, dh); const int hardOut = outliers;
+                check (dh < 5.0 && hardOut == 0, "hard tune on that vibrato: flat to " + juce::String (dh, 1) + " ct, no glitches (" + juce::String (hardOut) + " octave errors in the output)");
+                s.dvMode = 2; s.dvPitch = 1; measure (runTune (in, sr, 1, s), rc, dc);
+                s.dvMode = 3; measure (runTune (in, sr, 1, s), rb, db);
+                check (dc < 0.3 * di && db > 1.6 * di, "Moth Tune 2 Cut leaves " + juce::String (dc, 1) + " ct of vibrato, Boost makes it " + juce::String (db, 1) + " ct (input " + juce::String (di, 1) + " ct)");
+            }
+            // 4. Harmony trigger: a closed gate silences the harmony voices only
+            {
+                const double sr = 44100;
+                const auto in = voiceTone (sr, 2.0, [] (double) { return 220.0; });
+                SqVocal::TuneSettings s; s.retuneMs = 10; s.allowedMask = 0xfff; s.harm[0].mode = 1; s.harm[0].interval = 4; s.harm[0].gain = 1.0f; s.harm[0].pan = -1.0f;
+                auto energy = [] (const std::vector<float>& x) { double e = 0; for (size_t i = x.size() / 2; i < x.size(); ++i) e += (double) x[i] * x[i]; return 10 * std::log10 (e + 1e-20); };
+                const double open = energy (runTune (in, sr, 1, s)); s.harmGate = 0; const double closed = energy (runTune (in, sr, 1, s));
+                SqVocal::TuneSettings lead; lead.retuneMs = 10; lead.allowedMask = 0xfff; const double alone = energy (runTune (in, sr, 1, lead));
+                check (open - closed > 2.0 && std::abs (closed - alone) < 0.5, "Moth Tune 2 harmony trigger: gate open +" + juce::String (open - closed, 1) + " dB, closed matches the lead alone (" + juce::String (closed - alone, 2) + " dB)");
+            }
+            // 4a. Harmony voices hold their level at every interval (Studio: the overlap-add is power-compensated going down)
+            {
+                const double sr = 48000; std::vector<float> l, r; Eng::TestSignals::vocal (l, r, sr, 3.0);
+                double ein = 0; for (size_t i = l.size() / 4; i < l.size(); ++i) ein += (double) l[i] * l[i];
+                double lo = 99, hi = -99; juce::String worst;
+                for (int iv : { -12, -7, -5, -3, 3, 4, 5, 7 })
+                {
+                    SqVocal::TuneSettings s; s.retuneMs = 10; s.allowedMask = 0xfff; s.harm[0].mode = 1; s.harm[0].interval = (float) iv; s.harm[0].gain = 1.0f; s.harm[0].pan = -1.0f; s.harmDetune = 0; s.harmTimingMs = 0;
+                    SqVocal::TuneSettings lead = s; lead.harm[0].gain = 0.0f;
+                    const auto a = runTune (l, sr, 1, s), b = runTune (l, sr, 1, lead);
+                    double e = 0; for (size_t i = a.size() / 4; i < a.size(); ++i) e += std::pow ((double) a[i] - b[i], 2);
+                    const double db = 10 * std::log10 (e / ein); if (db < lo) { lo = db; worst = juce::String (iv); } hi = juce::jmax (hi, db);
+                }
+                check (lo > -2.0 && hi < 1.5, "Moth Tune 2 harmony voices from an octave down to a fifth up: " + juce::String (lo, 1) + " to " + juce::String (hi, 1) + " dB re the voice (lowest at " + worst + " st)");
+            }
+            // 4b. Live engine formant preservation keeps the level and the peaks (+3 st on the sung vocal)
+            {
+                const double sr = 48000; std::vector<float> l, r; Eng::TestSignals::vocal (l, r, sr, 3.0);
+                SqVocal::TuneSettings s; s.retuneMs = 20; s.allowedMask = 0xfff; s.transpose = 3; s.preserve = true;
+                const auto o = runTune (l, sr, 0, s);
+                double ei = 0, eo = 0; float pi = 0, po = 0; for (size_t i = 48000; i < l.size(); ++i) { ei += l[i] * l[i]; eo += o[i] * o[i]; pi = juce::jmax (pi, std::abs (l[i])); po = juce::jmax (po, std::abs (o[i])); }
+                const double lv = 10 * std::log10 (eo / ei), pk = juce::Decibels::gainToDecibels (po) - juce::Decibels::gainToDecibels (pi);
+                check (std::abs (lv) < 1.0 && pk < 6.0, "Moth Tune Live: +3 st with formants preserved holds level (" + juce::String (lv, 2) + " dB, peaks +" + juce::String (pk, 1) + " dB)");
+            }
+            // 5. Moth Key / detect_key on a song with a key change (written as a WAV, imported to a track)
+            {
+                const double sr = 44100; const double secs = 48;
+                std::vector<float> y ((size_t) (sr * secs), 0.0f);
+                auto note = [&] (double t0, double dur, double midi, float amp)
+                {
+                    const double f = 440.0 * std::pow (2.0, (midi - 69) / 12.0);
+                    const size_t a = (size_t) (t0 * sr), b = juce::jmin (y.size(), (size_t) ((t0 + dur) * sr));
+                    for (size_t i = a; i < b; ++i) { const double t = (i - a) / sr, env = std::exp (-t * 1.6) * juce::jmin (1.0, t * 200.0) * juce::jmin (1.0, (double) (b - i) / (0.01 * sr)); double v = 0; for (int h = 1; h <= 5; ++h) v += std::sin (twoPi * f * h * t) / (h * h * 0.7 + 0.3); y[i] += (float) (amp * env * v); }
+                };
+                auto prog = [&] (double t0, double len, int root, bool minor)
+                {
+                    const int maj[4][3] = { { 0, 4, 7 }, { 5, 9, 12 }, { 7, 11, 14 }, { 0, 4, 7 } }, mnr[4][3] = { { 0, 3, 7 }, { 5, 8, 12 }, { 7, 11, 14 }, { 0, 3, 7 } };
+                    int bar = 0; for (double t = t0; t < t0 + len - 0.1; t += 2.0, ++bar) { const auto& c = (minor ? mnr : maj)[bar % 4]; for (int k = 0; k < 3; ++k) note (t, 1.9, 60 + root + c[k], 0.05f); note (t, 1.9, 36 + root + c[0], 0.08f); }
+                };
+                prog (0, 24, 4, true); prog (24, 24, 9, false);   // E minor, then A major
+                auto wavF = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sqm_selftest_keysong.wav");
+                { wavF.deleteFile(); juce::AudioBuffer<float> b (1, (int) y.size()); b.copyFrom (0, 0, y.data(), (int) y.size()); juce::WavAudioFormat wav;
+                  if (auto os = wavF.createOutputStream()) if (auto w = std::unique_ptr<juce::AudioFormatWriter> (wav.createWriterFor (os.release(), sr, 1, 24, {}, 0))) w->writeFromAudioSampleBuffer (b, 0, b.getNumSamples()); }
+                call ("add_track", R"({"kind":"audio","name":"Key Song"})");
+                call ("import_audio", juce::String (R"({"track":"Key Song","path":")") + wavF.getFullPathName().replace ("\\", "/") + R"(","start_bar":1})");
+                call ("moth_tune", R"({"track":"Key Song","action":"add"})");
+                auto kr = juce::JSON::parse (call ("detect_key", R"({"track":"Key Song"})"));
+                const auto segs = kr["key_changes"];
+                const bool twoKeys = segs.isArray() && segs.size() == 2 && segs[0]["key"].toString() == "E minor" && segs[1]["key"].toString() == "A major" && std::abs ((double) segs[1]["start_s"] - (session->barToTime (1.0).inSeconds() + 24.0)) < 6.0;
+                check (twoKeys, "detect_key: the key change E minor -> A major found at " + (segs.isArray() && segs.size() > 1 ? juce::String ((double) segs[1]["start_s"], 1) : juce::String ("-")) + " s (" + kr["key"].toString() + ", confidence " + kr["confidence"].toString() + ")");
+                auto* kt = session->findTrack ("Key Song"); SqTunePlugin* ktu = nullptr; if (kt != nullptr) for (auto p : kt->pluginList) if (auto x = dynamic_cast<SqTunePlugin*> (p)) ktu = x;
+                check (session->edit->state.getProperty ("sqmKeyMap").toString().isNotEmpty() && ktu != nullptr && ktu->autoKey.get(),
+                       "detect_key: the key map is on the session and Moth Tune follows it (auto key " + juce::String (ktu != nullptr && ktu->autoKey.get() ? "on" : "off") + ")");
+                auto kf = juce::JSON::parse (call ("detect_key", juce::String (R"({"file":")") + wavF.getFullPathName().replace ("\\", "/") + R"(","apply":false})"));
+                check (kf["key_changes"].size() == 2, "detect_key from a file: " + juce::String (kf["key_changes"].size()) + " key regions, tempo " + kf["bpm"].toString() + " BPM");
+                // the Moth Key plug-in itself: hear the first 20 s (E minor) and analyse
+                auto mk = session->edit->getPluginCache().createNewPlugin (SqMothKeyPlugin::xmlTypeName, {});
+                if (auto* m = dynamic_cast<SqMothKeyPlugin*> (mk.get()))
+                {
+                    m->autoApply.setValue (false, nullptr);
+                    mk->baseClassInitialise ({ te::TimePosition(), sr, 512 });
+                    juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                    for (size_t p = 0; p + 512 <= (size_t) (20 * sr); p += 512)
+                    {
+                        buf.copyFrom (0, 0, y.data() + p, 512); buf.copyFrom (1, 0, y.data() + p, 512);
+                        te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (p / sr), te::TimePosition::fromSeconds ((p + 512) / sr)), true, false, true, false);
+                        mk->applyToBuffer (fc);
+                    }
+                    m->analyseHeard(); for (int i = 0; i < 500 && m->isAnalysing(); ++i) juce::Thread::sleep (10);
+                    const auto res = m->lastResult();
+                    check (m->hasResult() && res.root == 4 && res.minor, "Moth Key plug-in: heard " + juce::String (m->heardSeconds(), 0) + " s and found " + MothKeyAnalysis::keyText (res.root, res.minor));
+                    mk->baseClassDeinitialise();
+                }
+                call ("delete_track", R"({"track":"Key Song"})");
+                session->edit->state.removeProperty ("sqmKeyMap", nullptr);
+            }
+            // 6. Siren Comp / Siren EQ / Hush De-Ess 2 through vocal_fx, and Assist / Learning through the real plug-ins
+            {
+                call ("add_track", R"({"kind":"audio","name":"Siren"})");
+                for (auto w : { "sirencomp", "sireneq", "deess2", "mothkey" }) call ("vocal_fx", juce::String (R"({"track":"Siren","which":")") + w + R"(","action":"add"})");
+                auto* st = session->findTrack ("Siren"); SqSirenCompPlugin* sc = nullptr; SqSirenEqPlugin* se = nullptr; SqHushDeEss2Plugin* sh = nullptr; SqMothKeyPlugin* sk = nullptr;
+                if (st != nullptr) for (auto pl : st->pluginList) { if (auto a = dynamic_cast<SqSirenCompPlugin*> (pl)) sc = a; if (auto b = dynamic_cast<SqSirenEqPlugin*> (pl)) se = b; if (auto c = dynamic_cast<SqHushDeEss2Plugin*> (pl)) sh = c; if (auto d = dynamic_cast<SqMothKeyPlugin*> (pl)) sk = d; }
+                check (sc != nullptr && se != nullptr && sh != nullptr && sk != nullptr, "vocal_fx: Siren Comp, Siren EQ, Hush De-Ess 2 and Moth Key added");
+                call ("vocal_fx", R"({"track":"Siren","which":"sirencomp","action":"set","settings":{"model1":"FET","fet1":"All","dualOn":true,"model2":"Opto B","Threshold 1":-20,"punchOn":true,"Ceiling":-2}})");
+                call ("vocal_fx", R"({"track":"Siren","which":"sireneq","action":"set","settings":{"b2On":true,"b2Mode":"pitch","b2Harm":3,"Band 2 Gain":-4,"hpSlope":24,"Air":3}})");
+                call ("vocal_fx", R"({"track":"Siren","which":"deess2","action":"set","settings":{"linkOn":true,"Split":6000}})");
+                if (sc != nullptr && se != nullptr && sh != nullptr)
+                    check (sc->model1.get() == 0 && sc->fet1.get() == 4 && sc->dual.get() && sc->model2.get() == 2 && std::abs (sc->bank[SqSirenCompPlugin::thr1] + 20) < 0.01f && sc->punch.get()
+                           && se->on[1].get() && se->mode[1].get() == 1 && se->harm[1].get() == 3 && se->hpSlope.get() == 3 && std::abs (se->bank[SqSirenEqPlugin::airGain] - 3) < 0.01f
+                           && sh->link.get() && std::abs (sh->bank[SqHushDeEss2Plugin::split] - 6000) < 1, "vocal_fx: settings by name (models, FET All, dual, pitch band on H3, 24 dB slope, link)");
+                call ("delete_track", R"({"track":"Siren"})");
+                // render helper for a private plug-in copy
+                const double sr = 48000; std::vector<float> vl, vr; Eng::TestSignals::vocal (vl, vr, sr, 6.0);
+                auto render = [&] (te::Plugin& p, std::vector<float> l, std::vector<float> r, std::function<void()> perBlock = {})
+                {
+                    juce::AudioBuffer<float> buf (2, 256); te::MidiMessageArray midi;
+                    for (size_t q = 0; q + 256 <= l.size(); q += 256)
+                    {
+                        buf.copyFrom (0, 0, l.data() + q, 256); buf.copyFrom (1, 0, r.data() + q, 256);
+                        te::PluginRenderContext fc (&buf, 0, 256, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / sr), te::TimePosition::fromSeconds ((q + 256) / sr)), true, false, true, false);
+                        p.applyToBuffer (fc); if (perBlock) perBlock();
+                        std::copy (buf.getReadPointer (0), buf.getReadPointer (0) + 256, l.data() + q); std::copy (buf.getReadPointer (1), buf.getReadPointer (1) + 256, r.data() + q);
+                    }
+                    return l;
+                };
+                {   // Siren Comp Assist: learn, suggest (Controlled), preview, apply
+                    auto pp = session->edit->getPluginCache().createNewPlugin (SqSirenCompPlugin::xmlTypeName, {}); auto* c = dynamic_cast<SqSirenCompPlugin*> (pp.get());
+                    pp->baseClassInitialise ({ te::TimePosition(), sr, 256 });
+                    sqSetParam (c->bank, SqSirenCompPlugin::thr1, 0.0f);   // the knobs do nothing: anything heard comes from the suggestion
+                    c->startLearning(); render (*pp, vl, vr); c->stopLearning(); c->makeSuggestion (1);
+                    c->preview.setValue (true, nullptr); double grSum = 0; int grN = 0; render (*pp, vl, vr, [&] { grSum += c->gr1.load() + c->gr2.load(); ++grN; });
+                    const double avg = grSum / juce::jmax (1, grN);
+                    c->applySuggestion(); const auto s = c->suggestionCopy();
+                    check (avg > 1.5 && ! c->preview.get() && c->model1.get() == s.s1.model && c->dual.get() == s.dual && std::abs (c->bank[SqSirenCompPlugin::thr1] - s.s1.thresholdDb) < 0.05f,
+                           "Siren Comp Assist: previewed suggestion compresses " + juce::String (avg, 1) + " dB on average before it is applied; Apply commits it to the knobs");
+                    pp->baseClassDeinitialise();
+                }
+                {   // Siren EQ Vocal Learning: finds an injected resonance and the singer's range, audition, apply
+                    auto pp = session->edit->getPluginCache().createNewPlugin (SqSirenEqPlugin::xmlTypeName, {}); auto* e = dynamic_cast<SqSirenEqPlugin*> (pp.get());
+                    pp->baseClassInitialise ({ te::TimePosition(), sr, 256 });
+                    auto rl = vl, rr = vr; Eng::Biquad b1, b2; b1.set (Eng::Biquad::peak, sr, 2500, 8, 10); b2 = b1;
+                    for (size_t i = 0; i < rl.size(); ++i) { rl[i] = b1.process (rl[i]); rr[i] = b2.process (rr[i]); }
+                    e->startLearning(); render (*pp, rl, rr); const auto txt = e->finishLearning();
+                    e->preview.setValue (true, nullptr); render (*pp, rl, rr);
+                    e->applySuggestion(); int nOn = 0; for (int b = 0; b < 6; ++b) nOn += e->on[(size_t) b].get();
+                    check (e->hasSuggestion() && txt.contains ("2.") && txt.contains ("kHz") && nOn >= 1, "Siren EQ Vocal Learning: " + txt);
+                    pp->baseClassDeinitialise();
+                }
+                {   // Hush De-Ess 2 Assist on the sung vocal (its sibilants)
+                    auto pp = session->edit->getPluginCache().createNewPlugin (SqHushDeEss2Plugin::xmlTypeName, {}); auto* h = dynamic_cast<SqHushDeEss2Plugin*> (pp.get());
+                    pp->baseClassInitialise ({ te::TimePosition(), sr, 256 });
+                    h->startLearning(); render (*pp, vl, vr); const auto txt = h->finishLearning();
+                    check (h->hasSuggestion() && h->suggestedSoft() < -10.0f, "Hush De-Ess 2 Assist: " + txt);
+                    pp->baseClassDeinitialise();
+                }
+            }
+            // 7. Editions, then the factory presets of all five
+            Edition::owned() = Edition::Owned {}; Edition::owned().core = true; Edition::owned().vocal = true;
+            check (Edition::isTypeAllowed ("sqmSirenComp") && Edition::isTypeAllowed ("sqmSirenEq") && Edition::isTypeAllowed ("sqmHushDeEss2") && Edition::isTypeAllowed ("sqmMothKey") && ! Edition::isTypeAllowed ("sqmCinder"),
+                   "editions: Moth Key, Siren Comp, Siren EQ and Hush De-Ess 2 are in the Vocal Suite");
+            Edition::owned() = Edition::Owned {}; Edition::owned().core = true;
+            check (! Edition::isTypeAllowed ("sqmSirenComp") && ! Edition::isTypeAllowed ("sqmMothKey"), "editions: not in core Squelchmoth");
+            Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+            auto rep = session->sessionsDir.getChildFile ("preset-audit-voice.md");
+            auto sum = PresetAudit::run (*session->edit, { "Moth Tune", "Siren Comp", "Siren EQ", "Hush De-Ess 2" }, { "sqmSirenComp", "sqmSirenEq", "sqmHushDeEss2" }, 3.0, rep);
+            juce::String firstFail; for (auto& row : sum.rows) if (! row.pass && firstFail.isEmpty()) firstFail = row.plugin + " / " + row.preset + ": " + row.why;
+            int nTune = 0, nComp = 0, nEq = 0, nDe = 0; double maxCpu = 0;
+            for (auto& row : sum.rows) { nTune += row.plugin == "Moth Tune"; nComp += row.plugin == "Siren Comp"; nEq += row.plugin == "Siren EQ"; nDe += row.plugin == "Hush De-Ess 2"; maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent); }
+            check (nTune >= 150 && nComp >= 110 && nEq >= 100 && nDe >= 60 && sum.failed == 0,
+                   "Voice presets: " + juce::String (nTune) + " Moth Tune, " + juce::String (nComp) + " Siren Comp, " + juce::String (nEq) + " Siren EQ, " + juce::String (nDe) + " Hush De-Ess 2; audit "
+                   + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
+            auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-voice.md");
             if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
         }
         std::cout << "  (1.11 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)\n";

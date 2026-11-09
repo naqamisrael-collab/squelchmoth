@@ -210,8 +210,10 @@ ToolResult runSeriesTool (const juce::var& a, const juce::String& type)
              {
                  if (p == nullptr)
                  {
-                     auto np = session.edit->getPluginCache().createNewPlugin (type, {});
-                     if (np == nullptr) return ToolResult::error ("Couldn't create the plug-in");
+                     // through the session, so the editions apply (a plug-in this copy doesn't own is refused with the product that unlocks it)
+                     juce::String why;
+                     auto np = entry() != nullptr ? session.createPluginByName (entry()->name, why) : session.edit->getPluginCache().createNewPlugin (type, {});
+                     if (np == nullptr) return ToolResult::error (why.isNotEmpty() ? why : juce::String ("Couldn't create the plug-in"));
                      const int idx = t != nullptr ? Session::insertEndIndex (*list, t) : -1;
                      list->insertPlugin (np, idx, nullptr);
                      p = np.get();

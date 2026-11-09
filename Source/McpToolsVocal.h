@@ -49,6 +49,14 @@ juce::var describeTune (SqTunePlugin& tu)
     set (o, "lead_follows_midi", tu.midiLead.get());
     set (o, "graph_notes", (int) tu.getGraphNotes().size());
     set (o, "graph_enabled", tu.graphOn.get());
+    // Moth Tune 2
+    set (o, "dynamic_vibrato", SqTunePlugin::dvModeNames()[juce::jlimit (0, 3, tu.dvMode.get())].toLowerCase());
+    set (o, "vibrato_fx_straight_notes_only", tu.vibFxStraight.get());
+    set (o, "formant_link", tu.formantLink.get());
+    set (o, "auto_range", tu.autoRange.get());
+    { float lo, hi; if (tu.detectedRange (lo, hi)) { set (o, "detected_range", Skins::noteLabel (lo) + " - " + Skins::noteLabel (hi)); const int sv = tu.suggestedVoiceType(); if (sv >= 0) set (o, "suggested_voice_type", SqTunePlugin::voiceNames()[sv]); } }
+    set (o, "harmony_trigger", SqTunePlugin::triggerNames()[juce::jlimit (0, 2, tu.harmTrigger.get())].toLowerCase());
+    set (o, "harmony_cc", tu.harmCC.get()); set (o, "harmony_latch", tu.harmLatch.get()); set (o, "harmony_open", tu.harmGateOpen.load());
     auto params = obj();
     for (size_t i = 0; i < tu.bank.params.size(); ++i)
         set (params, tu.bank.specs[i].name, SqDsp::numText (tu.bank[i], tu.bank.specs[i].decimals) + tu.bank.specs[i].unit);
@@ -66,6 +74,7 @@ juce::var describeTune (SqTunePlugin& tu)
     set (live, "singing", Skins::noteLabel (tu.liveIn.load()));
     set (live, "target", Skins::noteLabel (tu.liveTarget.load()));
     set (live, "correction_cents", tu.liveCents.load());
+    set (live, "vibrato_rate_hz", tu.liveVibRate.load()); set (live, "vibrato_depth_cents", tu.liveVibDepth.load()); set (live, "vibrato_acted_on", tu.liveVibAmount.load());
     set (o, "live", live);
     return o;
 }
@@ -109,6 +118,13 @@ juce::String applyTuneSetting (SqTunePlugin& tu, const juce::String& keyIn, cons
     if (key == "graph" || key == "graph_enabled") { tu.graphOn.setValue (asBool(), um); return {}; }
     if (key == "lead_follows_midi")  { tu.midiLead.setValue (asBool(), um); return {}; }
     if (key == "vibrato_shape")      return setIdx (tu.vibShape, SqTunePlugin::vibShapeNames());
+    if (key == "dynamic_vibrato" || key == "dv_mode" || key == "dvmode") return setIdx (tu.dvMode, SqTunePlugin::dvModeNames());
+    if (key == "vibrato_fx_straight_notes_only" || key == "vibfxstraight") { tu.vibFxStraight.setValue (asBool(), um); return {}; }
+    if (key == "formant_link" || key == "formantlink") { tu.formantLink.setValue (asBool(), um); return {}; }
+    if (key == "auto_range" || key == "autorange") { tu.autoRange.setValue (asBool(), um); if (asBool()) tu.clearRange(); return {}; }
+    if (key == "harmony_trigger" || key == "harmtrigger") return setIdx (tu.harmTrigger, SqTunePlugin::triggerNames());
+    if (key == "harmony_cc" || key == "harmcc") { tu.harmCC.setValue (juce::jlimit (0, 127, (int) v), um); return {}; }
+    if (key == "harmony_latch" || key == "harmlatch") { tu.harmLatch.setValue (asBool(), um); return {}; }
     if (key == "midi" || key == "midi_targets")
     {
         auto t = v.toString().toLowerCase();
@@ -130,7 +146,9 @@ void registerVocalTools()
          "Moth Tune - Squelchmoth's flagship vocal tuner. Works on the named track's Moth Tune (action add inserts one). Actions:\n"
          " get - every setting, live readout (note being sung, target, correction in cents) and latency.\n"
          " add - insert Moth Tune on the track (optionally with preset).\n"
-         " set - settings: {name: value}. Names: any parameter (Retune Speed 0-400 ms, Humanize %, Flex Tune %, Vibrato Keep %, Natural Vibrato %, Correction %, Transpose st, Formant st, Throat %, Detune ct, Tracking, Mix %, Output dB, Vibrato Rate/Depth/Delay/Onset/Variation, Voice N Level/Pan/Interval/Formant, Harmony Detune, Harmony Timing) or engine (live/studio), character (modern/classic), voice_type (soprano, alto/tenor, low male, instrument, bass instrument, auto), key, scale, custom_scale ['C','E','G'...], remove [...], bypass [...], auto_key, formant_preserve, conform, vibrato_shape, midi (off/this/named), midi_track, lead_follows_midi, all_octaves, graph.\n"
+         " set - settings: {name: value}. Names: any parameter (Moth Tune 2: Vibrato Threshold ct, Vibrato Detect Delay s, Vibrato Attack s, Vibrato Irregularity %, Pitch Depth %, Amplitude Depth %, Timbre Depth %; Retune Speed 0-400 ms, Humanize %, Flex Tune %, Vibrato Keep %, Natural Vibrato %, Correction %, Transpose st, Formant st, Throat %, Detune ct, Tracking, Mix %, Output dB, Vibrato Rate/Depth/Delay/Onset/Variation, Voice N Level/Pan/Interval/Formant, Harmony Detune, Harmony Timing) or engine (live/studio), character (modern/classic), voice_type (soprano, alto/tenor, low male, instrument, bass instrument, auto), key, scale, custom_scale ['C','E','G'...], remove [...], bypass [...], auto_key, formant_preserve, conform, vibrato_shape, midi (off/this/named), midi_track, lead_follows_midi, all_octaves, graph,\n"
+         "   dynamic_vibrato (off / preserve - keeps the singer's vibrato exactly, even with Retune 0 / cut / boost), vibrato_fx_straight_notes_only (created vibrato only on straight notes),\n"
+         "   formant_link (Formant follows Transpose), auto_range (detect the voice range and pick the voice type), harmony_trigger (always / midi note / midi cc), harmony_cc (0-127), harmony_latch.\n"
          " key - set key (root) and scale; session true also makes it the session key (Auto-Key follows it).\n"
          " detect_key - find the key from the session's MIDI and this track's singing; apply true sets it.\n"
          " harmony - voice 1-4: mode (off, interval, scale, midi), interval (semitones, or scale steps in scale mode), level dB, pan -100..100, formant st.\n"

@@ -25,6 +25,7 @@
 #include "SqWingbeat.h"
 #include "SqFoilPlate.h"
 #include "SqRadiantMaw.h"
+#include "SqVoice111.h"
 
 namespace te = tracktion;
 
@@ -74,7 +75,11 @@ namespace Signature
             { "Mandible Lite",    "sqmMandibleLite", "Instruments", "The quick slicer: drop a loop, pick the slice resolution, play the slices from C1, dump to the piano roll", 0xffffb36b, "mandiblelite" },
             { "Pollen",           "sqmPollen",       "Instruments", "The preset-pack instrument: 11 packs (Keys, Pads, Plucks, Bass, Brass, Strings, Choir, Bells, Textures, Trap Melodies, Drill Melodies) on the wavetable + analogue engine, four named macros per sound, pack browser with covers", 0xffffc23a, "pollen" },
             // ---------------- Pitch & Vocal
-            { "Moth Tune",        "sqmTune",         "Pitch & Vocal", "The flagship vocal tuner: Live (<1 ms) or Studio engine, Vibrato Keep, formant & throat, MIDI targets, 4 harmony voices, Graph notes", 0xff19e3ff, "mothtune" },
+            { "Moth Tune",        "sqmTune",         "Pitch & Vocal", "Moth Tune 2, the flagship vocal tuner: Live (<1 ms) or Studio engine, dynamic vibrato (Preserve / Cut / Boost with separate pitch, amplitude and timbre depth), Auto Range, linked Formant, MIDI targets, 4 harmony voices triggered by notes or CC, Graph notes", 0xff19e3ff, "mothtune" },
+            { "Moth Key",         "sqmMothKey",      "Pitch & Vocal", "Key, scale and tempo from audio - live input, a track or a file - with key changes over time written to the session for every Moth Tune", 0xff5ad1ff, "mothkey" },
+            { "Siren Comp",       "sqmSirenComp",    "Dynamics",    "Vocal compressor: FET (4 / 8 / 12 / 20 / All), two Opto cells and Modern, single or dual series, warm, GR per stage, pitch-filter duck, Assist you can audition, Punch with ceiling", 0xffff4f8b, "sirencomp" },
+            { "Siren EQ",         "sqmSirenEq",      "EQ & Filter", "Vocal EQ: six bands that are fixed, locked to the singer's pitch (any harmonic) or dynamic; HP / LP 6-24 dB/oct, Air to 40 kHz, Tilt, Vocal Learning you hear before you apply", 0xffff7ab8, "sireneq" },
+            { "Hush De-Ess 2",    "sqmHushDeEss2",   "Dynamics",    "De-esser with separate Hard (T, K, Ch) and Soft (S, Sh, Z) detection, split-band reduction only, Link, Solo, Assist and a detection history", 0xffd4ff3a, "hushdeess2" },
             { "Moth Tune FX",     "sqmTuneFx",       "Pitch & Vocal", "Creative tuning: editable Motion patterns plus a six-slot X/Y effects rack - Mutate, Duet, Vocode, Talkbox, Octaver, Stutter and more", 0xffff2fd6, "mothtunefx" },
             // ---------------- EQ & filters
             { "Pulse EQ",         "sqmPulse",        "EQ & Filter", "Passive program EQ: the boost-and-cut low end, bandwidth high boost, high attenuation, plus a peak-dip-peak mid section and tube", 0xff2fe0ff, "pulseeq" },
