@@ -26,7 +26,7 @@
 #include "SqFoilPlate.h"
 #include "SqRadiantMaw.h"
 #include "SqVoice111.h"
-#include "SqColor111b.h"
+#include "SqColor111c.h"
 
 namespace te = tracktion;
 
@@ -76,8 +76,10 @@ namespace Signature
             { "Mandible Lite",    "sqmMandibleLite", "Instruments", "The quick slicer: drop a loop, pick the slice resolution, play the slices from C1, dump to the piano roll", 0xffffb36b, "mandiblelite" },
             { "Pollen",           "sqmPollen",       "Instruments", "The preset-pack instrument: 11 packs (Keys, Pads, Plucks, Bass, Brass, Strings, Choir, Bells, Textures, Trap Melodies, Drill Melodies) on the wavetable + analogue engine, four named macros per sound, pack browser with covers", 0xffffc23a, "pollen" },
             // ---------------- Pitch & Vocal
+
             { "Moth Tune",        "sqmTune",         "Pitch & Vocal", "Moth Tune 2, the flagship vocal tuner: Live (<1 ms) or Studio engine, dynamic vibrato (Preserve / Cut / Boost with separate pitch, amplitude and timbre depth), Auto Range, linked Formant, MIDI targets, 4 harmony voices triggered by notes or CC, Graph notes", 0xff19e3ff, "mothtune" },
             { "Moth Key",         "sqmMothKey",      "Pitch & Vocal", "Key, scale and tempo from audio - live input, a track or a file - with key changes over time written to the session for every Moth Tune", 0xff5ad1ff, "mothkey" },
+            { "Masquerade",       "sqmMasquerade",   "Pitch & Vocal", "Voice changer: Pitch and Formant +-24 st on Moth Tune's engine, Transpose, Quantize to the key, Robot and MIDI (held notes become chords), Cinder-family drive, stereo in, Live (under 1 ms) or Studio engine", 0xffff3a6a, "masquerade" },
             { "Siren Comp",       "sqmSirenComp",    "Dynamics",    "Vocal compressor: FET (4 / 8 / 12 / 20 / All), two Opto cells and Modern, single or dual series, warm, GR per stage, pitch-filter duck, Assist you can audition, Punch with ceiling", 0xffff4f8b, "sirencomp" },
             { "Siren EQ",         "sqmSirenEq",      "EQ & Filter", "Vocal EQ: six bands that are fixed, locked to the singer's pitch (any harmonic) or dynamic; HP / LP 6-24 dB/oct, Air to 40 kHz, Tilt, Vocal Learning you hear before you apply", 0xffff7ab8, "sireneq" },
             { "Hush De-Ess 2",    "sqmHushDeEss2",   "Dynamics",    "De-esser with separate Hard (T, K, Ch) and Soft (S, Sh, Z) detection, split-band reduction only, Link, Solo, Assist and a detection history", 0xffd4ff3a, "hushdeess2" },
@@ -130,6 +132,8 @@ namespace Signature
             { "Wingbeat Jr.",     "sqmWingbeatJr",   "Space",       "The quick echo: eight styles, Normal / Wide / Ping-Pong, glide or stretch when the time changes", 0xff3aa8ff, "wingbeatjr" },
             { "Foil Plate",       "sqmFoilPlate",    "Space",       "Plate reverb: seven plates from steel to gold foil, four audible input stages, decay per band, auto-decay that shortens or lengthens (or follows a key), freeze", 0xffd8c27a, "foilplate" },
             { "Foil Plate Lite",  "sqmFoilPlateLite", "Space",      "The steel plate in four knobs: Decay, Low Cut, Mod, Mix", 0xffc8b26a, "foilplatelite" },
+            { "Shard",            "sqmShard",        "Space",       "Granular reverse pitch echo: splices up to 8 s, reversed by chance, pitched +-48 st by a Vintage or Clean engine, spray, density, Recycle in three modes, scale-quantised pitch, Gate / Duck with a key and a two-LFO + envelope modulation matrix", 0xff9ad8ff, "shard" },
+            { "Murmuration",      "sqmMurmuration",  "Space",       "Tap-cloud space: up to 2048 taps over 10 ms to 90 s, an X/Y or drawn envelope, Texture from echoes to wash, Warp, evolving Color, Shimmer, Blur, Grain, loop or spectral Freeze and an Infinite tail", 0xffe0c068, "murmuration" },
             { "Shutter Delay",    "sqmShutter",      "Space",       "Late-70s digital rack delay: Multiply 1/2/4/8x halves the clock each step (12 / 6 / 3 / 1.5 kHz bandwidth), 8- or 12-bit companding colour, two lines to 10 s, six algorithms, LFO to 256 Hz, Freeze and a Smooth or Glitch time change", 0xff7affc8, "shutter" },
             { "Shutter Lite",     "sqmShutterLite",  "Space",       "The digital rack delay in four knobs: Time, Multiply, Feedback, Mix", 0xff6ae8b8, "shutterlite" },
             { "Oil Can Delay",    "sqmOilCan",       "Space",       "Electrostatic oil-can echo: wobbling delay line, sustain, tone, drive - echo or doubler", 0xffffa31a, "oilcan" },

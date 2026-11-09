@@ -206,6 +206,9 @@ public:
         engine->getPluginManager().createBuiltInType<SqMirrorShiftLitePlugin>();
         engine->getPluginManager().createBuiltInType<SqShutterPlugin>();
         engine->getPluginManager().createBuiltInType<SqShutterLitePlugin>();
+        engine->getPluginManager().createBuiltInType<SqShardPlugin>();
+        engine->getPluginManager().createBuiltInType<SqMurmurationPlugin>();
+        engine->getPluginManager().createBuiltInType<SqMasqueradePlugin>();
         engine->getPluginManager().createBuiltInType<SqMothKeyPlugin>();
         engine->getPluginManager().createBuiltInType<SqSirenCompPlugin>();
         engine->getPluginManager().createBuiltInType<SqSirenEqPlugin>();

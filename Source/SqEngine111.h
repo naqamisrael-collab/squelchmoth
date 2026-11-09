@@ -74,7 +74,9 @@ namespace PresetAudit
     {
         Row row; row.plugin = e.name; row.preset = pr.name;
         row.category = juce::String (pr.name).contains (" | ") ? juce::String (pr.name).upToFirstOccurrenceOf (" | ", false, false) : juce::String (e.category);
-        auto pp = edit.getPluginCache().createNewPlugin (e.type, {});
+        // straight from the plug-in manager, not the edit's cache: the cache only lets go on its 1 s timer, which never
+        // runs while the audit holds the message thread, so hundreds of instances (and their delay lines) would pile up
+        auto pp = edit.engine.getPluginManager().createNewPlugin (edit, e.type, {});
         if (pp == nullptr) { row.pass = false; row.why = "could not create"; return row; }
         Signature::applyPreset (*pp, pr);
         const int block = 256;

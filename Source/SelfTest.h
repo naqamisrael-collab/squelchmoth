@@ -54,6 +54,9 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqMirrorShiftLitePlugin>();
     engine->getPluginManager().createBuiltInType<SqShutterPlugin>();
     engine->getPluginManager().createBuiltInType<SqShutterLitePlugin>();
+    engine->getPluginManager().createBuiltInType<SqShardPlugin>();
+    engine->getPluginManager().createBuiltInType<SqMurmurationPlugin>();
+    engine->getPluginManager().createBuiltInType<SqMasqueradePlugin>();
     engine->getPluginManager().createBuiltInType<SqMothKeyPlugin>();
     engine->getPluginManager().createBuiltInType<SqSirenCompPlugin>();
     engine->getPluginManager().createBuiltInType<SqSirenEqPlugin>();
@@ -2321,6 +2324,68 @@ inline int runSelfTest()
             double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
             check (sum.presets >= 480 && sum.failed == 0, "Phase D1: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
             auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-d1.md");
+            if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
+        }
+        // ---------------------------------------------------------------- Phase D2: Shard, Murmuration, Masquerade
+        {
+            const double SR = 48000.0, twoPi = juce::MathConstants<double>::twoPi;
+            call ("add_track", R"({"kind":"audio","name":"D2"})");
+            for (auto w : { "shard", "murmuration", "masquerade" }) call ("studio_fx", juce::String (R"({"track":"D2","which":")") + w + R"(","action":"add"})");
+            auto* tt = session->findTrack ("D2"); SqShardPlugin* sd = nullptr; SqMurmurationPlugin* mu = nullptr; SqMasqueradePlugin* mq = nullptr;
+            if (tt != nullptr) for (auto pl : tt->pluginList) { if (auto a = dynamic_cast<SqShardPlugin*> (pl)) sd = a; if (auto b = dynamic_cast<SqMurmurationPlugin*> (pl)) mu = b; if (auto c = dynamic_cast<SqMasqueradePlugin*> (pl)) mq = c; }
+            check (sd && mu && mq, "Phase D2: Shard, Murmuration and Masquerade added through studio_fx");
+            call ("studio_fx", R"({"track":"D2","which":"shard","action":"set","settings":{"Pitch":7,"engine":1,"quantizeOn":true,"fbMode":2,"lfo1Target":1,"LFO 1 Depth":25}})");
+            call ("studio_fx", R"({"track":"D2","which":"murmuration","action":"set","settings":{"Time":4000,"Texture":20,"shimmerSt":3,"infiniteOn":true}})");
+            call ("studio_fx", R"({"track":"D2","which":"masquerade","action":"set","settings":{"mode":2,"robotNote":40,"Formant":-5,"driveVoicing":5}})");
+            if (sd && mu && mq)
+                check (std::abs (sd->bank[SqShardPlugin::pitch] - 7.0f) < 0.01f && sd->engine.get() == 1 && sd->quantize.get() && sd->fbMode.get() == 2 && sd->lfo1Target.get() == 1
+                       && std::abs (mu->bank[SqMurmurationPlugin::time] - 4000.0f) < 1.0f && mu->shimmerSt.get() == 3 && mu->infinite.get()
+                       && mq->mode.get() == 2 && mq->robotNote.get() == 40 && std::abs (mq->bank[SqMasqueradePlugin::formant] + 5.0f) < 0.01f && mq->driveVoicing.get() == 5,
+                       "Phase D2: engines, modes, matrix and switches set by name through studio_fx");
+            auto gm = call ("studio_fx", R"({"track":"D2","which":"murmuration","action":"get"})");
+            check (gm.contains ("envelope_0_to_1") && gm.contains ("\"taps\""), "Murmuration: get reports the taps and the envelope");
+            auto gq = call ("studio_fx", R"({"track":"D2","which":"masquerade","action":"get"})");
+            check (gq.contains ("Robot") && gq.contains ("latency_ms"), "Masquerade: get reports the mode and the latency");
+            {
+                auto pitchTest = [&] (int engine, float st)
+                {
+                    Shard::Processor s; s.prepare (SR, 256); s.p.engine = engine; s.p.pitchSt = st; s.p.reverseProb = 0; s.p.recycle = 0; s.p.mix = 1; s.p.spliceMs = 500;
+                    std::vector<float> l (96000), r; for (size_t i = 0; i < l.size(); ++i) l[i] = 0.25f * (float) std::sin (twoPi * 440.0 * (double) i / SR); r = l;
+                    for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; s.process (ch, 2, nullptr, 256); }
+                    double best = 0, bf = 0; for (double f = 100; f < 2000; f *= 1.002) { const double w = twoPi * f / SR, c = 2 * std::cos (w); double s1 = 0, s2 = 0; for (size_t i = 48000; i < 96000; ++i) { const double s0 = l[i] + c * s1 - s2; s2 = s1; s1 = s0; } const double pw = s1 * s1 + s2 * s2 - c * s1 * s2; if (pw > best) { best = pw; bf = f; } }
+                    return bf;
+                };
+                const double v = pitchTest (Shard::vintage, 12), c = pitchTest (Shard::clean, 7);
+                check (std::abs (v / 880.0 - 1) < 0.01 && std::abs (c / 659.26 - 1) < 0.012, "Shard: Vintage +12 st " + juce::String (v, 1) + " Hz, Clean +7 st " + juce::String (c, 1) + " Hz (from 440)");
+            }
+            {
+                Murm::Processor m; m.prepare (SR, 256); m.p.timeMs = 1000; m.p.texture = 0; m.p.y = 0; m.p.mix = 1; m.p.blur = 0; m.p.modDepth = 0;
+                std::vector<float> l (72000, 0.0f), r; l[0] = 1; r = l;
+                for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; m.process (ch, 2, 256); }
+                int peaks = 0; size_t last = 0; for (size_t i = 100; i + 340 < l.size(); i += 240) { double e = 0; for (size_t k = i; k < i + 240; ++k) e += (double) l[k] * l[k]; if (std::sqrt (e / 240) > 0.01 && (peaks == 0 || i - last > 4800)) { ++peaks; last = i; } }
+                check (peaks == 4 && Murm::tapsFor (1) * 2 == 2048, "Murmuration: Texture 0 = four discrete echoes over Time; Texture 100 = 2048 taps");
+            }
+            {
+                Masquerade::Processor m; m.p.engine = 0; m.p.pitchSt = 12; m.prepare (SR, 256);
+                std::vector<float> l (96000), r; double ph = 0;
+                for (size_t i = 0; i < l.size(); ++i) { ph += 200.0 / SR; double y = 0; for (int h = 1; h <= 10; ++h) y += std::sin (twoPi * h * ph) / h; l[i] = 0.1f * (float) y; }
+                r = l; for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; m.process (ch, 2, 256); }
+                // the output's fundamental by a fine Goertzel sweep around the expected octave
+                double bestP = 0, hz = 0;
+                for (double f = 340; f < 470; f *= 1.0005) { const double w = twoPi * f / SR, c = 2 * std::cos (w); double s1 = 0, s2 = 0; for (size_t i = 48000; i < 96000; ++i) { const double s0 = l[i] + c * s1 - s2; s2 = s1; s1 = s0; } const double pw = s1 * s1 + s2 * s2 - c * s1 * s2; if (pw > bestP) { bestP = pw; hz = f; } }
+                check (std::abs (1200.0 * std::log2 (hz / 400.0)) < 25 && m.latencySamples() / SR * 1000.0 < 1.0,
+                       "Masquerade: Transpose +12 st turns a 200 Hz voice into " + juce::String (hz, 1) + " Hz; Live latency " + juce::String (m.latencySamples() / SR * 1000.0, 2) + " ms");
+            }
+            call ("delete_track", R"({"track":"D2"})");
+            Edition::owned() = Edition::Owned {}; Edition::owned().core = true;
+            check (! Edition::isTypeAllowed ("sqmShard") && ! Edition::isTypeAllowed ("sqmMurmuration") && ! Edition::isTypeAllowed ("sqmMasquerade"), "editions: Shard, Murmuration and Masquerade are in Color & Space");
+            Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+            auto rep = session->sessionsDir.getChildFile ("preset-audit-d2.md");
+            auto sum = PresetAudit::run (*session->edit, { "Shard", "Murmuration", "Masquerade" }, { "sqmShard", "sqmMurmuration", "sqmMasquerade" }, 3.0, rep);
+            juce::String firstFail; for (auto& row : sum.rows) if (! row.pass && firstFail.isEmpty()) firstFail = row.plugin + " / " + row.preset + ": " + row.why;
+            double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
+            check (sum.presets >= 440 && sum.failed == 0, "Phase D2: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
+            auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-d2.md");
             if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
         }
         // ---------------------------------------------------------------- Phase C: Moth Tune 2, Moth Key, Siren Comp, Siren EQ, Hush De-Ess 2

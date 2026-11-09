@@ -40,7 +40,7 @@ public:
     }
     static juce::StringArray shapeNames() { juce::StringArray a; for (int i = 0; i < Eng::WingMod::numShapes; ++i) a.add (Eng::WingMod::shapeName (i)); return a; }
 protected:
-    float sm[24] {}; bool smInit = false;
+    float sm[40] {}; bool smInit = false;
     void smooth (float* v, int n, bool snap)
     {
         if (snap || ! smInit) { std::copy (v, v + n, sm); smInit = true; }

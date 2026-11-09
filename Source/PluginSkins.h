@@ -1510,13 +1510,14 @@ namespace Skins
     #include "SkinsColor111.inl"
     #include "SkinsVoice111.inl"
     #include "SkinsColor111b.inl"
+    #include "SkinsColor111c.inl"
     #include "SkinsSynths.inl"
     #include "SkinsSynths2.inl"
     #include "SkinsFx181.inl"
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -1869,6 +1870,23 @@ namespace Skins
                                                          G ("LFO", { "LFO Rate", "LFO Depth" }, false, 2) }; }
         else if (name == "Shutter Lite")  { s.family = Family::shutter; s.knob = KnobStyle::flat; s.width = 900; s.height = 580; s.vizH = 220;
                                             s.groups = { G ("DELAY", { "Time", "Multiply", "Feedback" }, true, 3), G ("MIX", { "Mix", "Freeze", "Output" }, true, 3) }; }
+        else if (name == "Shard")         { s.family = Family::shard; s.knob = KnobStyle::ring; s.width = 1440; s.height = 900; s.vizH = 240; s.rowSplit = 3; s.row1Share = 0.45f;
+                                            s.groups = { G ("SHARD", { "Engine", "Splice Sync", "Splice", "Delay Sync", "Delay", "Pitch" }, true, 3), G ("ECHO", { "Recycle", "Recycle Mode", "Reverse", "Mix", "Output" }, true, 3),
+                                                         G ("KEY", { "Quantize", "Session Key", "Key", "Scale" }, false, 2),
+                                                         G ("GRAINS", { "Smoothing", "Spray", "Density", "Size Jitter" }, false, 2), G ("TWEAK", { "Pitch L", "Pitch R", "Splice R", "Delay R", "Low Cut", "High Cut" }, false, 3),
+                                                         G ("GATE / DUCK", { "Gate/Duck", "Gate/Duck Threshold", "Gate/Duck Release", "Key Input" }, false, 2),
+                                                         G ("MOD MATRIX", { "LFO 1 Target", "LFO 1 Shape", "LFO 1 Sync", "LFO 1 Rate", "LFO 1 Depth", "LFO 2 Target", "LFO 2 Shape", "LFO 2 Sync", "LFO 2 Rate", "LFO 2 Depth",
+                                                                            "Env Target", "Env Attack", "Env Release", "Env Depth" }, false, 5) }; }
+        else if (name == "Murmuration")   { s.family = Family::murmuration; s.knob = KnobStyle::vintage; s.width = 1400; s.height = 860; s.vizH = 250; s.rowSplit = 3; s.row1Share = 0.5f;
+                                            s.groups = { G ("CLOUD", { "Sync", "Time", "Beats", "Shape X", "Shape Y", "Texture" }, true, 3), G ("CHARACTER", { "Warp", "Color", "Blur", "Grain" }, true, 2),
+                                                         G ("MIX", { "Mix", "Output" }, true, 1),
+                                                         G ("MOD", { "Mod Shape", "Mod Rate", "Mod Depth" }, false, 3), G ("SHIMMER", { "Shimmer Pitch", "Shimmer", "Shimmer Fade" }, false, 3),
+                                                         G ("HOLD", { "Freeze", "Freeze Mode", "Infinite", "Drawn Envelope" }, false, 2),
+                                                         G ("TWEAK", { "Tail Tilt", "Low Cut", "High Cut", "Width", "Ducking", "Pre-Delay" }, false, 3) }; }
+        else if (name == "Masquerade")    { s.family = Family::masquerade; s.knob = KnobStyle::chicken; s.width = 1240; s.height = 760; s.vizH = 240; s.rowSplit = 3; s.row1Share = 0.55f;
+                                            s.groups = { G ("VOICE", { "Mode", "Pitch", "Formant", "Link" }, true, 2), G ("DRIVE", { "Drive Type", "Drive" }, true, 2), G ("OUT", { "Mix", "Output" }, true, 1),
+                                                         G ("KEY", { "Session Key", "Key", "Scale", "Retune" }, false, 2), G ("ROBOT / MIDI", { "Robot Note", "Chord Level", "Chord Spread" }, false, 3),
+                                                         G ("ENGINE", { "Engine", "Voice Range" }, false, 2) }; }
         else if (name == "Silk Ladder")   { s.family = Family::ladder; s.knob = KnobStyle::chicken; s.width = 940; s.height = 580; s.vizH = 220;
                                             s.groups = { G ("FILTER", { "Cutoff", "Resonance" }, true, 2), G ("ENVELOPE", { "Env Amount", "Fast Envelope" }, false, 1), G ("DRIVE", { "Poles", "Drive" }, false, 1), G ("OUTPUT", { "Output", "Mix" }, false, 1) }; }
         else if (name == "Halo Ring")     { s.family = Family::ring; s.knob = KnobStyle::chicken; s.width = 900; s.height = 560; s.vizH = 220;
@@ -2485,6 +2503,46 @@ namespace Skins
                 add (toggle ("Freeze", [slp] { return slp->freeze.get(); }, [slp, um] (bool b) { slp->freeze.setValue (b, um); }));
                 for (auto& hs : handleStore) if (hs->name == "Output") hs->bipolar = true;
             }
+            else if (auto sdp = dynamic_cast<SqShardPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                auto ci = [&] (const juce::String& nm, juce::StringArray names, juce::CachedValue<int>& cv) { add (choice (nm, names, [&cv] { return cv.get(); }, [&cv, um] (int i) { cv.setValue (i, um); })); };
+                auto tb = [&] (const juce::String& nm, juce::CachedValue<bool>& cv) { add (toggle (nm, [&cv] { return cv.get(); }, [&cv, um] (bool b) { cv.setValue (b, um); })); };
+                ci ("Engine", SqShardPlugin::engineNames(), sdp->engine); ci ("Recycle Mode", SqShardPlugin::fbNames(), sdp->fbMode); ci ("Gate/Duck", SqShardPlugin::dynNames(), sdp->dynMode);
+                ci ("Splice Sync", SqColor111bBase::syncNames (true), sdp->spliceSync); ci ("Delay Sync", SqColor111bBase::syncNames (true), sdp->delaySync);
+                ci ("Key", SqSessionKey::rootNames(), sdp->keyRoot); ci ("Scale", SqSessionKey::scaleNames(), sdp->scale);
+                ci ("LFO 1 Target", SqShardPlugin::targetNames(), sdp->lfo1Target); ci ("LFO 1 Shape", SqColor111bBase::shapeNames(), sdp->lfo1Shape); ci ("LFO 1 Sync", SqColor111bBase::syncNames (true), sdp->lfo1Sync);
+                ci ("LFO 2 Target", SqShardPlugin::targetNames(), sdp->lfo2Target); ci ("LFO 2 Shape", SqColor111bBase::shapeNames(), sdp->lfo2Shape); ci ("LFO 2 Sync", SqColor111bBase::syncNames (true), sdp->lfo2Sync);
+                ci ("Env Target", SqShardPlugin::targetNames(), sdp->envTarget);
+                tb ("Quantize", sdp->quantize); tb ("Session Key", sdp->autoKey); tb ("Key Input", sdp->keyOn);
+                for (auto& hs : handleStore) if (hs->name == "Pitch" || hs->name == "Output" || hs->name.endsWith ("Depth") || hs->name.startsWith ("Pitch ") || hs->name.endsWith (" R")) hs->bipolar = true;
+            }
+            else if (auto mup = dynamic_cast<SqMurmurationPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Sync", SqColor111bBase::syncNames (true), [mup] { return mup->sync.get(); }, [mup, um] (int i) { mup->sync.setValue (i, um); }));
+                add (choice ("Mod Shape", SqColor111bBase::shapeNames(), [mup] { return mup->modShape.get(); }, [mup, um] (int i) { mup->modShape.setValue (i, um); }));
+                add (choice ("Shimmer Pitch", SqMurmurationPlugin::shimmerNames(), [mup] { return mup->shimmerSt.get(); }, [mup, um] (int i) { mup->shimmerSt.setValue (i, um); }));
+                add (toggle ("Freeze", [mup] { return mup->freeze.get(); }, [mup, um] (bool b) { mup->freeze.setValue (b, um); }));
+                add (choice ("Freeze Mode", SqMurmurationPlugin::freezeNames(), [mup] { return mup->freezeMode.get(); }, [mup, um] (int i) { mup->freezeMode.setValue (i, um); }));
+                add (toggle ("Infinite", [mup] { return mup->infinite.get(); }, [mup, um] (bool b) { mup->infinite.setValue (b, um); }));
+                add (toggle ("Drawn Envelope", [mup] { return mup->customEnv.get(); }, [mup, um] (bool b) { mup->customEnv.setValue (b, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Color" || hs->name == "Tail Tilt" || hs->name == "Output") hs->bipolar = true;
+            }
+            else if (auto mqp = dynamic_cast<SqMasqueradePlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Mode", SqMasqueradePlugin::modeNames(), [mqp] { return mqp->mode.get(); }, [mqp, um] (int i) { mqp->mode.setValue (i, um); }));
+                add (toggle ("Link", [mqp] { return mqp->link.get(); }, [mqp, um] (bool b) { mqp->link.setValue (b, um); }));
+                add (choice ("Drive Type", SqMasqueradePlugin::driveNames(), [mqp] { return mqp->driveVoicing.get(); }, [mqp, um] (int i) { mqp->driveVoicing.setValue (i, um); }));
+                add (toggle ("Session Key", [mqp] { return mqp->autoKey.get(); }, [mqp, um] (bool b) { mqp->autoKey.setValue (b, um); }));
+                add (choice ("Key", SqSessionKey::rootNames(), [mqp] { return mqp->keyRoot.get(); }, [mqp, um] (int i) { mqp->keyRoot.setValue (i, um); }));
+                add (choice ("Scale", SqSessionKey::scaleNames(), [mqp] { return mqp->scale.get(); }, [mqp, um] (int i) { mqp->scale.setValue (i, um); }));
+                add (choice ("Robot Note", SqMasqueradePlugin::noteNames(), [mqp] { return mqp->robotNote.get() - 24; }, [mqp, um] (int i) { mqp->robotNote.setValue (i + 24, um); }));
+                add (choice ("Engine", SqMasqueradePlugin::engineNames(), [mqp] { return mqp->engine.get(); }, [mqp, um] (int i) { mqp->engine.setValue (i, um); }));
+                add (choice ("Voice Range", SqMasqueradePlugin::voiceNames(), [mqp] { return mqp->voiceType.get(); }, [mqp, um] (int i) { mqp->voiceType.setValue (i, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Pitch" || hs->name == "Formant" || hs->name == "Output") hs->bipolar = true;
+            }
             else if (auto mwp = dynamic_cast<SqMawPlugin*> (&plugin))
             {
                 auto um = &plugin.edit.getUndoManager();
@@ -2707,6 +2765,9 @@ namespace Skins
                 case Family::orbitpan:  viz = std::make_unique<OrbitViz> (handles, plugin, accent); break;
                 case Family::mirrorshift: viz = std::make_unique<MirrorViz> (handles, plugin, accent); break;
                 case Family::shutter:   viz = std::make_unique<ShutterViz> (handles, plugin, accent); break;
+                case Family::shard:     viz = std::make_unique<ShardViz> (handles, plugin, accent); break;
+                case Family::murmuration: viz = std::make_unique<MurmurationViz> (handles, plugin, accent); break;
+                case Family::masquerade: viz = std::make_unique<MasqueradeViz> (handles, plugin, accent); break;
                 case Family::ring:      viz = std::make_unique<RingViz> (handles, plugin, accent); break;
                 case Family::phase12:   viz = std::make_unique<Phase12Viz> (handles, plugin, accent); break;
                 case Family::bbd:       viz = std::make_unique<BucketViz> (handles, plugin, accent); break;

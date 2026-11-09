@@ -12,6 +12,9 @@ static juce::String apexTypeFor (const juce::String& k)
 static juce::String colourTypeFor (const juce::String& k)
 {
     const auto s = k.toLowerCase().removeCharacters (" -_");
+    if (s.contains ("shard") || s.contains ("crystal")) return SqShardPlugin::xmlTypeName;
+    if (s.contains ("murmur") || s.contains ("cloud") || s.contains ("swarm")) return SqMurmurationPlugin::xmlTypeName;
+    if (s.contains ("masquerade") || s.contains ("voicechanger") || s.contains ("masq")) return SqMasqueradePlugin::xmlTypeName;
     if (s.contains ("vellum")) return SqVellumPlugin::xmlTypeName;
     if (s.contains ("tremor") || s.contains ("tremolo")) return SqTremorPlugin::xmlTypeName;
     if (s.contains ("orbit") || s.contains ("autopan")) return SqOrbitPanPlugin::xmlTypeName;
@@ -52,7 +55,10 @@ static const juce::StringArray& knownPluginSettings()
                               "style", "syncL", "syncR", "timeChange", "heads", "limiter", "pattern", "freezeOn", "primeOn", "tapData", "tapLength", "sync",
                               "plate", "input", "lowSlope", "highSlope", "darkeningOn", "monoInOn", "arch", "micOn", "noisyOn", "biasOn", "fastOn",
                               "lowFreq", "midFreq", "highFreq", "mid2On", "steppedOn", "target", "shape", "syncOn", "division", "stepDivision", "numSteps", "dynMode", "analog",
-                              "harmonicOn", "retrigOn", "steps", "custom", "triggerOn", "divider", "binauralOn", "panLaw", "multiply", "algo", "bits", "syncA", "syncB", "smoothOn", "pattern" };
+                              "harmonicOn", "retrigOn", "steps", "custom", "triggerOn", "divider", "binauralOn", "panLaw", "multiply", "algo", "bits", "syncA", "syncB", "smoothOn", "pattern",
+                              "engine", "fbMode", "dynMode", "quantizeOn", "autoKeyOn", "keyRoot", "scale", "spliceSync", "delaySync", "lfo1Target", "lfo1Shape", "lfo1Sync",
+                              "lfo2Target", "lfo2Shape", "lfo2Sync", "envTarget", "modShape", "shimmerSt", "freezeMode", "infiniteOn", "customEnvOn", "envShape",
+                              "linkOn", "voiceType", "robotNote", "driveVoicing" };
         for (int b = 1; b <= 6; ++b) for (auto pre : { "solo", "bypass", "flip", "auto" }) k.add (juce::String (pre) + juce::String (b));
         return k;
     }();
@@ -150,6 +156,26 @@ juce::var describeApex (te::Plugin& p)
     if (auto ob = dynamic_cast<SqOrbitPanPlugin*> (&p)) { set (o, "mode", Orbit::modeName (ob->mode.get())); set (o, "pan_law", Orbit::lawName (SqOrbitPanPlugin::lawFor (ob->panLaw.get()))); set (o, "live_position_deg", ob->proc.position() * 90.0f); }
     if (auto ms = dynamic_cast<SqMirrorShiftPlugin*> (&p)) { set (o, "style", Mirror::style (ms->style.get()).name); set (o, "correlation", ms->proc.correlation()); set (o, "mono_sum_loss_db", ms->proc.monoLossDb()); set (o, "duck_db", ms->proc.duckGainDb()); }
     if (auto ml = dynamic_cast<SqMirrorShiftLitePlugin*> (&p)) { set (o, "style", Mirror::style (ml->style.get()).name); set (o, "correlation", ml->proc.correlation()); set (o, "mono_sum_loss_db", ml->proc.monoLossDb()); }
+    if (auto sd = dynamic_cast<SqShardPlugin*> (&p))
+    {
+        const auto kp = sd->knobParams();
+        set (o, "engine", Shard::engineName (kp.engine)); set (o, "recycle_mode", Shard::fbName (kp.fbMode));
+        set (o, "pitch_st_used", Shard::quantisedPitch (kp.pitchSt, kp.quantize, kp.keyRoot, kp.scaleMask)); set (o, "key", SqSessionKey::rootNames()[kp.keyRoot] + (kp.quantize ? " (quantize on)" : " (quantize off)"));
+        set (o, "splices_started", (double) sd->proc.splicesStarted()); set (o, "active_grains", sd->proc.activeGrains());
+    }
+    if (auto mu = dynamic_cast<SqMurmurationPlugin*> (&p))
+    {
+        const auto kp = mu->knobParams();
+        set (o, "taps", Murm::tapsFor (kp.texture) * 2); set (o, "time_ms", mu->proc.timeMsTarget());
+        juce::String env; for (int i = 0; i <= 8; ++i) env << juce::String (Murm::envelopeAt (kp, i / 8.0f), 2) << (i < 8 ? " " : "");
+        set (o, "envelope_0_to_1", env); set (o, "frozen", kp.freeze); set (o, "infinite", kp.infinite);
+    }
+    if (auto mq = dynamic_cast<SqMasqueradePlugin*> (&p))
+    {
+        const auto kp = mq->knobParams();
+        set (o, "mode", Masquerade::modeName (kp.mode)); set (o, "latency_ms", mq->getLatencySeconds() * 1000.0); set (o, "input_hz", mq->liveHz.load());
+        set (o, "key", SqSessionKey::rootNames()[kp.keyRoot]); set (o, "formant_follows_pitch", kp.link);
+    }
     if (auto sh = dynamic_cast<SqShutterBase*> (&p))
     {
         if (! p.edit.getTransport().isPlaying()) sh->refreshSettings();
@@ -184,7 +210,13 @@ void registerApexTools()
          " radiant (Radiant, 1.11 tube mixer, 90 presets) | radiantpre (Radiant Pre, 40 presets) | maw (Maw, 1.11 crushing limiter, 110 presets) | mawlite (Maw Lite, 30 presets) |\n"
          " vellum (Vellum EQ, broadcast EQ, 80 presets) | tremor (Tremor, tremolo / gate, 100 presets) | orbit (Orbit Pan, auto-pan, 90 presets) |\n"
          " mirror (Mirror Shift, micro-pitch widener, 60 presets - 'get' returns correlation and mono-sum loss) | mirrorlite (Mirror Shift Lite, 20) |\n"
-         " shutter (Shutter Delay, digital rack delay, 100 presets) | shutterlite (Shutter Lite, 30).\n"
+         " shutter (Shutter Delay, digital rack delay, 100 presets) | shutterlite (Shutter Lite, 30) |\n"
+         " shard (Shard, granular reverse pitch echo, 220 presets) | murmuration (Murmuration, tap-cloud space, 120 presets) | masquerade (Masquerade, voice changer, 100 presets).\n"
+         " Shard settings: engine (0 Vintage 1 Clean), fbMode (0 Mixed 1 Dual 2 Ping-Pong), dynMode (0 off 1 gate 2 duck), keyOn, quantizeOn, autoKeyOn (follow Moth Key's key) or keyRoot (0-11) + scale,\n"
+         "   spliceSync / delaySync (0 free, 1-27 division), lfo1Target / lfo2Target / envTarget (0 off 1 pitch 2 splice 3 delay 4 recycle 5 spray 6 mix 7 reverse), lfo1Shape / lfo2Shape (0-8), lfo1Sync / lfo2Sync.\n"
+         " Murmuration settings: sync (0 free, 1-27 division; or the Beats knob), modShape, shimmerSt (0 -24, 1 -12, 2 +12, 3 +24 st), freezeOn, freezeMode (0 loop 1 spectral), infiniteOn,\n"
+         "   customEnvOn + envShape (16 comma-separated levels 0-1). Masquerade settings: mode (0 Transpose 1 Quantize 2 Robot 3 MIDI), linkOn (formant follows pitch), engine (0 Live 1 Studio),\n"
+         "   voiceType (0-5), autoKeyOn / keyRoot / scale, robotNote (MIDI 24-84), driveVoicing (0 off, 1-7 Clean Fat Squash Dirt Crunch Shred Pump).\n"
          " Vellum settings: lowFreq / midFreq / highFreq (step 0-5: low 35-330 Hz, mid 700-5600 Hz, high 3.3-15 kHz), mid2On, steppedOn, target (0 Stereo 1 Mid 2 Side 3 Left 4 Right), oversample (0-3).\n"
          " Tremor settings: mode (0 LFO, 1 Rhythm), shape (0-8), syncOn, division / stepDivision (0-26: 1/64 .. 4 bars T), numSteps, dynMode (0 off 1 env 2 gate 3 inverse), analog (0 off, 1-7 voicing),\n"
          "   harmonicOn, keyOn, retrigOn, pattern (0-23 factory rhythm), steps (16 comma-separated per-step depths 0-1, overrides pattern), custom (16 shape points -1..1).\n"
