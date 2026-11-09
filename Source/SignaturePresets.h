@@ -45,6 +45,7 @@ namespace SignaturePresets
 
 #include "SignaturePresets111.inl"
 #include "SignaturePresets111v.inl"
+#include "SignaturePresets111d.inl"
 
     inline const std::map<juce::String, std::vector<Preset>>& bank()
     {
@@ -952,6 +953,7 @@ namespace SignaturePresets
             A ("Major Sixth Up",  { N ("Semitones", 9) }) } } };
             add111 (base);
             add111v (base);   // 1.11 Voice, first wave (Moth Tune 2 presets go in front of the 1.6 ones)
+            add111d (base);   // 1.11 Color & Space, second wave (part 1)
             return base; }();
         return b;
     }

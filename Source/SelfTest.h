@@ -47,6 +47,13 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqRadiantPrePlugin>();
     engine->getPluginManager().createBuiltInType<SqMawPlugin>();
     engine->getPluginManager().createBuiltInType<SqMawLitePlugin>();
+    engine->getPluginManager().createBuiltInType<SqVellumPlugin>();
+    engine->getPluginManager().createBuiltInType<SqTremorPlugin>();
+    engine->getPluginManager().createBuiltInType<SqOrbitPanPlugin>();
+    engine->getPluginManager().createBuiltInType<SqMirrorShiftPlugin>();
+    engine->getPluginManager().createBuiltInType<SqMirrorShiftLitePlugin>();
+    engine->getPluginManager().createBuiltInType<SqShutterPlugin>();
+    engine->getPluginManager().createBuiltInType<SqShutterLitePlugin>();
     engine->getPluginManager().createBuiltInType<SqMothKeyPlugin>();
     engine->getPluginManager().createBuiltInType<SqSirenCompPlugin>();
     engine->getPluginManager().createBuiltInType<SqSirenEqPlugin>();
@@ -2230,6 +2237,90 @@ inline int runSelfTest()
             double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
             check (sum.presets >= 270 && sum.failed == 0, "Radiant / Maw: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
             auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-radiant-maw.md");
+            if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
+        }
+        // ---------------------------------------------------------------- Phase D1: Vellum EQ, Tremor, Orbit Pan, Mirror Shift + Lite, Shutter Delay + Lite
+        {
+            const double SR = 48000.0, twoPi = juce::MathConstants<double>::twoPi;
+            call ("add_track", R"({"kind":"audio","name":"D1"})");
+            for (auto w : { "vellum", "tremor", "orbit", "mirror", "shutter" }) call ("studio_fx", juce::String (R"({"track":"D1","which":")") + w + R"(","action":"add"})");
+            auto* tt = session->findTrack ("D1"); SqVellumPlugin* ve = nullptr; SqTremorPlugin* tr = nullptr; SqOrbitPanPlugin* ob = nullptr; SqMirrorShiftPlugin* ms = nullptr; SqShutterPlugin* sh = nullptr;
+            if (tt != nullptr) for (auto pl : tt->pluginList)
+            {
+                if (auto a = dynamic_cast<SqVellumPlugin*> (pl)) ve = a; if (auto b = dynamic_cast<SqTremorPlugin*> (pl)) tr = b; if (auto c = dynamic_cast<SqOrbitPanPlugin*> (pl)) ob = c;
+                if (auto d = dynamic_cast<SqMirrorShiftPlugin*> (pl)) ms = d; if (auto e = dynamic_cast<SqShutterPlugin*> (pl)) sh = e;
+            }
+            check (ve && tr && ob && ms && sh, "Phase D1: Vellum EQ, Tremor, Orbit Pan, Mirror Shift and Shutter Delay added through studio_fx");
+            call ("studio_fx", R"({"track":"D1","which":"vellum","action":"set","settings":{"Low":-9,"midFreq":3,"Mid":6,"steppedOn":true,"target":2}})");
+            call ("studio_fx", R"({"track":"D1","which":"tremor","action":"set","settings":{"Depth":100,"mode":1,"pattern":7,"harmonicOn":true}})");
+            call ("studio_fx", R"({"track":"D1","which":"orbit","action":"set","settings":{"mode":6,"Width":210,"binauralOn":true,"panLaw":3}})");
+            call ("studio_fx", R"({"track":"D1","which":"mirror","action":"set","settings":{"style":3,"Focus":1500,"Duck":9}})");
+            call ("studio_fx", R"({"track":"D1","which":"shutter","action":"set","settings":{"multiply":3,"algo":5,"bits":2,"Time A":1250}})");
+            if (ve && tr && ob && ms && sh)
+                check (ve->midFreq.get() == 3 && ve->stepped.get() && ve->target.get() == 2 && std::abs (ve->bank[SqVellumPlugin::lowGain] + 9.0f) < 0.01f
+                       && tr->mode.get() == 1 && tr->pattern.get() == 7 && tr->harmonicOn.get() && ob->mode.get() == 6 && ob->binauralOn.get() && ob->panLaw.get() == 3
+                       && ms->style.get() == 3 && std::abs (ms->bank[SqMirrorShiftPlugin::focus] - 1500.0f) < 1.0f && sh->multiply.get() == 3 && sh->algo.get() == 5 && sh->bits.get() == 2,
+                       "Phase D1: modes, steps, styles and switches set by name through studio_fx");
+            auto gs = call ("studio_fx", R"({"track":"D1","which":"shutter","action":"get"})");
+            check (gs.contains ("bandwidth_hz") && gs.contains ("1500") && gs.contains ("Ping-Pong"), "Shutter: get reports x8 = 1.5 kHz bandwidth and the algorithm");
+            auto gm = call ("studio_fx", R"({"track":"D1","which":"mirror","action":"get"})");
+            check (gm.contains ("mono_sum_loss_db") && gm.contains ("Tape ADT"), "Mirror Shift: get reports the mono-compatibility meter and the style");
+            // measured models (the DSP the plug-ins run)
+            {
+                Vellum::Processor v; v.prepare (SR, 64); v.p.lowDb = -12; v.p.highDb = -15; v.p.midIdx = 3; v.p.midDb = 8; { float a[16] {}, b[16] {}; float* ch[2] = { a, b }; v.process (ch, 2, 16); }
+                check (std::abs (v.magnitudeDb (25) + 12) < 1.5 && v.magnitudeDb (20000) < v.magnitudeDb (14000) && std::abs (v.magnitudeDb (2300) - 8) < 0.3,
+                       "Vellum: shelf low cut, falling low-pass high cut, +8 dB mid at 2.3 kHz (" + juce::String (v.magnitudeDb (2300), 2) + " dB)");
+                Vellum::Processor q2, q8; q2.prepare (SR, 64); q8.prepare (SR, 64);
+                check (Vellum::midQ (8) > 3.0 * Vellum::midQ (1) - 0.6, "Vellum: mid Q narrows with gain (Q " + juce::String (Vellum::midQ (2), 2) + " at 2 dB, " + juce::String (Vellum::midQ (8), 2) + " at 8 dB)");
+            }
+            {
+                Tremor::Processor t; t.prepare (SR, 256); t.p.depth = 1; t.p.shape = Eng::WingMod::square; t.p.sync = false; t.p.rateHz = 4; t.p.smoothMs = 0.5f;
+                std::vector<float> l (48000 * 2, 0.25f), r = l; for (size_t i = 0; i < l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; t.process (ch, 2, nullptr, 256); }
+                float mn = 1; int opens = 0; for (size_t i = 24000; i < l.size(); ++i) { mn = juce::jmin (mn, std::abs (l[i])); if (l[i - 1] < 0.125f && l[i] >= 0.125f) ++opens; }
+                check (Eng::gainToDb (mn / 0.25f) < -60.0f && std::abs (opens / 1.5 - 4.0) < 0.7, "Tremor: depth 100 % is a full gate, 4 Hz measured " + juce::String (opens / 1.5, 2) + " Hz");
+            }
+            {
+                Orbit::Processor o; o.prepare (SR, 256); o.p.binaural = true; o.p.offsetDeg = 90; o.p.widthDeg = 0; o.p.smoothMs = 0.1f;
+                std::vector<float> l (48000), r; juce::Random rn (7); for (auto& x : l) x = 0.3f * (rn.nextFloat() * 2 - 1); r = l;
+                for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; o.process (ch, 2, nullptr, 256); }
+                int best = 0; double bc = -1; for (int lag = 0; lag < 60; ++lag) { double c = 0; for (size_t i = 20000; i < 40000; ++i) c += (double) r[i] * l[i + (size_t) lag]; if (c > bc) { bc = c; best = lag; } }
+                check (std::abs (best / SR * 1000.0 - 0.66) < 0.06, "Orbit Pan: binaural ITD at 90 deg " + juce::String (best / SR * 1000.0, 3) + " ms (0.66)");
+            }
+            {
+                Mirror::Processor m; m.prepare (SR, 256); m.p.style = 0; m.p.detune = 1; m.p.delay = 0.3f; m.p.mix = 1;
+                std::vector<float> l (96000), r, dry; for (size_t i = 0; i < l.size(); ++i) l[i] = 0.25f * (float) std::sin (twoPi * 1000.0 * (double) i / SR); r = l; dry = l;
+                for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; m.process (ch, 2, nullptr, 256); }
+                double first = -1, last = -1; int cnt = 0; for (size_t i = 24001; i < 90000; ++i) { const float a = l[i - 1] - dry[i - 1], b = l[i] - dry[i]; if (a < 0 && b >= 0) { const double t = (double) (i - 1) + a / (a - b); if (first < 0) first = t; else ++cnt; last = t; } }
+                const double cents = 1200.0 * std::log2 (cnt * SR / (last - first) / 1000.0);
+                check (std::abs (cents - 15.0) < 2.0, "Mirror Shift: Micro A detune 100 % measures " + juce::String (cents, 1) + " cents (15)");
+            }
+            {
+                auto gainAt = [&] (int mlt, double hz)
+                {
+                    Shutter::Processor s; s.prepare (SR, 256); s.p.multiply = mlt; s.p.timeAMs = 5; s.p.feedbackA = 0; s.p.mix = 1; s.p.bits = 0;
+                    std::vector<float> l (28672), r; for (size_t i = 0; i < l.size(); ++i) l[i] = 0.2f * (float) std::sin (twoPi * hz * (double) i / SR); r = l;
+                    for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; s.process (ch, 2, 256); }
+                    double e = 0; for (size_t i = 14336; i < 28672; ++i) e += (double) l[i] * l[i]; return 10.0 * std::log10 (e / 14336.0 / (0.02));
+                };
+                juce::String law; bool ok = true;
+                for (int mlt = 0; mlt < 4; ++mlt) { const double bw = Shutter::bandwidthHz (mlt), in = gainAt (mlt, bw * 0.5), out = gainAt (mlt, bw * 1.5); ok = ok && std::abs (in) < 1.5 && out - in < -25; law << juce::String (bw / 1000.0, 1) << "k " << juce::String (out - in, 0) << " dB  "; }
+                check (ok, "Shutter: Multiply bandwidth law 12 / 6 / 3 / 1.5 kHz (stop band at 1.5x): " + law);
+                Shutter::Processor s; s.prepare (SR, 256); s.p.multiply = 3; s.p.timeAMs = 1250;
+                check (std::abs (s.totalMs (0) - 10000.0) < 1.0, "Shutter: two lines to 10 s (1250 ms x8 = " + juce::String (s.totalMs (0), 0) + " ms)");
+            }
+            call ("delete_track", R"({"track":"D1"})");
+            Edition::owned() = Edition::Owned {}; Edition::owned().core = true;
+            check (Edition::isTypeAllowed ("sqmShutterLite") && Edition::isTypeAllowed ("sqmMirrorShiftLite") && ! Edition::isTypeAllowed ("sqmShutter") && ! Edition::isTypeAllowed ("sqmMirrorShift")
+                   && ! Edition::isTypeAllowed ("sqmVellum") && ! Edition::isTypeAllowed ("sqmTremor") && ! Edition::isTypeAllowed ("sqmOrbitPan"),
+                   "editions: Shutter Lite and Mirror Shift Lite are in Squelchmoth (core); the full five are in Color & Space");
+            Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+            auto rep = session->sessionsDir.getChildFile ("preset-audit-d1.md");
+            const juce::StringArray names { "Vellum EQ", "Tremor", "Orbit Pan", "Mirror Shift", "Mirror Shift Lite", "Shutter Delay", "Shutter Lite" };
+            auto sum = PresetAudit::run (*session->edit, names, { "sqmVellum", "sqmTremor", "sqmOrbitPan", "sqmMirrorShift", "sqmMirrorShiftLite", "sqmShutter", "sqmShutterLite" }, 3.0, rep);
+            juce::String firstFail; for (auto& row : sum.rows) if (! row.pass && firstFail.isEmpty()) firstFail = row.plugin + " / " + row.preset + ": " + row.why;
+            double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
+            check (sum.presets >= 480 && sum.failed == 0, "Phase D1: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
+            auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-d1.md");
             if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
         }
         // ---------------------------------------------------------------- Phase C: Moth Tune 2, Moth Key, Siren Comp, Siren EQ, Hush De-Ess 2

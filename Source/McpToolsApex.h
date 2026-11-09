@@ -12,6 +12,13 @@ static juce::String apexTypeFor (const juce::String& k)
 static juce::String colourTypeFor (const juce::String& k)
 {
     const auto s = k.toLowerCase().removeCharacters (" -_");
+    if (s.contains ("vellum")) return SqVellumPlugin::xmlTypeName;
+    if (s.contains ("tremor") || s.contains ("tremolo")) return SqTremorPlugin::xmlTypeName;
+    if (s.contains ("orbit") || s.contains ("autopan")) return SqOrbitPanPlugin::xmlTypeName;
+    if (s.contains ("mirrorshiftlite") || s.contains ("mirrorlite")) return SqMirrorShiftLitePlugin::xmlTypeName;
+    if (s.contains ("mirror") || s.contains ("widen")) return SqMirrorShiftPlugin::xmlTypeName;
+    if (s.contains ("shutterlite")) return SqShutterLitePlugin::xmlTypeName;
+    if (s.contains ("shutter") || s.contains ("digitaldelay")) return SqShutterPlugin::xmlTypeName;
     if (s.contains ("cinder")) return SqCinderPlugin::xmlTypeName;
     if (s.contains ("radiantpre")) return SqRadiantPrePlugin::xmlTypeName;
     if (s.contains ("radiant")) return SqRadiantPlugin::xmlTypeName;
@@ -43,7 +50,9 @@ static const juce::StringArray& knownPluginSettings()
                               "sync", "poles", "envFast", "lfoShape", "stages",
                               "model", "modelB", "punishOn", "steepOn", "autoGainOn", "msMode", "oversample", "linearPhaseOn", "deltaOn", "keyOn",
                               "style", "syncL", "syncR", "timeChange", "heads", "limiter", "pattern", "freezeOn", "primeOn", "tapData", "tapLength", "sync",
-                              "plate", "input", "lowSlope", "highSlope", "darkeningOn", "monoInOn", "arch", "micOn", "noisyOn", "biasOn", "fastOn" };
+                              "plate", "input", "lowSlope", "highSlope", "darkeningOn", "monoInOn", "arch", "micOn", "noisyOn", "biasOn", "fastOn",
+                              "lowFreq", "midFreq", "highFreq", "mid2On", "steppedOn", "target", "shape", "syncOn", "division", "stepDivision", "numSteps", "dynMode", "analog",
+                              "harmonicOn", "retrigOn", "steps", "custom", "triggerOn", "divider", "binauralOn", "panLaw", "multiply", "algo", "bits", "syncA", "syncB", "smoothOn", "pattern" };
         for (int b = 1; b <= 6; ++b) for (auto pre : { "solo", "bypass", "flip", "auto" }) k.add (juce::String (pre) + juce::String (b));
         return k;
     }();
@@ -130,6 +139,23 @@ juce::var describeApex (te::Plugin& p)
     if (auto rp = dynamic_cast<SqRingPlugin*> (&p)) set (o, "live_frequency_hz", rp->liveFreq.load());
     if (auto ap = dynamic_cast<SqAuroraPlugin*> (&p)) set (o, "room", SqAuroraPlugin::roomNames()[juce::jlimit (0, 7, ap->roomType.get())]);
     if (auto ph = dynamic_cast<SqPhase12Plugin*> (&p)) set (o, "stages", SqPhase12Plugin::stageCount (ph->stages.get()));
+    if (auto ve = dynamic_cast<SqVellumPlugin*> (&p))
+    {
+        auto kp = ve->knobParams();
+        set (o, "low_hz", Vellum::lowFreqs()[kp.lowIdx]); set (o, "mid_hz", Vellum::midFreqs()[kp.midIdx]); set (o, "high_hz", Vellum::highFreqs()[kp.highIdx]);
+        set (o, "low_curve", kp.lowDb < 0 ? "shelf cut" : "very-low bell"); set (o, "high_curve", kp.highDb < 0 ? "gentle low-pass" : "very-high bell");
+        set (o, "mid_q", Vellum::midQ (Vellum::detent (kp.midDb, 2, kp.stepped))); set (o, "target", Vellum::targetName (kp.target)); set (o, "latency_ms", ve->getLatencySeconds() * 1000.0);
+    }
+    if (auto tr = dynamic_cast<SqTremorPlugin*> (&p)) { set (o, "mode", Tremor::modeName (tr->mode.get())); set (o, "shape", Eng::WingMod::shapeName (tr->shape.get())); set (o, "rate_hz", tr->proc.cycleHz()); set (o, "live_gain_db", Eng::gainToDb (tr->proc.currentGain())); }
+    if (auto ob = dynamic_cast<SqOrbitPanPlugin*> (&p)) { set (o, "mode", Orbit::modeName (ob->mode.get())); set (o, "pan_law", Orbit::lawName (SqOrbitPanPlugin::lawFor (ob->panLaw.get()))); set (o, "live_position_deg", ob->proc.position() * 90.0f); }
+    if (auto ms = dynamic_cast<SqMirrorShiftPlugin*> (&p)) { set (o, "style", Mirror::style (ms->style.get()).name); set (o, "correlation", ms->proc.correlation()); set (o, "mono_sum_loss_db", ms->proc.monoLossDb()); set (o, "duck_db", ms->proc.duckGainDb()); }
+    if (auto ml = dynamic_cast<SqMirrorShiftLitePlugin*> (&p)) { set (o, "style", Mirror::style (ml->style.get()).name); set (o, "correlation", ml->proc.correlation()); set (o, "mono_sum_loss_db", ml->proc.monoLossDb()); }
+    if (auto sh = dynamic_cast<SqShutterBase*> (&p))
+    {
+        if (! p.edit.getTransport().isPlaying()) sh->refreshSettings();
+        set (o, "bandwidth_hz", Shutter::bandwidthHz (sh->proc.p.multiply)); set (o, "clock_hz", sh->proc.lineRate());
+        set (o, "time_a_ms", sh->proc.totalMs (0)); set (o, "time_b_ms", sh->proc.totalMs (1)); set (o, "algorithm", Shutter::algoName (sh->proc.p.algo));
+    }
     return o;
 }
 
@@ -155,7 +181,17 @@ void registerApexTools()
          " cinder (Cinder, 1.11: ten-model saturation, 140 presets - 'get' also returns the harmonic profile H2-H10 and THD at -18 dBFS, latency and auto gain) |\n"
          " wingbeat (Wingbeat Echo, 1.11: 36 styles, 160 presets) | wingbeatjr (Wingbeat Jr., 8 styles, 60 presets) |\n"
          " foilplate (Foil Plate, 1.11: seven plates, 120 presets - 'get' reports RT60 per band and the input stage THD) | foilplatelite (Foil Plate Lite, 30 presets) |\n"
-         " radiant (Radiant, 1.11 tube mixer, 90 presets) | radiantpre (Radiant Pre, 40 presets) | maw (Maw, 1.11 crushing limiter, 110 presets) | mawlite (Maw Lite, 30 presets).\n"
+         " radiant (Radiant, 1.11 tube mixer, 90 presets) | radiantpre (Radiant Pre, 40 presets) | maw (Maw, 1.11 crushing limiter, 110 presets) | mawlite (Maw Lite, 30 presets) |\n"
+         " vellum (Vellum EQ, broadcast EQ, 80 presets) | tremor (Tremor, tremolo / gate, 100 presets) | orbit (Orbit Pan, auto-pan, 90 presets) |\n"
+         " mirror (Mirror Shift, micro-pitch widener, 60 presets - 'get' returns correlation and mono-sum loss) | mirrorlite (Mirror Shift Lite, 20) |\n"
+         " shutter (Shutter Delay, digital rack delay, 100 presets) | shutterlite (Shutter Lite, 30).\n"
+         " Vellum settings: lowFreq / midFreq / highFreq (step 0-5: low 35-330 Hz, mid 700-5600 Hz, high 3.3-15 kHz), mid2On, steppedOn, target (0 Stereo 1 Mid 2 Side 3 Left 4 Right), oversample (0-3).\n"
+         " Tremor settings: mode (0 LFO, 1 Rhythm), shape (0-8), syncOn, division / stepDivision (0-26: 1/64 .. 4 bars T), numSteps, dynMode (0 off 1 env 2 gate 3 inverse), analog (0 off, 1-7 voicing),\n"
+         "   harmonicOn, keyOn, retrigOn, pattern (0-23 factory rhythm), steps (16 comma-separated per-step depths 0-1, overrides pattern), custom (16 shape points -1..1).\n"
+         " Orbit settings: mode (0 LFO 1 Rhythm Step 2 Rhythm Shape 3 Ping-Pong 4 Random 5 Random Step 6 Circle), shape, syncOn, division, stepDivision, numSteps, triggerOn, divider (1-16),\n"
+         "   keyOn, binauralOn, panLaw (0 session, 1 0 dB, 2 -3 dB, 3 -4.5 dB, 4 -6 dB), pattern (0-11), steps (16 positions -1..1, overrides pattern).\n"
+         " Mirror settings: style (0 Micro A, 1 Micro B, 2 Rack Wander, 3 Tape ADT, 4 Prism), keyOn. Shutter settings: multiply (0-3 = 1x 2x 4x 8x), algo (0 Classic 1 Parallel 2 Reverb\n"
+         "   3 Series 4 Criss-Cross 5 Ping-Pong), bits (0 clean 1 12-bit 2 8-bit), syncA / syncB (0 free, 1-27 division), freezeOn, smoothOn.\n"
          " Actions: add (optional preset), get, set {name: value}, preset (name or 'list'), open.\n"
          " Parameters by name, e.g. Aurora: Pre-Delay, Size, Decay, Low Decay, High Decay, Diffusion, Early Level, Tail Level, Modulation, Mod Rate, Width, Low Cut, High Cut, Ducking, Mix;\n"
          "   Opto: Peak Reduction, Gain, Emphasis, Tube, Mix; Pulse: Low Boost, Low Atten, High Boost, Bandwidth, High Atten, Mid Low Peak, Mid Dip, Mid High Peak, Output, Tube;\n"

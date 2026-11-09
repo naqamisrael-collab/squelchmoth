@@ -1018,7 +1018,7 @@ private:
     void registerPluginTools()
     {
         add ("list_plugins",
-             "List every plugin available: your scanned VST3/AU plugins (Waves, FabFilter, etc.), the Squelchmoth Signature bundle (87: 27 instruments and 60 processors - Hexwing, Pollen, Mandible, Prism EQ, Apex Triad, Time Weaver, Ember Tape, Aurora Verb...), and the full AirWindows collection (186). Filter by text and/or category ('instrument', 'effect', 'signature', 'builtin', 'thirdparty'). Insert any of them by name with insert_plugin.",
+             "List every plugin available: your scanned VST3/AU plugins (Waves, FabFilter, etc.), the Squelchmoth Signature bundle (over 100 instruments and processors - Hexwing, Pollen, Mandible, Prism EQ, Apex Triad, Time Weaver, Ember Tape, Aurora Verb...), and the full AirWindows collection (186). Filter by text and/or category ('instrument', 'effect', 'signature', 'builtin', 'thirdparty'). Insert any of them by name with insert_plugin. Without a filter, Signature entries show preset counts and categories; add a filter (e.g. the plug-in name) to get every preset name.",
              R"({"type":"object","properties":{"filter":{"type":"string"},"category":{"type":"string","enum":["all","instrument","effect","signature","builtin","thirdparty"]}}})",
              [this] (const juce::var& a)
              {
@@ -1057,7 +1057,18 @@ private:
                          set (o, "maker", "Squelchmoth Signature");
                          set (o, "kind", inst ? "instrument" : e.category);
                          set (o, "what", e.tagline);
-                         if (! e.presets.empty()) { juce::Array<juce::var> pr; for (auto& pp : e.presets) pr.add (pp.name); set (o, "presets", pr); }
+                         if (! e.presets.empty())
+                         {
+                             // a filtered search lists every preset name; the full catalogue gives counts and categories
+                             // (thousands of names would not fit one reply): get_plugin_presets / preset 'list' has the rest
+                             set (o, "preset_count", (int) e.presets.size());
+                             if (filter.isNotEmpty()) { juce::Array<juce::var> pr; for (auto& pp : e.presets) pr.add (pp.name); set (o, "presets", pr); }
+                             else
+                             {
+                                 juce::StringArray cats; for (auto& pp : e.presets) { auto c = juce::String (pp.name).upToFirstOccurrenceOf (" | ", false, false); if (juce::String (pp.name).contains (" | ")) cats.addIfNotAlreadyThere (c); }
+                                 if (! cats.isEmpty()) set (o, "preset_categories", cats.joinIntoString (", "));
+                             }
+                         }
                          out.add (o);
                      }
 

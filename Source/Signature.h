@@ -26,6 +26,7 @@
 #include "SqFoilPlate.h"
 #include "SqRadiantMaw.h"
 #include "SqVoice111.h"
+#include "SqColor111b.h"
 
 namespace te = tracktion;
 
@@ -82,6 +83,7 @@ namespace Signature
             { "Hush De-Ess 2",    "sqmHushDeEss2",   "Dynamics",    "De-esser with separate Hard (T, K, Ch) and Soft (S, Sh, Z) detection, split-band reduction only, Link, Solo, Assist and a detection history", 0xffd4ff3a, "hushdeess2" },
             { "Moth Tune FX",     "sqmTuneFx",       "Pitch & Vocal", "Creative tuning: editable Motion patterns plus a six-slot X/Y effects rack - Mutate, Duet, Vocode, Talkbox, Octaver, Stutter and more", 0xffff2fd6, "mothtunefx" },
             // ---------------- EQ & filters
+            { "Vellum EQ",        "sqmVellum",       "EQ & Filter", "Seventies broadcast-console EQ: shelf or very-low-bell low, six-step mid whose Q narrows as it rises, a second sweepable mid, gentle low-pass or very-high-bell high, Stepped detents, Mid/Side and L/R, oversampled Drive", 0xffe8c87a, "vellum" },
             { "Pulse EQ",         "sqmPulse",        "EQ & Filter", "Passive program EQ: the boost-and-cut low end, bandwidth high boost, high attenuation, plus a peak-dip-peak mid section and tube", 0xff2fe0ff, "pulseeq" },
             { "Silk Ladder",      "sqmLadder",       "EQ & Filter", "Four- or two-pole transistor-ladder low-pass with envelope follower, resonance and drive", 0xffff7a1a, "silkladder" },
             { "Prism EQ",         "4bandEq",         "EQ & Filter", "Four-band parametric with low/high shelves - clean, musical, zero-latency",    0xff3ad1ff, "prismeq" },
@@ -128,6 +130,8 @@ namespace Signature
             { "Wingbeat Jr.",     "sqmWingbeatJr",   "Space",       "The quick echo: eight styles, Normal / Wide / Ping-Pong, glide or stretch when the time changes", 0xff3aa8ff, "wingbeatjr" },
             { "Foil Plate",       "sqmFoilPlate",    "Space",       "Plate reverb: seven plates from steel to gold foil, four audible input stages, decay per band, auto-decay that shortens or lengthens (or follows a key), freeze", 0xffd8c27a, "foilplate" },
             { "Foil Plate Lite",  "sqmFoilPlateLite", "Space",      "The steel plate in four knobs: Decay, Low Cut, Mod, Mix", 0xffc8b26a, "foilplatelite" },
+            { "Shutter Delay",    "sqmShutter",      "Space",       "Late-70s digital rack delay: Multiply 1/2/4/8x halves the clock each step (12 / 6 / 3 / 1.5 kHz bandwidth), 8- or 12-bit companding colour, two lines to 10 s, six algorithms, LFO to 256 Hz, Freeze and a Smooth or Glitch time change", 0xff7affc8, "shutter" },
+            { "Shutter Lite",     "sqmShutterLite",  "Space",       "The digital rack delay in four knobs: Time, Multiply, Feedback, Mix", 0xff6ae8b8, "shutterlite" },
             { "Oil Can Delay",    "sqmOilCan",       "Space",       "Electrostatic oil-can echo: wobbling delay line, sustain, tone, drive - echo or doubler", 0xffffa31a, "oilcan" },
             { "Bucket Brigade",   "sqmBBD",          "Space",       "Analog bucket-brigade delay: darkening repeats, compander drive, filtered feedback and chorus-style modulation", 0xffff5a8a, "bucketbrigade" },
             { "Nebula Verb",      "reverb",          "Space",       "Lush algorithmic reverb: room size, damping, width, pre-delay, freeze",           0xff3affb0, "nebulaverb" },
@@ -137,6 +141,10 @@ namespace Signature
             { "Dust Delay",       "delay",           "Space",       "Tempo-synced stereo delay with feedback and mix",    0xff3affb0, "dustdelay" },
             { "Echo Wing",        "airwindows_tapedelay", "Space",  "Tape echo with wow, flutter and saturating feedback - dub and vintage slap",        0xff3affb0, "echowing" },
             // ---------------- Modulation & pitch
+            { "Tremor",           "sqmTremor",       "Modulation",  "Tremolo to a full gate: LFO or a 16-step rhythm with per-step depth, nine shapes, Feel, Groove, Accent, Env / Gate dynamics with a key input, audio-rate Rate Mod, stereo phase, harmonic split-band mode, Analog Style and Mix", 0xffff4fa3, "tremor" },
+            { "Orbit Pan",        "sqmOrbitPan",     "Modulation",  "Auto-pan in seven modes (LFO, Rhythm Step, Rhythm Shape, Ping-Pong, Random, Random Step and Circle with depth and Haas cues), +-105 deg offset, 210 deg width, audio trigger with a 1-16 divider, binaural mode, pan laws and Mix", 0xff4fd8ff, "orbitpan" },
+            { "Mirror Shift",     "sqmMirrorShift",  "Modulation",  "Micro-pitch widener: five styles (two classic micro-shifts, a wandering rack pitch-delay, Tape ADT and Prism), Detune and Delay in %, a Focus crossover, ducked width and a mono-compatibility meter", 0xffb08cff, "mirrorshift" },
+            { "Mirror Shift Lite", "sqmMirrorShiftLite", "Modulation", "Instant width: three styles and one Amount knob", 0xff9c7cf0, "mirrorshiftlite" },
             { "Halo Ring",        "sqmRing",         "Modulation",  "Ring modulator with sine or square LFO, drive and mix - bells, robots and tremolo", 0xff9dff2a, "haloring" },
             { "Time Weaver",      "sqmTimeWeaver",   "Modulation",  "Time and volume slicer: 32 steps over two bars, 36 factory time slots (half-time, stutter, reverse, tape stop, scratch) and 36 volume slots (gates, pumps, trance gates), MIDI picks the slot", 0xff3ae0c8, "timeweaver" },
             { "Larva Filter",     "sqmLarvaFilter",  "EQ & Filter", "Eight filter stages in series, parallel or 4+4, each with its own type, resonance, LFO, envelope follower and share of the 16-step sequencer", 0xffb8ff3a, "larvafilter" },

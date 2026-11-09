@@ -1509,13 +1509,14 @@ namespace Skins
     #include "SkinsColour.inl"
     #include "SkinsColor111.inl"
     #include "SkinsVoice111.inl"
+    #include "SkinsColor111b.inl"
     #include "SkinsSynths.inl"
     #include "SkinsSynths2.inl"
     #include "SkinsFx181.inl"
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -1842,6 +1843,32 @@ namespace Skins
                                             s.groups = { G ("DETECT", { "Split", "Sensitivity" }, true, 2), G ("HARD  T K CH", { "Hard Threshold", "Hard Range" }, true, 2),
                                                          G ("SOFT  S SH Z", { "Soft Threshold", "Soft Range" }, true, 2),
                                                          G ("LISTEN", { "Link", "Solo", "Output" }, false, 3), G ("ASSIST", { "Learn", "Preview", "Apply" }, false, 3) }; }
+        else if (name == "Vellum EQ")     { s.family = Family::vellum; s.knob = KnobStyle::vintage; s.width = 1240; s.height = 760; s.vizH = 260; s.rowSplit = 3; s.row1Share = 0.55f;
+                                            s.groups = { G ("LOW", { "Low Freq", "Low" }, true, 2), G ("MID", { "Mid Freq", "Mid" }, true, 2), G ("HIGH", { "High Freq", "High" }, true, 2),
+                                                         G ("MID 2", { "Mid 2 On", "Mid 2 Freq", "Mid 2" }, false, 3), G ("AMP", { "Drive", "Oversampling", "Output" }, false, 3),
+                                                         G ("MODE", { "Stepped", "Channels" }, false, 2) }; }
+        else if (name == "Tremor")        { s.family = Family::tremor; s.knob = KnobStyle::chicken; s.width = 1320; s.height = 820; s.vizH = 240; s.rowSplit = 3; s.row1Share = 0.5f;
+                                            s.groups = { G ("TREMOLO", { "Mode", "Shape", "Sync", "Division", "Rate", "Depth" }, true, 3), G ("FEEL", { "Feel", "Groove", "Accent", "Smoothing", "Pulse Width" }, false, 3),
+                                                         G ("OUTPUT", { "Stereo Phase", "Mix", "Output" }, false, 3),
+                                                         G ("RHYTHM", { "Pattern", "Step Length", "Steps", "Retrigger" }, false, 2), G ("DYNAMICS", { "Dynamics", "Threshold", "Attack", "Release", "Key Input" }, false, 3),
+                                                         G ("COLOUR", { "Rate Mod", "Rate Mod Hz", "Harmonic", "Crossover", "Analog", "Drive" }, false, 3) }; }
+        else if (name == "Orbit Pan")     { s.family = Family::orbitpan; s.knob = KnobStyle::ring; s.width = 1320; s.height = 820; s.vizH = 260; s.rowSplit = 3; s.row1Share = 0.5f;
+                                            s.groups = { G ("MOTION", { "Mode", "Shape", "Sync", "Division", "Rate" }, true, 3), G ("IMAGE", { "Offset", "Width", "Smoothing", "Source Width" }, true, 2),
+                                                         G ("OUTPUT", { "Pan Law", "Mix", "Output" }, false, 3),
+                                                         G ("RHYTHM", { "Pattern", "Step Length", "Steps" }, false, 3), G ("TRIGGER", { "Audio Trigger", "Divider", "Threshold", "Detector HP", "Detector LP", "Key Input" }, false, 3),
+                                                         G ("SPACE", { "Depth", "Haas", "Binaural" }, false, 3) }; }
+        else if (name == "Mirror Shift")  { s.family = Family::mirrorshift; s.knob = KnobStyle::ring; s.width = 1080; s.height = 680; s.vizH = 250;
+                                            s.groups = { G ("SHIFT", { "Style", "Detune", "Delay" }, true, 3), G ("FOCUS", { "Focus", "Mix", "Output" }, true, 3),
+                                                         G ("DUCK", { "Duck", "Duck Threshold", "Key Input" }, false, 3) }; }
+        else if (name == "Mirror Shift Lite") { s.family = Family::mirrorshift; s.knob = KnobStyle::ring; s.width = 820; s.height = 540; s.vizH = 220;
+                                            s.groups = { G ("WIDTH", { "Style", "Amount" }, true, 2), G ("OUT", { "Mix", "Output" }, true, 2) }; }
+        else if (name == "Shutter Delay") { s.family = Family::shutter; s.knob = KnobStyle::flat; s.width = 1280; s.height = 800; s.vizH = 240; s.rowSplit = 3; s.row1Share = 0.5f;
+                                            s.groups = { G ("LINE A", { "Sync A", "Time A", "Feedback A" }, true, 3), G ("LINE B", { "Sync B", "Time B", "Feedback B" }, true, 3),
+                                                         G ("MIX", { "Mix", "Output" }, true, 2),
+                                                         G ("CONVERTER", { "Multiply", "Converter", "Input" }, false, 3), G ("ROUTING", { "Algorithm", "Freeze", "Time Change" }, false, 3),
+                                                         G ("LFO", { "LFO Rate", "LFO Depth" }, false, 2) }; }
+        else if (name == "Shutter Lite")  { s.family = Family::shutter; s.knob = KnobStyle::flat; s.width = 900; s.height = 580; s.vizH = 220;
+                                            s.groups = { G ("DELAY", { "Time", "Multiply", "Feedback" }, true, 3), G ("MIX", { "Mix", "Freeze", "Output" }, true, 3) }; }
         else if (name == "Silk Ladder")   { s.family = Family::ladder; s.knob = KnobStyle::chicken; s.width = 940; s.height = 580; s.vizH = 220;
                                             s.groups = { G ("FILTER", { "Cutoff", "Resonance" }, true, 2), G ("ENVELOPE", { "Env Amount", "Fast Envelope" }, false, 1), G ("DRIVE", { "Poles", "Drive" }, false, 1), G ("OUTPUT", { "Output", "Mix" }, false, 1) }; }
         else if (name == "Halo Ring")     { s.family = Family::ring; s.knob = KnobStyle::chicken; s.width = 900; s.height = 560; s.vizH = 220;
@@ -2380,6 +2407,84 @@ namespace Skins
                 add (toggle ("Apply", [] { return false; }, [hd, um] (bool) { um->beginNewTransaction ("Hush: apply Assist"); hd->applySuggestion(); }));
                 for (auto& hs : handleStore) if (hs->name == "Output") hs->bipolar = true;
             }
+            else if (auto vep = dynamic_cast<SqVellumPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Low Freq", SqVellumPlugin::freqNames (Vellum::lowFreqs()), [vep] { return vep->lowFreq.get(); }, [vep, um] (int i) { vep->lowFreq.setValue (i, um); }));
+                add (choice ("Mid Freq", SqVellumPlugin::freqNames (Vellum::midFreqs()), [vep] { return vep->midFreq.get(); }, [vep, um] (int i) { vep->midFreq.setValue (i, um); }));
+                add (choice ("High Freq", SqVellumPlugin::freqNames (Vellum::highFreqs()), [vep] { return vep->highFreq.get(); }, [vep, um] (int i) { vep->highFreq.setValue (i, um); }));
+                add (toggle ("Mid 2 On", [vep] { return vep->mid2On.get(); }, [vep, um] (bool b) { vep->mid2On.setValue (b, um); }));
+                add (toggle ("Stepped", [vep] { return vep->stepped.get(); }, [vep, um] (bool b) { vep->stepped.setValue (b, um); }));
+                add (choice ("Channels", SqVellumPlugin::targetNames(), [vep] { return vep->target.get(); }, [vep, um] (int i) { vep->target.setValue (i, um); }));
+                add (choice ("Oversampling", SqVellumPlugin::osNames(), [vep] { return vep->oversample.get(); }, [vep, um] (int i) { vep->oversample.setValue (i, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Low" || hs->name == "Mid" || hs->name == "Mid 2" || hs->name == "High" || hs->name == "Output") hs->bipolar = true;
+            }
+            else if (auto trp = dynamic_cast<SqTremorPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Mode", SqTremorPlugin::modeNames(), [trp] { return trp->mode.get(); }, [trp, um] (int i) { trp->mode.setValue (i, um); }));
+                add (choice ("Shape", SqColor111bBase::shapeNames(), [trp] { return trp->shape.get(); }, [trp, um] (int i) { trp->shape.setValue (i, um); }));
+                add (toggle ("Sync", [trp] { return trp->syncOn.get(); }, [trp, um] (bool b) { trp->syncOn.setValue (b, um); }));
+                add (choice ("Division", SqColor111bBase::syncNames (false), [trp] { return trp->division.get(); }, [trp, um] (int i) { trp->division.setValue (i, um); }));
+                add (choice ("Step Length", SqColor111bBase::syncNames (false), [trp] { return trp->stepDivision.get(); }, [trp, um] (int i) { trp->stepDivision.setValue (i, um); }));
+                add (choice ("Steps", { "1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16" }, [trp] { return trp->numSteps.get() - 1; }, [trp, um] (int i) { trp->numSteps.setValue (i + 1, um); }));
+                add (choice ("Pattern", SqTremorPlugin::patternNames(), [trp] { return trp->pattern.get(); }, [trp, um] (int i) { trp->steps.setValue ({}, um); trp->pattern.setValue (i, um); }));
+                add (toggle ("Retrigger", [trp] { return trp->retrigOn.get(); }, [trp, um] (bool b) { trp->retrigOn.setValue (b, um); }));
+                add (choice ("Dynamics", SqTremorPlugin::dynNames(), [trp] { return trp->dynMode.get(); }, [trp, um] (int i) { trp->dynMode.setValue (i, um); }));
+                add (toggle ("Key Input", [trp] { return trp->keyOn.get(); }, [trp, um] (bool b) { trp->keyOn.setValue (b, um); }));
+                add (toggle ("Harmonic", [trp] { return trp->harmonicOn.get(); }, [trp, um] (bool b) { trp->harmonicOn.setValue (b, um); }));
+                add (choice ("Analog", SqTremorPlugin::analogNames(), [trp] { return trp->analog.get(); }, [trp, um] (int i) { trp->analog.setValue (i, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output" || hs->name == "Feel") hs->bipolar = true;
+            }
+            else if (auto orp = dynamic_cast<SqOrbitPanPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Mode", SqOrbitPanPlugin::modeNames(), [orp] { return orp->mode.get(); }, [orp, um] (int i) { orp->mode.setValue (i, um); }));
+                add (choice ("Shape", SqColor111bBase::shapeNames(), [orp] { return orp->shape.get(); }, [orp, um] (int i) { orp->shape.setValue (i, um); }));
+                add (toggle ("Sync", [orp] { return orp->syncOn.get(); }, [orp, um] (bool b) { orp->syncOn.setValue (b, um); }));
+                add (choice ("Division", SqColor111bBase::syncNames (false), [orp] { return orp->division.get(); }, [orp, um] (int i) { orp->division.setValue (i, um); }));
+                add (choice ("Step Length", SqColor111bBase::syncNames (false), [orp] { return orp->stepDivision.get(); }, [orp, um] (int i) { orp->stepDivision.setValue (i, um); }));
+                add (choice ("Steps", { "1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16" }, [orp] { return orp->numSteps.get() - 1; }, [orp, um] (int i) { orp->numSteps.setValue (i + 1, um); }));
+                add (choice ("Pattern", SqOrbitPanPlugin::patternNames(), [orp] { return orp->pattern.get(); }, [orp, um] (int i) { orp->steps.setValue ({}, um); orp->pattern.setValue (i, um); }));
+                add (toggle ("Audio Trigger", [orp] { return orp->triggerOn.get(); }, [orp, um] (bool b) { orp->triggerOn.setValue (b, um); }));
+                add (choice ("Divider", { "1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16" }, [orp] { return orp->divider.get() - 1; }, [orp, um] (int i) { orp->divider.setValue (i + 1, um); }));
+                add (toggle ("Key Input", [orp] { return orp->keyOn.get(); }, [orp, um] (bool b) { orp->keyOn.setValue (b, um); }));
+                add (toggle ("Binaural", [orp] { return orp->binauralOn.get(); }, [orp, um] (bool b) { orp->binauralOn.setValue (b, um); }));
+                add (choice ("Pan Law", SqOrbitPanPlugin::lawNames(), [orp] { return orp->panLaw.get(); }, [orp, um] (int i) { orp->panLaw.setValue (i, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Offset" || hs->name == "Output") hs->bipolar = true;
+            }
+            else if (auto msp = dynamic_cast<SqMirrorShiftPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Style", SqMirrorShiftPlugin::styleNames(), [msp] { return msp->style.get(); }, [msp, um] (int i) { msp->style.setValue (i, um); }));
+                add (toggle ("Key Input", [msp] { return msp->keyOn.get(); }, [msp, um] (bool b) { msp->keyOn.setValue (b, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output") hs->bipolar = true;
+            }
+            else if (auto mlp = dynamic_cast<SqMirrorShiftLitePlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Style", SqMirrorShiftPlugin::styleNames (3), [mlp] { return mlp->style.get(); }, [mlp, um] (int i) { mlp->style.setValue (i, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output") hs->bipolar = true;
+            }
+            else if (auto shp = dynamic_cast<SqShutterPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Multiply", SqShutterBase::multiplyNames(), [shp] { return shp->multiply.get(); }, [shp, um] (int i) { shp->multiply.setValue (i, um); }));
+                add (choice ("Converter", SqShutterPlugin::bitsNames(), [shp] { return shp->bits.get(); }, [shp, um] (int i) { shp->bits.setValue (i, um); }));
+                add (choice ("Algorithm", SqShutterPlugin::algoNames(), [shp] { return shp->algo.get(); }, [shp, um] (int i) { shp->algo.setValue (i, um); }));
+                add (choice ("Sync A", SqColor111bBase::syncNames (true), [shp] { return shp->syncA.get(); }, [shp, um] (int i) { shp->syncA.setValue (i, um); }));
+                add (choice ("Sync B", SqColor111bBase::syncNames (true), [shp] { return shp->syncB.get(); }, [shp, um] (int i) { shp->syncB.setValue (i, um); }));
+                add (toggle ("Freeze", [shp] { return shp->freeze.get(); }, [shp, um] (bool b) { shp->freeze.setValue (b, um); }));
+                add (choice ("Time Change", { "Glitch", "Smooth" }, [shp] { return shp->smoothOn.get() ? 1 : 0; }, [shp, um] (int i) { shp->smoothOn.setValue (i == 1, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output" || hs->name == "Input") hs->bipolar = true;
+            }
+            else if (auto slp = dynamic_cast<SqShutterLitePlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Multiply", SqShutterBase::multiplyNames(), [slp] { return slp->multiply.get(); }, [slp, um] (int i) { slp->multiply.setValue (i, um); }));
+                add (toggle ("Freeze", [slp] { return slp->freeze.get(); }, [slp, um] (bool b) { slp->freeze.setValue (b, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output") hs->bipolar = true;
+            }
             else if (auto mwp = dynamic_cast<SqMawPlugin*> (&plugin))
             {
                 auto um = &plugin.edit.getUndoManager();
@@ -2597,6 +2702,11 @@ namespace Skins
                 case Family::sirencomp: viz = std::make_unique<SirenCompViz> (handles, plugin, accent); break;
                 case Family::sireneq:   viz = std::make_unique<SirenEqViz> (handles, plugin, accent); break;
                 case Family::hushdeess2: viz = std::make_unique<HushViz> (handles, plugin, accent); break;
+                case Family::vellum:    viz = std::make_unique<VellumViz> (handles, plugin, accent); break;
+                case Family::tremor:    viz = std::make_unique<TremorViz> (handles, plugin, accent); break;
+                case Family::orbitpan:  viz = std::make_unique<OrbitViz> (handles, plugin, accent); break;
+                case Family::mirrorshift: viz = std::make_unique<MirrorViz> (handles, plugin, accent); break;
+                case Family::shutter:   viz = std::make_unique<ShutterViz> (handles, plugin, accent); break;
                 case Family::ring:      viz = std::make_unique<RingViz> (handles, plugin, accent); break;
                 case Family::phase12:   viz = std::make_unique<Phase12Viz> (handles, plugin, accent); break;
                 case Family::bbd:       viz = std::make_unique<BucketViz> (handles, plugin, accent); break;
