@@ -1512,13 +1512,14 @@ namespace Skins
     #include "SkinsColor111b.inl"
     #include "SkinsColor111c.inl"
     #include "SkinsColor111d.inl"
+    #include "SkinsVoice111e.inl"
     #include "SkinsSynths.inl"
     #include "SkinsSynths2.inl"
     #include "SkinsFx181.inl"
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -1909,6 +1910,25 @@ namespace Skins
                                                          G ("RACK", { "Chain", "Routing", "Open Slot", "Lane Balance", "Input", "Output", "Mix" }, true, 3),
                                                          G ("RECYCLE", { "Recycle", "Recycle Time", "Recycle Sync", "Recycle Division" }, true, 2),
                                                          G ("MACROS", { "Macro 1", "Macro 2", "Macro 3", "Macro 4", "Macro 5", "Macro 6", "Macro 7", "Macro 8" }, false, 8) }; }
+        else if (name == "Siren Verb")    { s.family = Family::sirenverb; s.knob = KnobStyle::vintage; s.width = 1440; s.height = 900; s.vizH = 250; s.rowSplit = 3; s.row1Share = 0.5f; s.resizable = true;
+                                            s.groups = { G ("REVERB", { "Algorithm", "Assist", "Dice", "Size", "Decay", "Pre-Delay" }, true, 3),
+                                                         G ("SPACE", { "Damping", "Early", "Width", "Low Cut", "High Cut", "Mod Depth" }, true, 3),
+                                                         G ("MIX", { "Mix", "Mix Lock", "Output" }, true, 1),
+                                                         G ("PRE-VERB", { "Pre Pitch", "Throat", "Tube", "De-Ess", "Reverse", "Reverse Time" }, false, 3),
+                                                         G ("POST-VERB", { "Auto-EQ", "Auto-EQ Depth", "Tone", "Compressor", "Gate", "Ducking", "Shimmer", "Shimmer Pitch", "Mod Rate" }, false, 3),
+                                                         G ("ECHO", { "Echo", "Echo Sync", "Echo Time", "Echo Feedback", "Echo Level" }, false, 3) }; }
+        else if (name == "Mic Closet")    { s.family = Family::miccloset; s.knob = KnobStyle::chicken; s.width = 1320; s.height = 820; s.vizH = 250; s.rowSplit = 3; s.row1Share = 0.55f; s.resizable = true;
+                                            s.groups = { G ("MICROPHONES", { "Source Mic", "Target Mic", "Pattern", "Source Proximity" }, true, 2),
+                                                         G ("PLACEMENT", { "Distance", "Low Cut", "Pad" }, true, 3),
+                                                         G ("OUT", { "Mix", "Output" }, true, 1),
+                                                         G ("CHARACTER", { "Colour", "Self-Noise" }, false, 2) }; }
+        else if (name == "Larynx")        { s.family = Family::larynx; s.knob = KnobStyle::ring; s.width = 1400; s.height = 880; s.vizH = 280; s.rowSplit = 3; s.row1Share = 0.5f; s.resizable = true;
+                                            s.groups = { G ("TRACT", { "Tract Length", "Precision", "Level Match" }, true, 3),
+                                                         G ("GLOTTIS", { "Glottal Hardness", "Pulse Width", "Breathiness", "Breath Freq" }, true, 2),
+                                                         G ("OUT", { "Mix", "Output" }, true, 1),
+                                                         G ("SHAPE", { "Glottis", "Lower Throat", "Upper Throat", "Pharynx", "Back Tongue", "Mid Tongue", "Front Tongue", "Lips" }, false, 8) }; }
+        else if (name == "Exhale")        { s.family = Family::exhale; s.knob = KnobStyle::vintage; s.width = 1100; s.height = 680; s.vizH = 240; s.resizable = true;
+                                            s.groups = { G ("BREATH", { "Breath", "Breath Tone", "Consonants" }, true, 3), G ("TONE", { "Body" }, true, 1), G ("OUT", { "Mix", "Output" }, true, 2) }; }
         else if (name == "Silk Ladder")   { s.family = Family::ladder; s.knob = KnobStyle::chicken; s.width = 940; s.height = 580; s.vizH = 220;
                                             s.groups = { G ("FILTER", { "Cutoff", "Resonance" }, true, 2), G ("ENVELOPE", { "Env Amount", "Fast Envelope" }, false, 1), G ("DRIVE", { "Poles", "Drive" }, false, 1), G ("OUTPUT", { "Output", "Mix" }, false, 1) }; }
         else if (name == "Halo Ring")     { s.family = Family::ring; s.knob = KnobStyle::chicken; s.width = 900; s.height = 560; s.vizH = 220;
@@ -2624,6 +2644,38 @@ namespace Skins
                 add (choice ("Recycle Division", SqColor111bBase::syncNames (false), [hrp] { return hrp->syncDiv.get(); }, [hrp, um] (int i) { hrp->syncDiv.setValue (i, um); }));
                 for (auto& hs : handleStore) if (hs->name == "Output" || hs->name == "Input" || hs->name == "Lane Balance") hs->bipolar = true;
             }
+            else if (auto svp = dynamic_cast<SqSirenVerbPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                auto ci = [&] (const juce::String& nm, juce::StringArray names, juce::CachedValue<int>& cv) { add (choice (nm, names, [&cv] { return cv.get(); }, [&cv, um] (int i) { cv.setValue (i, um); })); };
+                auto tb = [&] (const juce::String& nm, juce::CachedValue<bool>& cv) { add (toggle (nm, [&cv] { return cv.get(); }, [&cv, um] (bool b) { cv.setValue (b, um); })); };
+                ci ("Algorithm", SqSirenVerbPlugin::algoNames(), svp->algo); ci ("Echo", SqSirenVerbPlugin::delayNames(), svp->delayMode);
+                ci ("Echo Sync", SqColor111bBase::syncNames (true), svp->delaySync); ci ("Shimmer Pitch", SqSirenVerbPlugin::shimmerNames(), svp->shimmerPitch);
+                tb ("Reverse", svp->reverseOn); tb ("Auto-EQ", svp->autoEqOn); tb ("Mix Lock", svp->mixLockOn);
+                juce::StringArray vibes { "-" }; vibes.addArray (SqSirenVerbPlugin::vibeNames());
+                add (choice ("Assist", vibes, [] { return 0; }, [svp, um] (int i) { if (i > 0) { um->beginNewTransaction ("Siren Verb: Assist"); svp->assist (i - 1, um); } }));
+                add (toggle ("Dice", [] { return false; }, [svp, um] (bool) { um->beginNewTransaction ("Siren Verb: Dice"); svp->dice (um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output" || hs->name == "Pre Pitch" || hs->name == "Throat" || hs->name == "Tone") hs->bipolar = true;
+            }
+            else if (auto mcp = dynamic_cast<SqMicClosetPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Source Mic", SqMicClosetPlugin::micNames(), [mcp] { return mcp->source.get(); }, [mcp, um] (int i) { mcp->source.setValue (i, um); }));
+                add (choice ("Target Mic", SqMicClosetPlugin::micNames(), [mcp] { return mcp->target.get(); }, [mcp, um] (int i) { mcp->target.setValue (i, um); }));
+                add (choice ("Pattern", SqMicClosetPlugin::patternNames(), [mcp] { return mcp->pattern.get(); }, [mcp, um] (int i) { mcp->pattern.setValue (i, um); }));
+                add (toggle ("Source Proximity", [mcp] { return mcp->sourceProxOn.get(); }, [mcp, um] (bool b) { mcp->sourceProxOn.setValue (b, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output") hs->bipolar = true;
+            }
+            else if (auto lxp = dynamic_cast<SqLarynxPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (toggle ("Level Match", [lxp] { return lxp->levelMatchOn.get(); }, [lxp, um] (bool b) { lxp->levelMatchOn.setValue (b, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output" || hs->name == "Glottal Hardness" || juce::StringArray { "Glottis", "Lower Throat", "Upper Throat", "Pharynx", "Back Tongue", "Mid Tongue", "Front Tongue", "Lips" }.contains (hs->name)) hs->bipolar = true;
+            }
+            else if (dynamic_cast<SqExhalePlugin*> (&plugin) != nullptr)
+            {
+                for (auto& hs : handleStore) if (hs->name == "Output" || hs->name == "Breath Tone" || hs->name == "Body") hs->bipolar = true;
+            }
             else if (auto mwp = dynamic_cast<SqMawPlugin*> (&plugin))
             {
                 auto um = &plugin.edit.getUndoManager();
@@ -2852,6 +2904,10 @@ namespace Skins
                 case Family::larva2: viz = std::make_unique<Larva2Viz> (handles, plugin, accent); break;
                 case Family::phase2: viz = std::make_unique<Phase2Viz> (handles, plugin, accent); break;
                 case Family::hiverack: viz = std::make_unique<HiveRackViz> (handles, plugin, accent); break;
+                case Family::sirenverb: viz = std::make_unique<SirenVerbViz> (handles, plugin, accent); break;
+                case Family::miccloset: viz = std::make_unique<MicClosetViz> (handles, plugin, accent); break;
+                case Family::larynx: viz = std::make_unique<LarynxViz> (handles, plugin, accent); break;
+                case Family::exhale: viz = std::make_unique<ExhaleViz> (handles, plugin, accent); break;
                 case Family::ring:      viz = std::make_unique<RingViz> (handles, plugin, accent); break;
                 case Family::phase12:   viz = std::make_unique<Phase12Viz> (handles, plugin, accent); break;
                 case Family::bbd:       viz = std::make_unique<BucketViz> (handles, plugin, accent); break;

@@ -26,7 +26,7 @@
 #include "SqFoilPlate.h"
 #include "SqRadiantMaw.h"
 #include "SqVoice111.h"
-#include "SqColor111d.h"
+#include "SqVoice111e.h"
 
 namespace te = tracktion;
 
@@ -83,6 +83,10 @@ namespace Signature
             { "Siren Comp",       "sqmSirenComp",    "Dynamics",    "Vocal compressor: FET (4 / 8 / 12 / 20 / All), two Opto cells and Modern, single or dual series, warm, GR per stage, pitch-filter duck, Assist you can audition, Punch with ceiling", 0xffff4f8b, "sirencomp" },
             { "Siren EQ",         "sqmSirenEq",      "EQ & Filter", "Vocal EQ: six bands that are fixed, locked to the singer's pitch (any harmonic) or dynamic; HP / LP 6-24 dB/oct, Air to 40 kHz, Tilt, Vocal Learning you hear before you apply", 0xffff7ab8, "sireneq" },
             { "Hush De-Ess 2",    "sqmHushDeEss2",   "Dynamics",    "De-esser with separate Hard (T, K, Ch) and Soft (S, Sh, Z) detection, split-band reduction only, Link, Solo, Assist and a detection history", 0xffd4ff3a, "hushdeess2" },
+            { "Siren Verb",       "sqmSirenVerb",    "Space",       "Vocal reverb: seven algorithms (Hall, Plate, Room, Chamber, Spring, Ambience, Shimmer), pre-verb Pitch / Throat / Tube / De-Ess / Reverse, a pitch-tracked Auto-EQ that keeps the singer's notes out of the tail, compressor, gate, ducking, mono or ping-pong echo, Assist and Dice", 0xff7fb4ff, "sirenverb" },
+            { "Mic Closet",       "sqmMicCloset",    "Pitch & Vocal", "Microphone modelling: 45 response archetypes (condensers, dynamics, ribbons, devices, originals), source-to-target conversion, distance and proximity, polar pattern, low cut, pad, colour and self-noise", 0xffe0a24a, "miccloset" },
+            { "Larynx",           "sqmLarynx",       "Pitch & Vocal", "Vocal-tract modeller: the voice's own tract and source separated, then a new glottis (hard / soft, pulse width, breathiness) and tract (length, 8-point shape) - stereo, level matched, guarded against whistling", 0xffff4fa8, "larynx" },
+            { "Exhale",           "sqmExhale",       "Pitch & Vocal", "Breathiness control: the voice split into its harmonic tone and its breath, the breath set from none to +12 dB with its own tone, consonants protected, the tone untouched", 0xff6ee6e0, "exhale" },
             { "Moth Tune FX",     "sqmTuneFx",       "Pitch & Vocal", "Creative tuning: editable Motion patterns plus a six-slot X/Y effects rack - Mutate, Duet, Vocode, Talkbox, Octaver, Stutter and more", 0xffff2fd6, "mothtunefx" },
             // ---------------- EQ & filters
             { "Vellum EQ",        "sqmVellum",       "EQ & Filter", "Seventies broadcast-console EQ: shelf or very-low-bell low, six-step mid whose Q narrows as it rises, a second sweepable mid, gentle low-pass or very-high-bell high, Stepped detents, Mid/Side and L/R, oversampled Drive", 0xffe8c87a, "vellum" },
@@ -231,6 +235,10 @@ namespace Signature
         SqDsp::ParamBank* bank = nullptr;
         if (auto e8 = dynamic_cast<Sq808Plugin*> (&p)) bank = &e8->bank;
         if (auto bl = dynamic_cast<SqBlossomPlugin*> (&p)) bank = &bl->bank;
+        // a plug-in with its Mix locked keeps the Mix you set
+        te::AutomatableParameter* lockedMix = nullptr; float lockedMixValue = 0;
+        if (auto ml = dynamic_cast<SqMixLockable*> (&p); ml != nullptr && ml->mixLocked())
+            for (auto ap : p.getAutomatableParameters()) if (ap->paramID == ml->mixParamId()) { lockedMix = ap; lockedMixValue = ap->getCurrentValue(); }
         if (auto bo = dynamic_cast<SqDsp::BankOwner*> (&p)) { bank = &bo->getBank(); bo->resetProps (&p.edit.getUndoManager()); }
         if (bank != nullptr)
             for (size_t i = 0; i < bank->params.size(); ++i)
@@ -242,6 +250,7 @@ namespace Signature
             if (pv.normalised) match->setNormalisedParameter (juce::jlimit (0.0f, 1.0f, pv.value), juce::sendNotification);
             else match->setParameter (match->getValueRange().clipValue (pv.value), juce::sendNotification);
         }
+        if (lockedMix != nullptr) lockedMix->setParameter (lockedMixValue, juce::sendNotification);
 
         // raw state properties (wave shapes, modes, delay length...)
         auto* um = &p.edit.getUndoManager();

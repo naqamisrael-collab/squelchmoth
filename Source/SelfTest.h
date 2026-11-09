@@ -60,6 +60,10 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqLarvaFilter2Plugin>();
     engine->getPluginManager().createBuiltInType<SqTwelvePhase2Plugin>();
     engine->getPluginManager().createBuiltInType<SqHiveRackPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSirenVerbPlugin>();
+    engine->getPluginManager().createBuiltInType<SqMicClosetPlugin>();
+    engine->getPluginManager().createBuiltInType<SqLarynxPlugin>();
+    engine->getPluginManager().createBuiltInType<SqExhalePlugin>();
     engine->getPluginManager().createBuiltInType<SqMothKeyPlugin>();
     engine->getPluginManager().createBuiltInType<SqSirenCompPlugin>();
     engine->getPluginManager().createBuiltInType<SqSirenEqPlugin>();
@@ -2466,6 +2470,93 @@ inline int runSelfTest()
             double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
             check (sum.presets >= 480 && sum.failed == 0, "Phase D3: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
             auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-d3.md");
+            if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
+        }
+        // ---------------------------------------------------------------- Phase E1: Siren Verb, Mic Closet, Larynx, Exhale
+        {
+            const double SR = 48000.0, twoPi = juce::MathConstants<double>::twoPi;
+            call ("add_track", R"({"kind":"audio","name":"E1"})");
+            for (auto w : { "sirenverb", "miccloset", "larynx", "exhale" }) call ("vocal_fx", juce::String (R"({"track":"E1","which":")") + w + R"(","action":"add"})");
+            auto* tt = session->findTrack ("E1"); SqSirenVerbPlugin* sv = nullptr; SqMicClosetPlugin* mc = nullptr; SqLarynxPlugin* lx = nullptr; SqExhalePlugin* ex = nullptr;
+            if (tt != nullptr) for (auto pl : tt->pluginList)
+            { if (auto a = dynamic_cast<SqSirenVerbPlugin*> (pl)) sv = a; if (auto b = dynamic_cast<SqMicClosetPlugin*> (pl)) mc = b; if (auto c = dynamic_cast<SqLarynxPlugin*> (pl)) lx = c; if (auto d = dynamic_cast<SqExhalePlugin*> (pl)) ex = d; }
+            check (sv && mc && lx && ex, "Phase E1: Siren Verb, Mic Closet, Larynx and Exhale added through vocal_fx");
+            call ("vocal_fx", R"({"track":"E1","which":"sirenverb","action":"set","settings":{"algo":"Chamber","Decay":2.5,"autoEqOn":true,"delayMode":"Ping-Pong","shimmerPitch":"+19"}})");
+            call ("vocal_fx", R"({"track":"E1","which":"miccloset","action":"set","settings":{"target":"1950s Ribbon","source":"USB Desktop Condenser","pattern":"Figure-8","Distance":5}})");
+            call ("vocal_fx", R"({"track":"E1","which":"larynx","action":"set","settings":{"Tract Length":120,"Lips":60,"levelMatchOn":false}})");
+            call ("vocal_fx", R"({"track":"E1","which":"exhale","action":"set","settings":{"Breath":-60,"Consonants":90}})");
+            if (sv && mc && lx && ex)
+                check (sv->algo.get() == SirenVerb::chamber && std::abs (sv->bank[SqSirenVerbPlugin::decay] - 2.5f) < 0.01f && sv->autoEqOn.get() && sv->delayMode.get() == 2 && sv->shimmerPitch.get() == 2
+                       && mc->target.get() == 19 && mc->source.get() == 10 && mc->pattern.get() == 3 && std::abs (mc->bank[SqMicClosetPlugin::distance] - 5.0f) < 0.01f
+                       && std::abs (lx->bank[SqLarynxPlugin::length] - 120.0f) < 0.01f && std::abs (lx->bank[SqLarynxPlugin::p8] - 60.0f) < 0.01f && ! lx->levelMatchOn.get()
+                       && std::abs (ex->bank[SqExhalePlugin::breath] + 60.0f) < 0.01f,
+                       "Phase E1: algorithms, microphones, tract points and breath set by name through vocal_fx");
+            auto gm = call ("vocal_fx", R"({"track":"E1","which":"miccloset","action":"get"})");
+            check (gm.contains ("1950s Ribbon") && gm.contains ("response") && gm.contains ("Figure-8"), "Mic Closet: get reports the microphones, the pattern and the response");
+            auto gs = call ("vocal_fx", R"({"track":"E1","which":"sirenverb","action":"get"})");
+            check (gs.contains ("Chamber") && gs.contains ("singer_pitch_hz"), "Siren Verb: get reports the algorithm and the singer's pitch");
+            call ("vocal_fx", R"({"track":"E1","which":"sirenverb","action":"assist","vibe":"Epic"})");
+            if (sv != nullptr) check (sv->algo.get() == SirenVerb::shimmer && sv->bank[SqSirenVerbPlugin::decay] >= 3.0f, "Siren Verb: Assist 'Epic' sets a shimmer hall from the tempo");
+            if (sv != nullptr)
+            {
+                // Mix lock: a preset keeps the Mix you set
+                sv->mixLockOn.setValue (true, nullptr); sv->bank.params[(size_t) SqSirenVerbPlugin::mix]->setParameter (41.0f, juce::sendNotificationSync);
+                call ("vocal_fx", R"({"track":"E1","which":"sirenverb","action":"preset","preset":"Big Pop Hall"})");
+                const float m1 = sv->bank[SqSirenVerbPlugin::mix];
+                sv->mixLockOn.setValue (false, nullptr);
+                call ("vocal_fx", R"({"track":"E1","which":"sirenverb","action":"preset","preset":"Big Pop Hall"})");
+                check (std::abs (m1 - 41.0f) < 0.01f && std::abs (sv->bank[SqSirenVerbPlugin::mix] - 24.0f) < 0.01f, "Siren Verb: Mix lock keeps 41 % through a preset; unlocked the preset's 24 % loads");
+            }
+            {
+                // Hall at 2.0 s measures within 20 % (Schroeder T20)
+                SirenVerb::Processor p; p.p.algo = SirenVerb::hall; p.p.decayS = 2.0f; p.p.mix = 1; p.p.early = 0; p.p.preDelayMs = 0; p.p.modDepth = 0; p.p.lowCutHz = 20; p.p.highCutHz = 20000; p.p.damping = 0; p.prepare (SR, 256);
+                std::vector<float> l (160000, 0.0f), r; l[256] = 1; r = l;
+                for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; p.process (ch, 2, 256); }
+                std::vector<double> e (l.size()); double acc = 0; for (size_t i = l.size(); i-- > 0;) { acc += (double) l[i] * l[i] + (double) r[i] * r[i]; e[i] = acc; }
+                size_t i5 = 0, i25 = 0; for (size_t i = 300; i < l.size(); ++i) { const double d = 10 * std::log10 (e[i] / e[300] + 1e-30); if (! i5 && d <= -5) i5 = i; if (! i25 && d <= -25) { i25 = i; break; } }
+                const double rt = 3.0 * (double) (i25 - i5) / SR;
+                check (std::abs (rt / 2.0 - 1) < 0.2, "Siren Verb: Hall set to 2.0 s measures RT60 " + juce::String (rt, 2) + " s");
+            }
+            {
+                MicCloset::Processor q; q.p.source = 3; q.p.target = 3; q.p.colour = 0; q.prepare (SR, 256);
+                double w = 0; for (double hz = 60; hz <= 12000; hz *= 1.15) w = juce::jmax (w, std::abs (q.responseDb (hz)));
+                MicCloset::Processor ph; ph.p.source = 0; ph.p.target = 30; ph.p.colour = 0; ph.prepare (SR, 256);
+                check (w < 0.05 && ph.responseDb (2000) - ph.responseDb (6000) > 12 && MicCloset::numMics() >= 44,
+                       "Mic Closet: " + juce::String (MicCloset::numMics()) + " archetypes; a mic converted to itself is flat (" + juce::String (w, 3) + " dB); the handset rolls off above 3.4 kHz");
+            }
+            {
+                // a voice: 200 Hz harmonics + breath noise; Exhale with Breath off takes the noise down and leaves the harmonics
+                auto voice = [&] (size_t n) { std::vector<float> v (n); double ph = 0; juce::Random rnd (7); for (size_t i = 0; i < n; ++i) { ph += 200.0 / SR; double y = 0; for (int h = 1; h <= 12; ++h) y += std::sin (twoPi * h * ph) / h; v[i] = 0.08f * (float) y + 0.025f * (rnd.nextFloat() * 2 - 1); } return v; };
+                auto goertzel = [&] (const std::vector<float>& v, double hz) { const double w = twoPi * hz / SR, c = 2 * std::cos (w); double s1 = 0, s2 = 0; for (size_t i = 48000; i < 140000; ++i) { const double s0 = v[i] + c * s1 - s2; s2 = s1; s1 = s0; } return 10 * std::log10 (s1 * s1 + s2 * s2 - c * s1 * s2 + 1e-30); };
+                auto run = [&] (float db) { Exhale::Processor p; p.p.breathDb = db; p.prepare (SR, 256); auto l = voice (144000), r = l; for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; p.process (ch, 2, 256); } return l; };
+                const auto y0 = run (0), y1 = run (-60);
+                double n0 = 0, n1 = 0, h0 = 0, h1 = 0; for (int k = 3; k <= 9; ++k) { n0 += goertzel (y0, 100.0 * (2 * k + 1)); n1 += goertzel (y1, 100.0 * (2 * k + 1)); } for (int k = 1; k <= 4; ++k) { h0 += goertzel (y0, 200.0 * k); h1 += goertzel (y1, 200.0 * k); }
+                check ((n0 - n1) / 7 > 8 && std::abs (h0 - h1) / 4 < 1.0, "Exhale: Breath off takes the breath down " + juce::String ((n0 - n1) / 7, 1) + " dB, harmonics move " + juce::String ((h0 - h1) / 4, 2) + " dB");
+            }
+            {
+                // Larynx: the neutral tract is transparent; a 0.8x tract raises the formants
+                std::vector<float> vowel (96000); { Eng::Biquad f1, f2; f1.set (Eng::Biquad::bandpass, SR, 700, 6); f2.set (Eng::Biquad::bandpass, SR, 1200, 8); double ph = 0;
+                    for (size_t i = 0; i < vowel.size(); ++i) { ph += 140 / SR; float e = 0; if (ph >= 1) { ph -= 1; e = 1; } vowel[i] = 0.6f * (f1.process (e) + 0.7f * f2.process (e)); } }
+                auto run = [&] (float len) { Larynx::Processor p; p.p.levelMatch = false; p.p.length = len; p.prepare (SR, 256); auto l = vowel, r = vowel; for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; p.process (ch, 2, 256); } return l; };
+                const auto y = run (1.0f); const int lat = Larynx::Channel::latency();
+                double e = 0, d = 0; for (size_t i = 24000; i < 90000; ++i) { const double ref = vowel[i - (size_t) lat]; e += ref * ref; d += (y[i] - ref) * (y[i] - ref); }
+                auto centroid = [&] (const std::vector<float>& v) { double num = 0, den = 0; for (double hz = 300; hz < 3000; hz += 25) { const double w = twoPi * hz / SR, c = 2 * std::cos (w); double s1 = 0, s2 = 0; for (size_t i = 24000; i < 90000; ++i) { const double s0 = v[i] + c * s1 - s2; s2 = s1; s1 = s0; } const double pw = s1 * s1 + s2 * s2 - c * s1 * s2; num += hz * pw; den += pw; } return num / den; };
+                const double ratio = centroid (run (0.8f)) / centroid (y);
+                check (10 * std::log10 (d / e) < -40 && ratio > 1.12 && lx != nullptr && std::abs (lx->getLatencySeconds() * SR - lat) < 1,
+                       "Larynx: neutral tract residual " + juce::String (10 * std::log10 (d / e), 1) + " dB; 0.8x tract raises the formants x" + juce::String (ratio, 2) + "; latency reported");
+            }
+            call ("delete_track", R"({"track":"E1"})");
+            Edition::owned() = Edition::Owned {}; Edition::owned().core = true; Edition::owned().vocal = true;
+            check (Edition::isTypeAllowed ("sqmSirenVerb") && Edition::isTypeAllowed ("sqmMicCloset") && Edition::isTypeAllowed ("sqmLarynx") && Edition::isTypeAllowed ("sqmExhale"), "editions: Siren Verb, Mic Closet, Larynx and Exhale are in the Vocal Suite");
+            Edition::owned() = Edition::Owned {}; Edition::owned().core = true;
+            check (! Edition::isTypeAllowed ("sqmSirenVerb") && ! Edition::isTypeAllowed ("sqmExhale"), "editions: not in core Squelchmoth");
+            Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+            auto rep = session->sessionsDir.getChildFile ("preset-audit-e1.md");
+            auto sum = PresetAudit::run (*session->edit, { "Siren Verb", "Mic Closet", "Larynx", "Exhale" }, { "sqmSirenVerb", "sqmMicCloset", "sqmLarynx", "sqmExhale" }, 3.0, rep);
+            juce::String firstFail; for (auto& row : sum.rows) if (! row.pass && firstFail.isEmpty()) firstFail = row.plugin + " / " + row.preset + ": " + row.why;
+            double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
+            check (sum.presets >= 310 && sum.failed == 0, "Phase E1: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
+            auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-e1.md");
             if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
         }
         // ---------------------------------------------------------------- Phase C: Moth Tune 2, Moth Key, Siren Comp, Siren EQ, Hush De-Ess 2

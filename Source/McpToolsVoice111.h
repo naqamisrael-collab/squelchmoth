@@ -4,6 +4,10 @@
 static juce::String voiceTypeFor (const juce::String& k)
 {
     const auto s = k.toLowerCase().removeCharacters (" -_.");
+    if (s.contains ("verb") || s.contains ("vocalreverb")) return SqSirenVerbPlugin::xmlTypeName;
+    if (s.contains ("miccloset") || s.contains ("micmod") || s == "mic" || s.contains ("closet")) return SqMicClosetPlugin::xmlTypeName;
+    if (s.contains ("larynx") || s.contains ("throat") || s.contains ("tract")) return SqLarynxPlugin::xmlTypeName;
+    if (s.contains ("exhale") || s.contains ("breath")) return SqExhalePlugin::xmlTypeName;
     if (s.contains ("comp")) return SqSirenCompPlugin::xmlTypeName;
     if (s.contains ("eq")) return SqSirenEqPlugin::xmlTypeName;
     if (s.contains ("ess") || s.contains ("hush")) return SqHushDeEss2Plugin::xmlTypeName;
@@ -17,7 +21,8 @@ static const juce::StringArray& voiceSettings()
     static const juce::StringArray s = []
     {
         juce::StringArray k { "model1", "model2", "fet1", "fet2", "dualOn", "autoMakeupOn", "punchOn", "keyOn", "assistAmount", "previewOn",
-                              "hpSlope", "lpSlope", "linkOn", "soloOn", "listenOn", "autoApplyOn", "tempoOn" };
+                              "hpSlope", "lpSlope", "linkOn", "soloOn", "listenOn", "autoApplyOn", "tempoOn",
+                              "algo", "reverseOn", "autoEqOn", "delayMode", "delaySync", "shimmerPitch", "mixLockOn", "source", "target", "pattern", "sourceProxOn", "levelMatchOn" };
         for (int b = 1; b <= 6; ++b) for (auto x : { "On", "Type", "Mode", "Harm", "Expand", "Solo", "Mute" }) k.add ("b" + juce::String (b) + x);
         return k;
     }();
@@ -104,7 +109,17 @@ void registerVoice111Tools()
 
     add ("vocal_fx",
          "The 1.11 Voice plug-ins. which = sirencomp (Siren Comp, vocal compressor, 110 presets) | sireneq (Siren EQ, pitch-tracking dynamic vocal EQ, 100 presets) |\n"
-         " deess2 (Hush De-Ess 2, Hard / Soft de-esser, 60 presets) | mothkey (Moth Key, key / scale / tempo detection).\n"
+         " deess2 (Hush De-Ess 2, Hard / Soft de-esser, 60 presets) | mothkey (Moth Key, key / scale / tempo detection) |\n"
+         " sirenverb (Siren Verb, vocal reverb, 140 presets) | miccloset (Mic Closet, microphone modelling, 80 presets) | larynx (Larynx, vocal-tract modeller, 60 presets) |\n"
+         " exhale (Exhale, breathiness control, 30 presets).\n"
+         " Siren Verb: Size, Decay (s), Pre-Delay, Damping, Early, Mod Rate, Mod Depth, Width, Low Cut, High Cut, Mix, Output, Pre Pitch (st), Throat, Tube, De-Ess, Reverse Time,\n"
+         "   Auto-EQ Depth, Tone, Compressor, Gate, Ducking, Shimmer, Echo Time / Feedback / Level; settings algo (Hall, Plate, Room, Chamber, Spring, Ambience, Shimmer),\n"
+         "   reverseOn, autoEqOn (cuts the singer's pitch out of the tail), delayMode (Off, Mono, Ping-Pong), delaySync (0 free, 1-27 division), shimmerPitch (+7, +12, +19, +24, -12 st),\n"
+         "   mixLockOn (presets keep your Mix). Actions assist (vibe: Intimate, Pop Sheen, Ballad, Epic, Dark, Retro - from the tempo and the voice it heard) and dice.\n"
+         " Mic Closet: Distance (cm), Low Cut, Pad, Colour, Self-Noise, Mix, Output; settings source / target (microphone name or index - 'preset list' shows presets;\n"
+         "   get lists the microphones), pattern (Mic's Own, Cardioid, Omni, Figure-8, Supercardioid), sourceProxOn (the source was recorded at Distance too).\n"
+         " Larynx: Tract Length (%), Glottis, Lower Throat, Upper Throat, Pharynx, Back Tongue, Mid Tongue, Front Tongue, Lips (-100..100 narrower / wider), Glottal Hardness,\n"
+         "   Pulse Width, Breathiness, Breath Freq, Precision, Mix, Output; settings levelMatchOn. Exhale: Breath (dB, -60 = none), Breath Tone, Consonants, Body, Mix, Output.\n"
          " Actions: add (optional preset), get (parameters, settings, live meters), set {name: value}, preset (name or 'list'), open,\n"
          " learn_start / learn_stop (Assist or Vocal Learning: play the vocal between them; learn_stop returns the suggestion), preview true/false (audition the suggestion\n"
          " before committing - A/B by toggling), apply (commit the suggestion to the controls), amount (Siren Comp Assist: minimal, controlled, aggressive),\n"
@@ -118,13 +133,13 @@ void registerVoice111Tools()
          " Hush De-Ess 2: Split (Hz), Hard Threshold, Soft Threshold, Hard Range, Soft Range, Sensitivity, Output; settings linkOn (one threshold moves both), soloOn (hear what is removed).\n"
          " Moth Key: Listen Length (s); settings listenOn, autoApplyOn (write each result to the session), tempoOn (also set the tempo).",
          R"json({"type":"object","properties":{"track":{"type":["string","integer"]},"which":{"type":"string"},
-            "action":{"type":"string","enum":["add","get","set","preset","open","key","learn_start","learn_stop","preview","apply","analyse","apply_key"]},
+            "action":{"type":"string","enum":["add","get","set","preset","open","key","learn_start","learn_stop","preview","apply","analyse","apply_key","assist","dice"]},"vibe":{"type":"string"},
             "settings":{"type":"object"},"preset":{"type":"string"},"on":{"type":"boolean"},"amount":{"type":"string"},"source":{"type":"string"},
             "track_source":{"type":["string","integer"]},"start_bar":{"type":"number"},"end_bar":{"type":"number"}},"required":["track","which","action"]})json",
          [this] (const juce::var& a)
          {
              const auto type = voiceTypeFor (str (a, "which"));
-             if (type.isEmpty()) return ToolResult::error ("which must be sirencomp, sireneq, deess2 or mothkey");
+             if (type.isEmpty()) return ToolResult::error ("which must be sirencomp, sireneq, deess2, mothkey, sirenverb, miccloset, larynx or exhale");
              const auto action = str (a, "action").toLowerCase();
              juce::String err; te::AudioTrack* t = nullptr;
              auto list = pluginListArg (a, err, t);
@@ -171,6 +186,27 @@ void registerVoice111Tools()
                      set (o, "learning", d->learning.load()); set (o, "has_suggestion", d->hasSuggestion());
                      if (d->hasSuggestion()) { set (o, "suggested_hard_threshold_db", d->suggestedHard()); set (o, "suggested_soft_threshold_db", d->suggestedSoft()); }
                  }
+                 if (auto sv = dynamic_cast<SqSirenVerbPlugin*> (&pl))
+                 {
+                     const auto kp = sv->knobParams();
+                     set (o, "algorithm", SirenVerb::algoName (kp.algo)); set (o, "singer_pitch_hz", sv->proc.liveHz()); set (o, "auto_eq", kp.autoEq);
+                     set (o, "tail_compressor_gr_db", sv->proc.compGrDb()); set (o, "mix_locked", sv->mixLockOn.get());
+                     set (o, "echo", SqSirenVerbPlugin::delayNames()[juce::jlimit (0, 2, kp.delayMode)]);
+                 }
+                 if (auto mc = dynamic_cast<SqMicClosetPlugin*> (&pl))
+                 {
+                     const auto kp = mc->knobParams();
+                     set (o, "source_mic", MicCloset::mics()[(size_t) kp.source].name); set (o, "target_mic", MicCloset::mics()[(size_t) kp.target].name);
+                     MicCloset::Processor tmp; tmp.p = kp; tmp.prepare (48000.0, 256);     // the settings as they are now, playing or not
+                     set (o, "pattern", MicCloset::patternName (tmp.effectivePattern()));
+                     juce::String resp; for (double hz : { 60.0, 120.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 12000.0 }) resp << juce::String ((int) hz) << " Hz " << juce::String (tmp.responseDb (hz), 1) << " dB, ";
+                     set (o, "response", resp.dropLastCharacters (2));
+                     juce::StringArray all; for (int i = 0; i < MicCloset::numMics(); ++i) all.add (juce::String (i) + " " + MicCloset::mics()[(size_t) i].name);
+                     set (o, "microphones", all.joinIntoString ("; "));
+                 }
+                 if (auto lx = dynamic_cast<SqLarynxPlugin*> (&pl)) { set (o, "latency_ms", lx->getLatencySeconds() * 1000.0); set (o, "level_match", lx->levelMatchOn.get()); }
+                 if (auto ex = dynamic_cast<SqExhalePlugin*> (&pl))
+                 { set (o, "voiced", ex->proc.voiced()); set (o, "harmonic_to_noise_db", ex->proc.hnrDb()); set (o, "breath_gain_db", ex->proc.breathGainDb()); set (o, "latency_ms", ex->getLatencySeconds() * 1000.0); }
                  if (auto k = dynamic_cast<SqMothKeyPlugin*> (&pl))
                  {
                      set (o, "heard_seconds", k->heardSeconds()); set (o, "status", k->status()); set (o, "analysing", k->isAnalysing());
@@ -201,7 +237,12 @@ void registerVoice111Tools()
                      if (exact != nullptr) { exact->setParameter (exact->getValueRange().clipValue ((float) (double) v), juce::sendNotification); continue; }
                      juce::String id; for (auto& k : voiceSettings()) if (k.equalsIgnoreCase (key)) id = k;
                      if (id.isEmpty()) { if (auto ap = Signature::findParam (*p, key)) { ap->setParameter (ap->getValueRange().clipValue ((float) (double) v), juce::sendNotification); continue; } problems.add ("unknown setting '" + key + "'"); continue; }
-                     if (id.startsWith ("model")) v = pickName (SqSirenCompPlugin::modelNames(), v.isString() ? juce::var (v.toString().toUpperCase().replace ("OPTOA", "OPTO A").replace ("OPTOB", "OPTO B")) : v);
+                     if (id == "algo") v = pickName (SqSirenVerbPlugin::algoNames(), v);
+                     else if (id == "delayMode") v = pickName (SqSirenVerbPlugin::delayNames(), v);
+                     else if (id == "shimmerPitch") { if (v.isString()) v = pickName (SqSirenVerbPlugin::shimmerNames(), v.toString().replace ("st", "").trim() + " st"); }
+                     else if (id == "source" || id == "target") v = pickName (SqMicClosetPlugin::micNames(), v);
+                     else if (id == "pattern") v = pickName (SqMicClosetPlugin::patternNames(), v);
+                     else if (id.startsWith ("model")) v = pickName (SqSirenCompPlugin::modelNames(), v.isString() ? juce::var (v.toString().toUpperCase().replace ("OPTOA", "OPTO A").replace ("OPTOB", "OPTO B")) : v);
                      else if (id.startsWith ("fet")) { if (v.isString()) v = pickName (SqSirenCompPlugin::fetNames(), v.toString().toUpperCase()); else if ((int) v > 4) { const int r = (int) v; v = r >= 30 ? 4 : r >= 20 ? 3 : r >= 12 ? 2 : r >= 8 ? 1 : 0; } }
                      else if (id.endsWith ("Type")) v = pickName (SqSirenEqPlugin::typeNames(), v);
                      else if (id.endsWith ("Mode")) v = pickName (SqSirenEqPlugin::modeNames(), v.isString() && v.toString().containsIgnoreCase ("track") ? juce::var ("PITCH") : v);
@@ -235,6 +276,16 @@ void registerVoice111Tools()
                  if (action == "learn_stop") { auto o = describe (*d); set (o, "learned", d->finishLearning()); d->preview.setValue (true, nullptr); return ToolResult::ok (describe (*d)); }
                  if (action == "preview") { d->preview.setValue (flag (a, "on", true) && d->hasSuggestion(), nullptr); return ToolResult::ok (describe (*d)); }
                  if (action == "apply") { if (! d->hasSuggestion()) return ToolResult::error ("No suggestion yet - learn_start, play, learn_stop"); um->beginNewTransaction ("Hush: apply Assist"); d->applySuggestion(); return ToolResult::ok (describe (*d)); }
+             }
+             if (auto sv = dynamic_cast<SqSirenVerbPlugin*> (p))
+             {
+                 if (action == "assist")
+                 {
+                     const int vi = juce::jmax (0, SqSirenVerbPlugin::vibeNames().indexOf (str (a, "vibe", "Pop Sheen"), true));
+                     um->beginNewTransaction ("Siren Verb: Assist"); sv->assist (vi, um);
+                     auto o = describe (*sv); set (o, "assist", SqSirenVerbPlugin::vibeNames()[vi] + " (undo to go back, or A/B in the window)"); return ToolResult::ok (o);
+                 }
+                 if (action == "dice") { um->beginNewTransaction ("Siren Verb: Dice"); sv->dice (um); return ToolResult::ok (describe (*sv)); }
              }
              if (auto k = dynamic_cast<SqMothKeyPlugin*> (p))
              {

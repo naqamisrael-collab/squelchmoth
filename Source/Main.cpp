@@ -230,6 +230,10 @@ public:
         engine->getPluginManager().createBuiltInType<SqLarvaFilter2Plugin>();
         engine->getPluginManager().createBuiltInType<SqTwelvePhase2Plugin>();
         engine->getPluginManager().createBuiltInType<SqHiveRackPlugin>();
+        engine->getPluginManager().createBuiltInType<SqSirenVerbPlugin>();
+        engine->getPluginManager().createBuiltInType<SqMicClosetPlugin>();
+        engine->getPluginManager().createBuiltInType<SqLarynxPlugin>();
+        engine->getPluginManager().createBuiltInType<SqExhalePlugin>();
         engine->getPluginManager().createBuiltInType<SqMothKeyPlugin>();
         engine->getPluginManager().createBuiltInType<SqSirenCompPlugin>();
         engine->getPluginManager().createBuiltInType<SqSirenEqPlugin>();
