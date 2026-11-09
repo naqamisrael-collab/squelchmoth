@@ -1,0 +1,3834 @@
+[
+ {
+  "name": "Vocal | Pop Lead Polish",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Moth Tune",
+    "Natural | Transparent Lead"
+   ],
+   [
+    "Siren EQ",
+    "Female Vocal | Pop Shine"
+   ],
+   [
+    "Siren Comp",
+    "Pop Vocal | Radio Ready Lead"
+   ],
+   [
+    "Hush De-Ess 2",
+    "Female Vocal | Gentle"
+   ],
+   [
+    "Foil Plate Lite",
+    "Vocal | Vocal Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Rap Upfront",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Siren EQ",
+    "Rap Vocal | Upfront Bars"
+   ],
+   [
+    "Siren Comp",
+    "Rap Vocal | Boom Bap Bark"
+   ],
+   [
+    "Hush De-Ess 2",
+    "Rap Vocal | Ad-Libs"
+   ],
+   [
+    "Cinder",
+    "Vocal | Gritty Rap Edge"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | R&B Silk",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Moth Tune",
+    "R&B | Slow Jam"
+   ],
+   [
+    "Siren EQ",
+    "R&B Vocal | Modern R&B Gloss"
+   ],
+   [
+    "Siren Comp",
+    "R&B Vocal | Falsetto Control"
+   ],
+   [
+    "Mirror Shift",
+    "Vocal Width | Classic Lead Spread"
+   ],
+   [
+    "Foil Plate",
+    "Vocal Plates | Classic Lead Vocal Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Trap Hard Tune",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Moth Tune",
+    "Hip-Hop / Trap Hard | Hard Tune Lead"
+   ],
+   [
+    "Siren Comp",
+    "Rap Vocal | Studio Polish Rap"
+   ],
+   [
+    "Wingbeat Jr.",
+    "Vocal | Tape Slap"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Broadcast Voice",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Siren EQ",
+    "Voice-Over | Broadcast Voice"
+   ],
+   [
+    "Siren Comp",
+    "Voice-Over | Trailer Voice"
+   ],
+   [
+    "Hush De-Ess 2",
+    "Voice-Over | Broadcast"
+   ],
+   [
+    "Apex Limiter",
+    "Podcast Voice"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Podcast Clean",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Veil Gate",
+    "Vocal Noise Floor"
+   ],
+   [
+    "Cocoon Compressor",
+    "Podcast Voice"
+   ],
+   [
+    "Hush De-Ess",
+    "Podcast"
+   ],
+   [
+    "Vellum EQ",
+    "Vocal | Podcast Clarity"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Warm Tape Vocal",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Cinder",
+    "Vocal | Warm Tape Lift"
+   ],
+   [
+    "Opto Leveler",
+    "Vocal Leveler"
+   ],
+   [
+    "Ember Tape",
+    "Vocal Warmth"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Vintage Soul",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Vari-Mu Tube",
+    "Soul Vocal"
+   ],
+   [
+    "Radiant",
+    "Vocal | 60s Mixer Warm Lift"
+   ],
+   [
+    "Wingbeat Echo",
+    "Vocal Slaps | Classic Tape Slap"
+   ],
+   [
+    "Foil Plate",
+    "Vocal Plates | Male Vocal Body"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Airy Ballad",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Siren EQ",
+    "Female Vocal | Breathy Intimate"
+   ],
+   [
+    "Siren Comp",
+    "Pop Vocal | Light Touch"
+   ],
+   [
+    "Antenna Air",
+    "Vocal Sparkle"
+   ],
+   [
+    "Foil Plate Lite",
+    "Vocal | Long Ballad"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Rock Scream",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Siren Comp",
+    "Rock Vocal | Alt Rock Even"
+   ],
+   [
+    "Cinder",
+    "Vocal | Rock Scream Edge"
+   ],
+   [
+    "Hush De-Ess 2",
+    "Female Vocal | Belter"
+   ],
+   [
+    "Wingbeat Jr.",
+    "Vocal | Tape Slap"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Gospel Power",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Moth Tune",
+    "Gospel | Run Friendly"
+   ],
+   [
+    "Siren Comp",
+    "Gospel Vocal | Powerhouse Lead"
+   ],
+   [
+    "Siren EQ",
+    "Female Vocal | Pop Shine"
+   ],
+   [
+    "Aurora Verb",
+    "Vocal Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Backing Stack",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Siren Comp",
+    "Backing Vocal | Ooh Pad Smooth"
+   ],
+   [
+    "Mirror Shift",
+    "Vocal Width | Ad-Lib Spread"
+   ],
+   [
+    "Double Wing ADT",
+    "Backing Vocal Spread"
+   ],
+   [
+    "Foil Plate Lite",
+    "Vocal | Lush Vocal"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Ad-Lib Throw",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Siren EQ",
+    "Rap Vocal | Upfront Bars"
+   ],
+   [
+    "Wingbeat Echo",
+    "Throws | Reverse Bloom Throw"
+   ],
+   [
+    "Murmuration",
+    "Vocal Halos | Breath Cloud"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Telephone Hook",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Vocal | Telephone Line"
+   ],
+   [
+    "Siren Comp",
+    "Pop Vocal | Radio Ready Lead"
+   ],
+   [
+    "Shutter Lite",
+    "Slap | Rockabilly"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Megaphone Rap",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Vocal | Megaphone"
+   ],
+   [
+    "Maw Lite",
+    "Vocal | Megaphone-ish"
+   ],
+   [
+    "Wingbeat Jr.",
+    "Vocal | Tape Slap"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Dreamy Halo",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Siren EQ",
+    "Female Vocal | Breathy Intimate"
+   ],
+   [
+    "Shard",
+    "Vocal FX | Vocal Swell"
+   ],
+   [
+    "Murmuration",
+    "Vocal Halos | Breath Cloud"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Shimmer Hook",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Siren Comp",
+    "Pop Vocal | Radio Ready Lead"
+   ],
+   [
+    "Starfield",
+    "Vocal Halo"
+   ],
+   [
+    "Mirror Shift",
+    "Vocal Width | Classic Lead Spread"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Robot Voice",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Masquerade",
+    "Robot | Classic Robot"
+   ],
+   [
+    "Halo Ring",
+    "Robot Voice"
+   ],
+   [
+    "Shutter Lite",
+    "Slap | Double"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Monster Voice",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Masquerade",
+    "Monster | Demon"
+   ],
+   [
+    "Cinder",
+    "Vocal | Gritty Rap Edge"
+   ],
+   [
+    "Aurora Verb",
+    "Big Hall"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Chipmunk Hook",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Masquerade",
+    "Chipmunk | Cartoon Mouse"
+   ],
+   [
+    "Siren Comp",
+    "Pop Vocal | Light Touch"
+   ],
+   [
+    "Wingbeat Jr.",
+    "Vocal | Lunar Throw"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Lo-Fi Bedroom",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Vocal | Lo-Fi Mic"
+   ],
+   [
+    "Ember Tape",
+    "Old Cassette"
+   ],
+   [
+    "Wingbeat Echo",
+    "Vocal Slaps | Lo-Fi Slap"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Whisper Intimate",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Cinder",
+    "Vocal | Whisper Warmth"
+   ],
+   [
+    "Siren Comp",
+    "Pop Vocal | Light Touch"
+   ],
+   [
+    "Hush De-Ess 2",
+    "Female Vocal | Soft S Only"
+   ],
+   [
+    "Pocket Spaces",
+    "Small Chamber"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Eighties Power",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Siren Comp",
+    "Vintage Vocal | Eighties Power"
+   ],
+   [
+    "Flutter Chorus",
+    "Subtle Vocal"
+   ],
+   [
+    "Aurora Verb",
+    "Vocal Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Country Harmony",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Moth Tune",
+    "Vibrato Lift"
+   ],
+   [
+    "Hush De-Ess 2",
+    "Country Vocal | Harmony"
+   ],
+   [
+    "Siren Comp",
+    "Pop Vocal | Light Touch"
+   ],
+   [
+    "Foil Plate",
+    "Vintage | Surf Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Live Stage Vocal",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Siren Comp",
+    "Live Vocal | Worship Stage"
+   ],
+   [
+    "Hush De-Ess 2",
+    "Live Vocal | Bright PA"
+   ],
+   [
+    "Nebula Verb",
+    "Vocal Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Dark Tape Lead",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Ember Tape",
+    "Dark Tape Vocal"
+   ],
+   [
+    "Opto Leveler",
+    "Vocal Leveler"
+   ],
+   [
+    "Echo Wing",
+    "Vocal Throw"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Vocal Chop FX",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Masquerade",
+    "Vocal Chop | Soft Snap"
+   ],
+   [
+    "Time Weaver",
+    "Time | Stutter 1/8"
+   ],
+   [
+    "Shutter Lite",
+    "Slap | Double"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Parallel Grit",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Siren Comp",
+    "Pop Vocal | Radio Ready Lead"
+   ],
+   [
+    "Scorch Drive",
+    "Parallel Vocal Grit"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Twin Lanes Wet Dry",
+  "category": "Vocal",
+  "routing": 1,
+  "slots": [
+   [
+    "Siren Comp",
+    "Pop Vocal | Radio Ready Lead"
+   ],
+   [
+    "Hush De-Ess 2",
+    "Female Vocal | Gentle"
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "Foil Plate",
+    "Vocal Plates | Classic Lead Vocal Plate"
+   ],
+   [
+    "Wingbeat Echo",
+    "Vocal Slaps | Classic Tape Slap"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Vocal | Phased Verse",
+  "category": "Vocal",
+  "routing": 0,
+  "slots": [
+   [
+    "Siren Comp",
+    "Pop Vocal | Light Touch"
+   ],
+   [
+    "Twelve Phase 2",
+    "Vocal | Psychedelic Verse"
+   ],
+   [
+    "Foil Plate Lite",
+    "Vocal | Vocal Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Drum Bus Glue",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Pupa Buss Comp",
+    "Drum Bus"
+   ],
+   [
+    "Cinder",
+    "Drums | Overheads Glue"
+   ],
+   [
+    "Vellum EQ",
+    "Drums | Loop Lift"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Room Smash",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Maw",
+    "Drum Room Crush | Room Mics Destroyed"
+   ],
+   [
+    "Vellum EQ",
+    "Drums | Room Smash Tone"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Breakbeat Crunch",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Maw",
+    "Parallel Smash | Breakbeat Parallel"
+   ],
+   [
+    "Grit Bits",
+    "Old Sampler Drums"
+   ],
+   [
+    "Pupa Buss Comp",
+    "Drum Bus"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Trap Loud",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Pop Knock",
+    "Trap Kick Slap"
+   ],
+   [
+    "Cinder",
+    "Drum Bus | Trap Clean Loud"
+   ],
+   [
+    "Clamp Limiter",
+    "Drum Bus Clip"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Boom Bap Dust",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Pop Knock",
+    "Boom Bap"
+   ],
+   [
+    "Ember Tape",
+    "Drum Smash"
+   ],
+   [
+    "Vinyl Press",
+    "Lo-Fi Beats"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Snare Plate Crack",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Snap Transient",
+    "Snare Snap"
+   ],
+   [
+    "Prism EQ",
+    "Snare Crack"
+   ],
+   [
+    "Foil Plate",
+    "Snare & Drums | Gated-Style Snare (auto-decay)"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Kick Punch",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Pop Knock",
+    "Kick Forward"
+   ],
+   [
+    "Deep Sub",
+    "Kick Thump"
+   ],
+   [
+    "Cinder",
+    "Drums | Kick Punch"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Gated Eighties",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Pocket Spaces",
+    "Gated 80s Snare"
+   ],
+   [
+    "Cocoon Compressor",
+    "Drum Punch"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Lo-Fi Loop",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Drums | Dusty Sampler"
+   ],
+   [
+    "Vinyl Press",
+    "Worn Record"
+   ],
+   [
+    "Maw Lite",
+    "Drums | Room Crush"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Filter Build",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Drums | Highpass Build"
+   ],
+   [
+    "Pupa Buss Comp",
+    "Drum Bus"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Half Time Switch",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Time Weaver",
+    "Time | Half Time Drop"
+   ],
+   [
+    "Pupa Buss Comp",
+    "Drum Bus"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Stutter Roll",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Time Weaver",
+    "Time | Trap Roll"
+   ],
+   [
+    "Clamp Limiter",
+    "Drum Bus Clip"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Sidechain Pump",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Time Weaver",
+    "Volume | Side-chain Pump"
+   ],
+   [
+    "Cinder",
+    "Drums | Overheads Glue"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Wide Overheads",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Vellum EQ",
+    "Drums | Bright Overheads"
+   ],
+   [
+    "Mirror Shift",
+    "Drum Width | Room Widen"
+   ],
+   [
+    "Wingspan",
+    "Drum Bus Air Width"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Dub Snare Echo",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Snap Transient",
+    "Snare Snap"
+   ],
+   [
+    "Wingbeat Echo",
+    "Dub | Spring Heads 1+3"
+   ],
+   [
+    "Foil Plate",
+    "Vintage | Surf Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Phased Hats",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Drums | Hi-Hat Jet"
+   ],
+   [
+    "Antenna Air",
+    "Cymbal Lift"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Rhythmic Filter Loop",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Rhythmic | Tresillo Filter"
+   ],
+   [
+    "Pupa Buss Comp",
+    "Drum Bus"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Smear And Hit",
+  "category": "Drums",
+  "routing": 1,
+  "slots": [
+   [
+    "Pupa Buss Comp",
+    "Drum Bus"
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "Murmuration",
+    "Drum Smears | Break Smear"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Parallel Smash Lanes",
+  "category": "Drums",
+  "routing": 1,
+  "slots": [
+   [
+    "Pupa Buss Comp",
+    "Drum Bus"
+   ],
+   [
+    "Maw",
+    "Parallel Smash | Room Blend 40%"
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "Cinder",
+    "Drums | Overheads Glue"
+   ],
+   [
+    "Maw Lite",
+    "Drums | Max Crush"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Vintage Kit",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Vellum EQ",
+    "Drums | Vintage Kit"
+   ],
+   [
+    "Radiant",
+    "Drums | 60s Mixer Parallel Smash"
+   ],
+   [
+    "Ember Tape",
+    "Drum Smash"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Tight Room",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Veil Gate",
+    "Drum Tight"
+   ],
+   [
+    "Pocket Spaces",
+    "Tight Gated Room"
+   ],
+   [
+    "Pupa Buss Comp",
+    "Drum Bus"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Clap Wash",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Foil Plate",
+    "Snare & Drums | Trap Clap Wash"
+   ],
+   [
+    "Mirror Shift",
+    "Drum Width | Room Widen"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Percussion Pop",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Snap Transient",
+    "Percussion Pop"
+   ],
+   [
+    "Orbit Pan",
+    "Drum Pan | Loop Sweep"
+   ],
+   [
+    "Pocket Spaces",
+    "Room"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Crushed 8-bit Break",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Grit Bits",
+    "8-bit Crunch"
+   ],
+   [
+    "Larva Filter 2",
+    "Drums | Crunchy Bus"
+   ],
+   [
+    "Clamp Limiter",
+    "Drum Bus Clip"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Drums | Tom Thunder",
+  "category": "Drums",
+  "routing": 0,
+  "slots": [
+   [
+    "Vellum EQ",
+    "Drums | Toms Thump"
+   ],
+   [
+    "Snap Transient",
+    "Room Mic Transient Pull"
+   ],
+   [
+    "Aurora Verb",
+    "Drum Room"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Round DI",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Opto Leveler",
+    "Bass Smooth"
+   ],
+   [
+    "Vellum EQ",
+    "Bass | Round Bottom"
+   ],
+   [
+    "Mono Maker",
+    "Bass Bus Mono (90 Hz)"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Growl Grind",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Scorch Drive",
+    "Bass Grind"
+   ],
+   [
+    "Cocoon Compressor",
+    "Bass Even"
+   ],
+   [
+    "Vellum EQ",
+    "Bass | Growl Mids"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | 808 Weight",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Deep Sub",
+    "808 Weight"
+   ],
+   [
+    "Cinder",
+    "808 | Tape Saturated Sub"
+   ],
+   [
+    "Clamp Limiter",
+    "808 Clipper"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | 808 Distorted",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Scorch Drive",
+    "808 Distortion"
+   ],
+   [
+    "Mono Maker",
+    "Club Safe (120 Hz)"
+   ],
+   [
+    "Clamp Limiter",
+    "808 Clipper"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Acid Line",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Bass | Acid Squelch"
+   ],
+   [
+    "Wingbeat Jr.",
+    "Synth | Synth Eighths"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Acid Sixteenths",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Bass | Acid Eighths"
+   ],
+   [
+    "Cinder",
+    "Bass | Synth Bass Bite"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Wobble",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Bass | Wobble Quarter"
+   ],
+   [
+    "Maw Lite",
+    "Bass | 808 Grit"
+   ],
+   [
+    "Mono Maker",
+    "Club Safe (120 Hz)"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Funk Envelope",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Bass | Funk Envelope"
+   ],
+   [
+    "Cocoon Compressor",
+    "Bass Even"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Dub Bass",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Maw",
+    "Bass | Dub Bass Lock"
+   ],
+   [
+    "Larva Filter 2",
+    "Bass | Dub Low Pass"
+   ],
+   [
+    "Mono Maker",
+    "Bass Bus Mono (90 Hz)"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Pick Bass Crush",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Maw",
+    "Bass | Pick Bass Crush"
+   ],
+   [
+    "Snap Transient",
+    "Bass Pick Definition"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Tube Bass",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Vari-Mu Tube",
+    "Bass Warmth"
+   ],
+   [
+    "Triode Glow",
+    "Bass Tube"
+   ],
+   [
+    "Radiant Pre",
+    "Bass | DI Pre"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Low End Focus",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Opto Leveler",
+    "Bass Smooth"
+   ],
+   [
+    "Mono Maker",
+    "Bass Bus Mono (90 Hz)"
+   ],
+   [
+    "Lantern Tilt",
+    "Thick Bass"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Synth Bass Edge",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Vellum EQ",
+    "Bass | Synth Bass Edge"
+   ],
+   [
+    "Cinder",
+    "Bass | Synth Bass Bite"
+   ],
+   [
+    "Moth Press",
+    "Bass Hold"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Reese Motion",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Bass | Reese Movement"
+   ],
+   [
+    "Mirror Shift Lite",
+    "Medium | Synth Spread"
+   ],
+   [
+    "Mono Maker",
+    "Club Safe (120 Hz)"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Fuzz Bass",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Scorch Drive",
+    "Fuzz"
+   ],
+   [
+    "Larva Filter 2",
+    "Bass | Driven Diode"
+   ],
+   [
+    "Mono Maker",
+    "Bass Bus Mono (90 Hz)"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Talking Bass",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Bass | Talking Bass"
+   ],
+   [
+    "Opto Leveler",
+    "Bass Smooth"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Lo-Fi Bass",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Ember Tape",
+    "Bass Fat"
+   ],
+   [
+    "Vinyl Press",
+    "Mono Bass Safe"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Bass Bus Control",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Pupa Buss Comp",
+    "Bass Bus"
+   ],
+   [
+    "Furnace Density",
+    "Bass Fatten"
+   ],
+   [
+    "Mono Maker",
+    "Bass Bus Mono (90 Hz)"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Octave Sub Layer",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Apex Sub",
+    "Bass Octave"
+   ],
+   [
+    "Opto Leveler",
+    "Bass Smooth"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Bass | Phased Bass",
+  "category": "Bass",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Classic | Synth 12 Deep Slow"
+   ],
+   [
+    "Mono Maker",
+    "Mono Below 150 Hz"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Clean Chime",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Vellum EQ",
+    "Guitar | Clean Chime"
+   ],
+   [
+    "Flutter Chorus",
+    "Wide Guitar"
+   ],
+   [
+    "Foil Plate Lite",
+    "Instruments | Acoustic Guitar"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Edge Of Breakup",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Cinder",
+    "Guitar | Edge of Breakup"
+   ],
+   [
+    "Wingbeat Jr.",
+    "Guitar | Dotted Eighth"
+   ],
+   [
+    "Foil Plate",
+    "Vintage | Surf Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Fuzz Wall",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Maw Lite",
+    "Guitar | Fuzz Wall"
+   ],
+   [
+    "Mirror Shift",
+    "Guitar Doubles | Lead Halo"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Surf Spring",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Pocket Spaces",
+    "Big Spring Surf"
+   ],
+   [
+    "Quiver Tremolo",
+    "Surf"
+   ],
+   [
+    "Oil Can Delay",
+    "Surf Slap"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Ambient Swell",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Veil Gate",
+    "Slow Swell"
+   ],
+   [
+    "Shard",
+    "Pads | Slow Bloom"
+   ],
+   [
+    "Murmuration",
+    "Swells | Gentle Swell"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Funk Wah",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Wah & Envelope | Auto Wah Funk"
+   ],
+   [
+    "Cocoon Compressor",
+    "Acoustic Guitar"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Phase Rhythm",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Guitar | Funk Rhythm Phase"
+   ],
+   [
+    "Pocket Spaces",
+    "Room"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Vibe Lead",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Guitar | Vibe Rotor Wash"
+   ],
+   [
+    "Wingbeat Jr.",
+    "Guitar | Dotted Eighth"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Acoustic Sparkle",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Vellum EQ",
+    "Guitar | Acoustic Sparkle"
+   ],
+   [
+    "Opto Leveler",
+    "De-Harsh Guitar"
+   ],
+   [
+    "Foil Plate Lite",
+    "Instruments | Acoustic Guitar"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Doubled Wide",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Mirror Shift",
+    "Guitar Doubles | Lead Halo"
+   ],
+   [
+    "Double Wing ADT",
+    "Guitar Double"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Tremolo Amp",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Tremor",
+    "Vintage Amp | Blackface Throb"
+   ],
+   [
+    "Pocket Spaces",
+    "Spring"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Harmonic Trem",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Tremor",
+    "Harmonic Trem | Synced Split"
+   ],
+   [
+    "Foil Plate",
+    "Vintage | Surf Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Shoegaze",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Guitar | Shoegaze Wall"
+   ],
+   [
+    "Murmuration",
+    "Washes | Endless Wash"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Dotted Echo Lead",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Cinder",
+    "Guitar | Edge of Breakup"
+   ],
+   [
+    "Wingbeat Echo",
+    "Rhythmic | Quarter + Dotted Pattern"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Lo-Fi Guitar",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Lo-Fi | Old Gramophone"
+   ],
+   [
+    "Ember Tape",
+    "Lo-Fi Wobble"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Crunch Room",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Maw Lite",
+    "Guitar | Guitar Crush"
+   ],
+   [
+    "Vellum EQ",
+    "Guitar | Crunch Tame"
+   ],
+   [
+    "Pocket Spaces",
+    "Room"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Tube Preamp",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Triode Glow",
+    "Guitar Preamp"
+   ],
+   [
+    "Furnace Density",
+    "Guitar Amp-ish"
+   ],
+   [
+    "Foil Plate Lite",
+    "Short | Short Steel"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Orbit Strum",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Snap Transient",
+    "Acoustic Strum Soften"
+   ],
+   [
+    "Orbit Pan",
+    "Gentle Motion | Slow Drift"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Crystal Octaves",
+  "category": "Guitar",
+  "routing": 0,
+  "slots": [
+   [
+    "Shard",
+    "Octaves | Octave Up"
+   ],
+   [
+    "Foil Plate",
+    "Long / Ambient | Big Steel Hall"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Guitar | Dry Wet Lanes",
+  "category": "Guitar",
+  "routing": 1,
+  "slots": [
+   [
+    "Cinder",
+    "Guitar | Edge of Breakup"
+   ],
+   [
+    "Wingbeat Echo",
+    "Chorus / Doubling | Guitar Doubler Wide"
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "Foil Plate",
+    "Long / Ambient | Big Steel Hall"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Piano Clarity",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Vellum EQ",
+    "Keys | Piano Clarity"
+   ],
+   [
+    "Cocoon Compressor",
+    "Piano Gentle"
+   ],
+   [
+    "Foil Plate Lite",
+    "Instruments | Piano"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Piano Glow",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Radiant",
+    "Keys | Line Amp Piano Glow"
+   ],
+   [
+    "Vari-Mu Tube",
+    "Piano Glow"
+   ],
+   [
+    "Foil Plate",
+    "Long / Ambient | Piano Hall Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Electric Piano Drive",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Radiant",
+    "Keys | Line Amp Electric Piano Drive"
+   ],
+   [
+    "Twelve Phase 2",
+    "Keys | Electric Piano Swirl"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Tine Trem",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Quiver Tremolo",
+    "Rhodes Trem"
+   ],
+   [
+    "Foil Plate Lite",
+    "Instruments | Piano"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Stereo Tines",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Keys | Stereo Tines"
+   ],
+   [
+    "Orbit Pan",
+    "Gentle Motion | Slow Drift"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Organ Drive",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Radiant Pre",
+    "Keys | Organ Pre Drive"
+   ],
+   [
+    "Twelve Phase 2",
+    "Keys | Organ Rotor-ish"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Funk Keys",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Wah & Envelope | Snappy Funk Keys"
+   ],
+   [
+    "Twelve Phase 2",
+    "Keys | Funk Keys Phase"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Lo-Fi Keys",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Lo-Fi | Dusty Keys"
+   ],
+   [
+    "Vinyl Press",
+    "Lo-Fi Beats"
+   ],
+   [
+    "Ember Tape",
+    "Lo-Fi Wobble"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Bell Shine",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Vellum EQ",
+    "Keys | Bell Shine"
+   ],
+   [
+    "Shard",
+    "Octaves | Octave Shimmer Long"
+   ],
+   [
+    "Foil Plate",
+    "Long / Ambient | Piano Hall Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Pad Width",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Swarm Ensemble",
+    "Keys Width"
+   ],
+   [
+    "Wingspan",
+    "Wide Pads"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Piano Glue",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Maw Lite",
+    "Keys | Piano Glue"
+   ],
+   [
+    "Pupa Buss Comp",
+    "Keys & Pads"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Felt Piano Room",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Lantern Tilt",
+    "Slightly Darker"
+   ],
+   [
+    "Pocket Spaces",
+    "Small Chamber"
+   ],
+   [
+    "Ember Tape",
+    "Keys & Pads"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Keys Warmth",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Triode Glow",
+    "Keys Warmth"
+   ],
+   [
+    "Larva Filter 2",
+    "Synth | Keys Warmth"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Barber Pole Keys",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Keys | Barber Pole Rise"
+   ],
+   [
+    "Foil Plate Lite",
+    "Long | Swell"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Reed Piano Throb",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Keys | Reed Piano Throb"
+   ],
+   [
+    "Tremor",
+    "Vintage Amp | Deep Sixties"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Ambient Piano",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Cocoon Compressor",
+    "Piano Gentle"
+   ],
+   [
+    "Murmuration",
+    "Clouds | Stratus"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Keys Bus",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Pupa Buss Comp",
+    "Keys & Pads"
+   ],
+   [
+    "Cinder",
+    "Keys | Pad Thickener"
+   ],
+   [
+    "Wingspan",
+    "Slightly Wider"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Keys | Gated Keys",
+  "category": "Keys",
+  "routing": 0,
+  "slots": [
+   [
+    "Tremor",
+    "Gate Patterns | Clave 2-3"
+   ],
+   [
+    "Wingbeat Jr.",
+    "Keys | Tape Quarter"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Supersaw Air",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Mirror Shift",
+    "Synth Spread | Supersaw Air"
+   ],
+   [
+    "Cinder",
+    "Synth | Bass Synth Weight"
+   ],
+   [
+    "Foil Plate",
+    "Instruments | Synth Lead Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Lead Bite",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Synth | Saw Lead Bite"
+   ],
+   [
+    "Wingbeat Jr.",
+    "Synth | Synth Eighths"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Pad Bloom",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Synth | Pad Slow Open"
+   ],
+   [
+    "Swarm Ensemble",
+    "Pad Swarm"
+   ],
+   [
+    "Murmuration",
+    "Swells | Gentle Swell"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Trance Gate Pad",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Rhythmic | Trance Gate Filter"
+   ],
+   [
+    "Wingbeat Echo",
+    "Rhythmic | Quarter + Dotted Pattern"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Arp Sparkle",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Synth | Arp Sixteenths"
+   ],
+   [
+    "Shutter Delay",
+    "Ping-Pong | Wide Pong"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Synth 12 Sweep",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Synth | Classic Synth Sweep"
+   ],
+   [
+    "Foil Plate Lite",
+    "Long | Swell"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Analog Heat",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Radiant",
+    "Synth | 60s Mixer Analog Heat"
+   ],
+   [
+    "Radiant Pre",
+    "Synth | Synth Pre Warmth"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Glassy Bells",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Mirror Shift",
+    "Synth Spread | Glassy Bells"
+   ],
+   [
+    "Shard",
+    "Crystals | Classic Crystal"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Step Filter Sequence",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Synth | Step Sequence Filter"
+   ],
+   [
+    "Orbit Pan",
+    "Rhythm Steps | Walk Across"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Random Steps",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Synth | Random Steps"
+   ],
+   [
+    "Shutter Lite",
+    "Echo | Eighth at 120"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Formant Pad",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Synth | Formant Pad"
+   ],
+   [
+    "Starfield",
+    "Ambient Wash"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | 80s Chorus Synth",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Flutter Chorus",
+    "80s Synth"
+   ],
+   [
+    "Aurora Verb",
+    "Big Hall"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Crushed Lead",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Grit Bits",
+    "Aliased Lead"
+   ],
+   [
+    "Scorch Drive",
+    "Synth Bite"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Game Console",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Grit Bits",
+    "Game Console"
+   ],
+   [
+    "Shutter Lite",
+    "Slap | Double"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Barber Pole Riser",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Synth | Barber Pole Endless"
+   ],
+   [
+    "Murmuration",
+    "Reverse Builds | Reverse Halo"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Pluck Space",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Synth | Plucked String"
+   ],
+   [
+    "Shutter Delay",
+    "Dual Rhythm | Short + Long"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Wide Stereo Filter",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Synth | Wide Stereo Filter"
+   ],
+   [
+    "Wingspan",
+    "Super Wide"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Sample Hold Phase",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Synth | Sample Hold Phase"
+   ],
+   [
+    "Shutter Lite",
+    "Echo | Bright 200"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Synth Bus",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Pupa Buss Comp",
+    "Keys & Pads"
+   ],
+   [
+    "Cinder",
+    "Synth | Bass Synth Weight"
+   ],
+   [
+    "Vellum EQ",
+    "Mix Bus | Air Lift"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Synth | Brass Stab",
+  "category": "Synth",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Synth | Analog Brass"
+   ],
+   [
+    "Foil Plate",
+    "Instruments | Synth Lead Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Gentle Glue",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Pupa Buss Comp",
+    "Mix Glue"
+   ],
+   [
+    "Cinder",
+    "Mix Bus | Side Air (M/S)"
+   ],
+   [
+    "Apex Limiter",
+    "Transparent Safety"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Streaming Master",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Vellum EQ",
+    "Mastering | Open Top"
+   ],
+   [
+    "Pupa Buss Comp",
+    "Mastering Kiss"
+   ],
+   [
+    "Apex Limiter",
+    "Streaming Master"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Tape Bus",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Ember Tape",
+    "Mix Bus Tape"
+   ],
+   [
+    "Pupa Buss Comp",
+    "Mix Glue"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Tube Bus",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Vari-Mu Tube",
+    "Mix Bus Tube"
+   ],
+   [
+    "Triode Glow",
+    "Mix Bus Tube"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Vintage Desk",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Ashen Desk",
+    "Mix Bus Weight"
+   ],
+   [
+    "Radiant",
+    "Mix Bus | 60s Mixer Tape-Era Bus"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Club Loud",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Apex Triad",
+    "Master | Club Loud"
+   ],
+   [
+    "Mono Maker",
+    "Club Safe (120 Hz)"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Trap Master",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Apex Triad",
+    "Master | Trap Master"
+   ],
+   [
+    "Clamp Limiter",
+    "Trap Master"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Warm Low End",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Apex Triad",
+    "Master | Warm Low End"
+   ],
+   [
+    "Vellum EQ",
+    "Mix Bus | Air Lift"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Bright Air",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Antenna Air",
+    "Mix Bus Air"
+   ],
+   [
+    "Pupa Buss Comp",
+    "Light Touch"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Lo-Fi Master",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Apex Triad",
+    "Master | Lo-Fi Soft"
+   ],
+   [
+    "Vinyl Press",
+    "Soft Vinyl"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Acoustic Natural",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Apex Triad",
+    "Master | Acoustic Natural"
+   ],
+   [
+    "Lantern Tilt",
+    "Mastering Nudge Bright"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Mid Side Polish",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Radiant",
+    "Mix Bus | Line Amp Mid Heat (M/S)"
+   ],
+   [
+    "Vellum EQ",
+    "Mastering | Mid Side Air"
+   ],
+   [
+    "Apex Limiter",
+    "Streaming Master"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Summing Warmth",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Lumen Buss",
+    "Mix Bus"
+   ],
+   [
+    "Furnace Density",
+    "Mix Bus Warmth"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | EDM Wall",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Apex Triad",
+    "Master | EDM Wall"
+   ],
+   [
+    "Wingspan",
+    "Mastering Touch"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | De-Harsh Master",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Apex Triad",
+    "Master | De-Harsh"
+   ],
+   [
+    "Antenna Air",
+    "Tame Harsh Top"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Vinyl Cut",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Vinyl Press",
+    "Club 12-inch"
+   ],
+   [
+    "Mono Maker",
+    "Vinyl Safe (200 Hz)"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Mix Bus | Gentle Multiband",
+  "category": "Mix Bus",
+  "routing": 0,
+  "slots": [
+   [
+    "Apex Multiband",
+    "Mastering Gentle (4 bands)"
+   ],
+   [
+    "Apex Limiter",
+    "Transparent Safety"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Plate And Slap",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Wingbeat Jr.",
+    "Vocal | Tape Slap"
+   ],
+   [
+    "Foil Plate",
+    "Vocal Plates | Classic Lead Vocal Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Big Hall Pre-Delay",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Shutter Lite",
+    "Slap | Tight"
+   ],
+   [
+    "Aurora Verb",
+    "Big Hall"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Endless Gold",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Foil Plate",
+    "Infinite / Pads | Endless Gold"
+   ],
+   [
+    "Lantern Tilt",
+    "Darker"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Shimmer Cathedral",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Starfield",
+    "Shimmer Pad"
+   ],
+   [
+    "Nebula Verb",
+    "Cathedral"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Stratus Cloud",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Murmuration",
+    "Clouds | Stratus"
+   ],
+   [
+    "Mirror Shift Lite",
+    "Wide | Wide A"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Reverse Bloom",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Shard",
+    "Reverse | Suck Back"
+   ],
+   [
+    "Murmuration",
+    "Reverse Builds | Reverse Halo"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Dub Space",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Wingbeat Echo",
+    "Dub | Spring Heads 1+3"
+   ],
+   [
+    "Pocket Spaces",
+    "Spring"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Tape Echo Chamber",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Echo Wing",
+    "Vintage Echo"
+   ],
+   [
+    "Pocket Spaces",
+    "Chamber"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Ambient Cloud Echo",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Wingbeat Echo",
+    "Ambient | Ambient Cloud"
+   ],
+   [
+    "Foil Plate",
+    "Long / Ambient | Big Steel Hall"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Glacier",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Wingbeat Echo",
+    "Ambient | Glacier"
+   ],
+   [
+    "Starfield",
+    "Ambient Wash"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Infinite Pad",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Murmuration",
+    "Freeze Pads | Infinite Pad"
+   ],
+   [
+    "Lantern Tilt",
+    "Darker"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Crystal Octave Hall",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Shard",
+    "Octaves | Octave Shimmer Long"
+   ],
+   [
+    "Aurora Verb",
+    "Big Hall"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Digital Room",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Shutter Delay",
+    "Reverb Algo | Small Digital Room"
+   ],
+   [
+    "Antenna Air",
+    "Subtle Air"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Lo-Fi Echo Space",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Shutter Lite",
+    "Lo-Fi | x4 Dusty"
+   ],
+   [
+    "Pocket Spaces",
+    "Tiny Tiled"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Oil Can Swirl",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Oil Can Delay",
+    "Dub Swirl"
+   ],
+   [
+    "Nebula Verb",
+    "Dark Chamber"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Bucket Chorus Echo",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Bucket Brigade",
+    "Chorus Echo"
+   ],
+   [
+    "Foil Plate Lite",
+    "Movement | Wobbly Plate"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Spaces | Echo Recycle Wash",
+  "category": "Spaces",
+  "routing": 0,
+  "slots": [
+   [
+    "Wingbeat Jr.",
+    "Keys | Tape Quarter"
+   ],
+   [
+    "Foil Plate Lite",
+    "Long | Huge Steel"
+   ]
+  ],
+  "recycle": 35,
+  "recycleMs": 375
+ },
+ {
+  "name": "Spaces | Wet Lanes Plate Hall",
+  "category": "Spaces",
+  "routing": 1,
+  "slots": [
+   [
+    "Foil Plate",
+    "Vocal Plates | Classic Lead Vocal Plate"
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "Aurora Verb",
+    "Big Hall"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Classic Phase Chorus",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Classic | One-Knob Amber 4"
+   ],
+   [
+    "Flutter Chorus",
+    "Classic Chorus"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Phase Into Echo",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Classic | Script Amber 4"
+   ],
+   [
+    "Wingbeat Jr.",
+    "Guitar | Dotted Eighth"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Filter Into Phase",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Sweeps | Slow Ladder Sweep"
+   ],
+   [
+    "Twelve Phase 2",
+    "Classic | Synth 12"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Orbit Ping",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Orbit Pan",
+    "Ping-Pong | Triplets"
+   ],
+   [
+    "Shutter Lite",
+    "Echo | Eighth at 120"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Tremolo Pan",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Tremor",
+    "Stereo Motion | Ping Chop"
+   ],
+   [
+    "Orbit Pan",
+    "Synced Sweeps | Quarter Swing"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Ensemble Width",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Swarm Ensemble",
+    "Strings"
+   ],
+   [
+    "Mirror Shift",
+    "Synth Spread | Supersaw Air"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Ring Shadow",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Tremor",
+    "Audio Rate | Ring Shadow"
+   ],
+   [
+    "Halo Ring",
+    "Bell Tones"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Through-Zero Sweep",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Classic | Through-Zero 8"
+   ],
+   [
+    "Foil Plate Lite",
+    "Movement | Gentle Mod"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Deep Space Phase",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Deep Space | Endless Twenty-Four"
+   ],
+   [
+    "Murmuration",
+    "Clouds | Stratus"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Vibrato Chorus",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Flutter Chorus",
+    "Vibrato (wet)"
+   ],
+   [
+    "Mirror Shift Lite",
+    "Medium | Medium Wander"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Rhythmic Filter Pan",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Rhythmic | Pulse Accents Filter"
+   ],
+   [
+    "Orbit Pan",
+    "Rhythm Steps | Walk Across"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Rotor Swirl",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Flutter Chorus",
+    "Slow Drift"
+   ],
+   [
+    "Quiver Tremolo",
+    "Classic Amp"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Seasick Tape",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Flutter Chorus",
+    "Seasick"
+   ],
+   [
+    "Ember Tape",
+    "Lo-Fi Wobble"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Stereo Swirl Filter",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Sweeps | Stereo Swirl"
+   ],
+   [
+    "Twelve Phase 2",
+    "Guitar | Twin Rack Stereo"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Helicopter",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Quiver Tremolo",
+    "Helicopter"
+   ],
+   [
+    "Orbit Pan",
+    "Circle | Bar Orbit"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Phase Lanes",
+  "category": "Modulation",
+  "routing": 1,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Classic | Synth 12"
+   ],
+   [
+    "Twelve Phase 2",
+    "Classic | Deep 24"
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "Larva Filter 2",
+    "Sweeps | Notch Drift"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Modulation | Dream Orbit",
+  "category": "Modulation",
+  "routing": 0,
+  "slots": [
+   [
+    "Mirror Shift Lite",
+    "Subtle | Pad Wander"
+   ],
+   [
+    "Orbit Pan",
+    "Vocal Pan | Dream Orbit"
+   ],
+   [
+    "Foil Plate Lite",
+    "Movement | Gentle Mod"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Alien Swarm",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Murmuration",
+    "Sound Design | Alien Swarm"
+   ],
+   [
+    "Larva Filter 2",
+    "Sound Design | Alien Chatter"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Glitch Arp",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Shard",
+    "Glitch | Glitch Arp"
+   ],
+   [
+    "Time Weaver",
+    "Time | Stutter 1/8"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Time Slip",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Shard",
+    "Sound Design | Time Slip"
+   ],
+   [
+    "Twelve Phase 2",
+    "Sound Design | Sample Hold Chaos"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Runaway Echo",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Shutter Delay",
+    "Sound Design | Runaway Feedback"
+   ],
+   [
+    "Larva Filter 2",
+    "Sound Design | Ping-Pong Filters"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Bucket Siren",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Wingbeat Echo",
+    "Sound Design | Bucket Siren"
+   ],
+   [
+    "Halo Ring",
+    "Sci-Fi Sweep"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Metallic Robot",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Twelve Phase 2",
+    "Sound Design | Metallic Robot"
+   ],
+   [
+    "Grit Bits",
+    "Telephone Bits"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Laser Zaps",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Sound Design | Laser Zaps"
+   ],
+   [
+    "Shutter Lite",
+    "Slap | Double"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Collapse",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Sound Design | Collapse"
+   ],
+   [
+    "Murmuration",
+    "Washes | Endless Wash"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Broken Speaker",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Maw",
+    "Lo-Fi | Broken Speaker"
+   ],
+   [
+    "Larva Filter 2",
+    "Lo-Fi | Toy Speaker"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Sci-Fi Tail",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Starfield",
+    "Sci-Fi Tail"
+   ],
+   [
+    "Halo Ring",
+    "Square Warble"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Resonant Cluster",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Larva Filter 2",
+    "Sound Design | Resonant Cluster"
+   ],
+   [
+    "Foil Plate",
+    "Infinite / Pads | Endless Gold"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Freeze Beat",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Time Weaver",
+    "FX | Freeze Beat 1"
+   ],
+   [
+    "Murmuration",
+    "Freeze Pads | Sustain Cloud"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Destroyed",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Grit Bits",
+    "Destroyed"
+   ],
+   [
+    "Maw Lite",
+    "Drums | Max Crush"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Crunch Choir",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Masquerade",
+    "Sound Design | Crunch Choir"
+   ],
+   [
+    "Murmuration",
+    "Swells | Choir Swell"
+   ]
+  ],
+  "recycle": 0,
+  "recycleMs": 250
+ },
+ {
+  "name": "Sound Design | Recycled Glitch",
+  "category": "Sound Design",
+  "routing": 0,
+  "slots": [
+   [
+    "Shard",
+    "Glitch | Glitch Arp"
+   ],
+   [
+    "Larva Filter 2",
+    "Sweeps | Sample Hold Steps"
+   ]
+  ],
+  "recycle": 45,
+  "recycleMs": 250
+ }
+]

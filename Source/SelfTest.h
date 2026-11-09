@@ -57,6 +57,9 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqShardPlugin>();
     engine->getPluginManager().createBuiltInType<SqMurmurationPlugin>();
     engine->getPluginManager().createBuiltInType<SqMasqueradePlugin>();
+    engine->getPluginManager().createBuiltInType<SqLarvaFilter2Plugin>();
+    engine->getPluginManager().createBuiltInType<SqTwelvePhase2Plugin>();
+    engine->getPluginManager().createBuiltInType<SqHiveRackPlugin>();
     engine->getPluginManager().createBuiltInType<SqMothKeyPlugin>();
     engine->getPluginManager().createBuiltInType<SqSirenCompPlugin>();
     engine->getPluginManager().createBuiltInType<SqSirenEqPlugin>();
@@ -120,7 +123,9 @@ inline int runSelfTest()
         auto report = SelfTestMode::reportPath.isNotEmpty() ? juce::File::getCurrentWorkingDirectory().getChildFile (SelfTestMode::reportPath)
                                                             : juce::File::getCurrentWorkingDirectory().getChildFile ("preset-audit.md");
         std::cout << "== Squelchmoth preset audit ==\n";
-        auto sum = PresetAudit::run (*session->edit, SelfTestMode::only, { "*" }, 1.5, report, [] (const juce::String& m) { std::cout << "  FAIL " << m << "\n"; });
+        if (session->edit == nullptr) session->newSession ("Audit");
+        Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };   // audit every plug-in, including the ones a rack hosts
+        auto sum = PresetAudit::run (*session->edit, SelfTestMode::only, { "*" }, 3.0, report, [] (const juce::String& m) { std::cout << "  FAIL " << m << "\n"; });
         std::cout << "\n== " << sum.plugins << " plug-ins, " << sum.presets << " presets: " << sum.passed << " passed, " << sum.failed << " failed ("
                   << juce::String (sum.seconds, 1) << " s) ==\nReport: " << report.getFullPathName() << "\n";
         scannerOwner.reset(); session.reset(); engine.reset();
@@ -2386,6 +2391,81 @@ inline int runSelfTest()
             double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
             check (sum.presets >= 440 && sum.failed == 0, "Phase D2: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
             auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-d2.md");
+            if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
+        }
+        // ---------------------------------------------------------------- Phase D3: Larva Filter 2, Twelve Phase 2, Hive Rack
+        {
+            const double SR = 48000.0, twoPi = juce::MathConstants<double>::twoPi;
+            call ("add_track", R"({"kind":"audio","name":"D3"})");
+            for (auto w : { "larva2", "phase2", "hive" }) call ("studio_fx", juce::String (R"({"track":"D3","which":")") + w + R"(","action":"add"})");
+            auto* tt = session->findTrack ("D3"); SqLarvaFilter2Plugin* lf = nullptr; SqTwelvePhase2Plugin* ph = nullptr; SqHiveRackPlugin* hr = nullptr;
+            if (tt != nullptr) for (auto pl : tt->pluginList) { if (auto a = dynamic_cast<SqLarvaFilter2Plugin*> (pl)) lf = a; if (auto b = dynamic_cast<SqTwelvePhase2Plugin*> (pl)) ph = b; if (auto c = dynamic_cast<SqHiveRackPlugin*> (pl)) hr = c; }
+            check (lf && ph && hr, "Phase D3: Larva Filter 2, Twelve Phase 2 and Hive Rack added through studio_fx");
+            call ("studio_fx", R"({"track":"D3","which":"larva2","action":"set","settings":{"Cutoff":1200,"stages":4,"routing":2,"resp2":3,"model3":1,"modMode":1,"pattern":"Tresillo","modSync":13}})");
+            call ("studio_fx", R"({"track":"D3","which":"phase2","action":"set","settings":{"style":"Deep 24","tzOn":true}})");
+            if (lf && ph)
+                check (std::abs (lf->bank[SqLarvaFilter2Plugin::cutoff] - 1200.0f) < 1.0f && lf->stages.get() == 4 && lf->routing.get() == 2 && lf->resp[1].get() == 3 && lf->model[2].get() == 1
+                       && lf->wm.mode.get() == 1 && lf->wm.pattern.get() == 4 && lf->wm.sync.get() == 13
+                       && ph->stages.get() == 24 && SqTwelvePhase2Plugin::styleNames()[ph->style.get()] == "Deep 24" && ph->tz.get(),
+                       "Phase D3: stages, routing, per-stage type, Wing Mod and phaser style set by name through studio_fx");
+            auto gl = call ("studio_fx", R"({"track":"D3","which":"larva2","action":"get"})");
+            check (gl.contains ("stage_types") && gl.contains ("live_cutoff_hz"), "Larva Filter 2: get reports the stage types and the live cutoff");
+            auto gp = call ("studio_fx", R"({"track":"D3","which":"phase2","action":"get"})");
+            check (gp.contains ("Deep 24") && gp.contains ("through_zero"), "Twelve Phase 2: get reports the style and through-zero");
+            // Hive Rack: slots, routing, macros, chains
+            call ("hive_rack", R"({"track":"D3","action":"set_slot","slot":1,"plugin":"Cinder"})");
+            call ("hive_rack", R"({"track":"D3","action":"set_slot","slot":2,"plugin":"Foil Plate","preset":""})");
+            call ("hive_rack", R"({"track":"D3","action":"routing","routing":1})");
+            auto mm = call ("hive_rack", R"({"track":"D3","action":"map_macro","macro":1,"slot":1,"param":"Mix","lo":0.2,"hi":0.8})");
+            if (hr != nullptr)
+            {
+                check (hr->slotInfo (0).name == "Cinder" && hr->slotInfo (1).name == "Foil Plate" && hr->slotInfo (0).preset.isNotEmpty() && hr->routing.get() == 1,
+                       "Hive Rack: slots take Signature effects with a preset; routing switches to two lanes");
+                hr->bank.params[(size_t) SqHiveRackPlugin::m1]->setParameter (100.0f, juce::sendNotificationSync);
+                for (int i = 0; i < 10; ++i) juce::MessageManager::getInstance()->runDispatchLoopUntil (30);
+                auto* ap = hr->slotPlugin (0) != nullptr ? SqHiveRackPlugin::findParam (*hr->slotPlugin (0), "Mix") : nullptr;
+                check (ap != nullptr && std::abs (ap->getCurrentNormalisedValue() - 0.8f) < 0.02f, "Hive Rack: Macro 1 at 100 % drives slot 1's Mix to its mapped top (0.8)");
+                // the rack's state carries its slots: a copy made from it rebuilds them
+                hr->flushPluginStateToValueTree();
+                auto copyState = hr->state.createCopy(); copyState.removeProperty (te::IDs::id, nullptr);
+                auto np = session->edit->engine.getPluginManager().createNewPlugin (*session->edit, copyState);
+                auto* hc = dynamic_cast<SqHiveRackPlugin*> (np.get());
+                check (hc != nullptr && hc->slotInfo (0).name == "Cinder" && hc->slotInfo (1).name == "Foil Plate" && hc->macroTargets().size() == 1,
+                       "Hive Rack: saved state restores every slot, its plug-in settings and the macro map");
+                auto lst = call ("hive_rack", R"({"track":"D3","action":"chain","chain":"list"})");
+                check (HiveChains::chains().size() >= 200 && lst.contains ("Vocal") && lst.contains ("Mix Bus"), "Hive Rack: " + juce::String ((int) HiveChains::chains().size()) + " factory chains in categories");
+                call ("hive_rack", R"({"track":"D3","action":"chain","chain":0})");
+                const auto& c0 = HiveChains::chains()[0]; int filled = 0; for (int i = 0; i < 8; ++i) if (hr->slotInfo (i).name.isNotEmpty()) ++filled;
+                check (filled == (int) c0.slots.size() && hr->slotInfo (0).name == juce::String (c0.slots[0].plugin) && hr->loadedChain == 0, "Hive Rack: chain '" + juce::String (c0.name) + "' loads its " + juce::String (filled) + " slots");
+                // editions: a slot this copy doesn't own is kept but locked (passed through) and names its product
+                Edition::owned() = Edition::Owned {}; Edition::owned().core = true;
+                hr->setSlot (2, "Shard");
+                const auto si = hr->slotInfo (2);
+                check (! si.allowed && si.lockedBy.isNotEmpty(), "Hive Rack: a slot from a pack this copy doesn't own is locked, naming " + si.lockedBy);
+                Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+            }
+            {
+                // Larva 2: a 4-pole ladder low-pass at 500 Hz keeps 100 Hz and takes 4 kHz down by more than 40 dB
+                auto level = [&] (double hz)
+                {
+                    Larva2::Processor p; p.p.stages = 1; p.p.response[0] = 0; p.p.model[0] = 0; p.p.cutoffHz = 500; p.p.resonance = 0; p.p.freqModOct = 0; p.p.mix = 1; p.prepare (SR, 256);
+                    std::vector<float> l (49152), r; for (size_t i = 0; i < l.size(); ++i) l[i] = 0.25f * (float) std::sin (twoPi * hz * (double) i / SR); r = l;   // a whole number of blocks
+                    for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; p.process (ch, 2, nullptr, 256); }
+                    double e = 0; for (size_t i = 24576; i < l.size(); ++i) e += (double) l[i] * l[i]; return 10 * std::log10 (e / 24576.0 / (0.25 * 0.25 / 2));
+                };
+                const double lo = level (100), hi = level (4000);
+                check (lo > -3 && hi < -40, "Larva Filter 2: transistor ladder at 500 Hz: 100 Hz " + juce::String (lo, 1) + " dB, 4 kHz " + juce::String (hi, 1) + " dB");
+            }
+            call ("delete_track", R"({"track":"D3"})");
+            Edition::owned() = Edition::Owned {}; Edition::owned().core = true;
+            check (! Edition::isTypeAllowed ("sqmLarvaFilter2") && ! Edition::isTypeAllowed ("sqmPhase12v2") && ! Edition::isTypeAllowed ("sqmHiveRack"), "editions: Larva Filter 2, Twelve Phase 2 and Hive Rack are in Color & Space");
+            Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+            auto rep = session->sessionsDir.getChildFile ("preset-audit-d3.md");
+            auto sum = PresetAudit::run (*session->edit, { "Larva Filter 2", "Twelve Phase 2", "Hive Rack" }, { "sqmLarvaFilter2", "sqmPhase12v2", "sqmHiveRack" }, 3.0, rep);
+            juce::String firstFail; for (auto& row : sum.rows) if (! row.pass && firstFail.isEmpty()) firstFail = row.plugin + " / " + row.preset + ": " + row.why;
+            double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
+            check (sum.presets >= 480 && sum.failed == 0, "Phase D3: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
+            auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-d3.md");
             if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
         }
         // ---------------------------------------------------------------- Phase C: Moth Tune 2, Moth Key, Siren Comp, Siren EQ, Hush De-Ess 2

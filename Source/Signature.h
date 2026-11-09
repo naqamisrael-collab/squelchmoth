@@ -26,7 +26,7 @@
 #include "SqFoilPlate.h"
 #include "SqRadiantMaw.h"
 #include "SqVoice111.h"
-#include "SqColor111c.h"
+#include "SqColor111d.h"
 
 namespace te = tracktion;
 
@@ -153,6 +153,9 @@ namespace Signature
             { "Time Weaver",      "sqmTimeWeaver",   "Modulation",  "Time and volume slicer: 32 steps over two bars, 36 factory time slots (half-time, stutter, reverse, tape stop, scratch) and 36 volume slots (gates, pumps, trance gates), MIDI picks the slot", 0xff3ae0c8, "timeweaver" },
             { "Larva Filter",     "sqmLarvaFilter",  "EQ & Filter", "Eight filter stages in series, parallel or 4+4, each with its own type, resonance, LFO, envelope follower and share of the 16-step sequencer", 0xffb8ff3a, "larvafilter" },
             { "Twelve Phase",     "sqmPhase12",      "Modulation",  "Four- to twelve-stage phaser with resonance and stereo spread", 0xffc04dff, "twelvephase" },
+            { "Larva Filter 2",   "sqmLarvaFilter2", "EQ & Filter", "Eight-stage multi-filter: transistor and diode ladders, Sallen-Key and state-variable models per stage, series / parallel / 4+4, LP / HP / BP / notch, Wing Mod (LFO, rhythm steps, envelope follower, ADSR on audio or MIDI), Analog drive pre or post", 0xffc6ff4a, "larvafilter2" },
+            { "Twelve Phase 2",   "sqmPhase12v2",    "Modulation",  "Phaser workstation: 2 to 24 allpass stages, 72 styles from twelve classic phaser families, through-zero, resonance around or inside the chain, Wing Mod, stereo phase, Analog drive", 0xffd06aff, "twelvephase2" },
+            { "Hive Rack",        "sqmHiveRack",     "Utility",     "Effects rack: eight slots for any Signature effect, serial or two parallel lanes, Recycle feedback around the whole rack, eight macros and 200 factory chains", 0xffffc23a, "hiverack" },
             { "Flutter Chorus",   "chorus",          "Modulation",  "Classic stereo chorus - depth, speed, width, mix",       0xffff3ad1, "flutterchorus" },
             { "Swarm Ensemble",   "airwindows_ensemble", "Modulation", "Multi-voice ensemble thickener for pads, strings and guitars", 0xffff3ad1, "swarmensemble" },
             { "Phase Moth",       "phaser",          "Modulation",  "Sweeping analogue phaser - rate, depth, feedback",       0xffff3ad1, "phasemoth" },
@@ -318,3 +321,5 @@ namespace Signature
         return p;
     }
 }
+
+#include "SqHiveHost.inl"

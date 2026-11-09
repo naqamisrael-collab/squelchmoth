@@ -34,7 +34,7 @@ public:
     bool moreThanOneInstanceAllowed() override
     {
         auto cl = getCommandLineParameters();
-        return cl.contains ("--selftest") || cl.contains ("--preset-audit") || cl.contains ("--render-faces") || cl.contains ("--make-") || cl.contains ("--check-key") || cl.contains ("PluginScan");
+        return cl.contains ("--selftest") || cl.contains ("--preset-audit") || cl.contains ("--render-faces") || cl.contains ("--make-") || cl.contains ("--check-key") || cl.contains ("--dump-catalog") || cl.contains ("PluginScan");
     }
 
     void initialise (const juce::String& commandLine) override
@@ -43,7 +43,7 @@ public:
         // Plug-in scanning and the command-line modes are extra copies of this binary: on macOS each would
         // otherwise add its own Squelchmoth icon to the Dock next to the real app.
         if (commandLine.contains ("PluginScan") || commandLine.contains ("--selftest") || commandLine.contains ("--preset-audit") || commandLine.contains ("--render-faces")
-            || commandLine.contains ("--make-") || commandLine.contains ("--check-key"))
+            || commandLine.contains ("--make-") || commandLine.contains ("--check-key") || commandLine.contains ("--dump-catalog"))
             juce::Process::setDockIconVisible (false);
        #endif
         // Out-of-process plugin scanning re-launches this binary with special arguments.
@@ -88,6 +88,24 @@ public:
             setApplicationReturnValue (bad == 0 && ok > 0 ? 0 : 1);
             quit();
             return;
+        }
+
+        if (commandLine.contains ("--dump-catalog"))
+        {
+            // Squelchmoth --dump-catalog out.json   (every Signature plug-in with its type, category and preset names; tooling)
+            auto args = juce::ArgumentList ("Squelchmoth", commandLine);
+            juce::File out;
+            for (int i = 0; i < args.size(); ++i) if (args[i].text == "--dump-catalog" && i + 1 < args.size()) out = juce::File (args[i + 1].text.unquoted());
+            juce::Array<juce::var> arr;
+            for (auto& e : Signature::entries())
+            {
+                auto* o = new juce::DynamicObject(); o->setProperty ("name", e.name); o->setProperty ("type", e.type); o->setProperty ("category", e.category);
+                juce::Array<juce::var> ps; for (auto& pr : e.presets) ps.add (juce::String (pr.name)); o->setProperty ("presets", ps);
+                arr.add (juce::var (o));
+            }
+            const auto txt = juce::JSON::toString (juce::var (arr));
+            if (out != juce::File()) out.replaceWithText (txt); else std::cout << txt << "\n";
+            setApplicationReturnValue (0); quit(); return;
         }
 
         if (commandLine.contains ("--preset-audit"))
@@ -209,6 +227,9 @@ public:
         engine->getPluginManager().createBuiltInType<SqShardPlugin>();
         engine->getPluginManager().createBuiltInType<SqMurmurationPlugin>();
         engine->getPluginManager().createBuiltInType<SqMasqueradePlugin>();
+        engine->getPluginManager().createBuiltInType<SqLarvaFilter2Plugin>();
+        engine->getPluginManager().createBuiltInType<SqTwelvePhase2Plugin>();
+        engine->getPluginManager().createBuiltInType<SqHiveRackPlugin>();
         engine->getPluginManager().createBuiltInType<SqMothKeyPlugin>();
         engine->getPluginManager().createBuiltInType<SqSirenCompPlugin>();
         engine->getPluginManager().createBuiltInType<SqSirenEqPlugin>();

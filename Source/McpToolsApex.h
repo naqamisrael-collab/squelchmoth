@@ -12,6 +12,9 @@ static juce::String apexTypeFor (const juce::String& k)
 static juce::String colourTypeFor (const juce::String& k)
 {
     const auto s = k.toLowerCase().removeCharacters (" -_");
+    if (s.contains ("larva2") || s.contains ("larvafilter2") || s.contains ("multifilter")) return SqLarvaFilter2Plugin::xmlTypeName;
+    if (s.contains ("phase2") || s.contains ("twelvephase2") || s.contains ("phaser2")) return SqTwelvePhase2Plugin::xmlTypeName;
+    if (s == "hive" || s.contains ("hiverack") || s.contains ("fxrack") || s.contains ("effectsrack") || s == "rack") return SqHiveRackPlugin::xmlTypeName;
     if (s.contains ("shard") || s.contains ("crystal")) return SqShardPlugin::xmlTypeName;
     if (s.contains ("murmur") || s.contains ("cloud") || s.contains ("swarm")) return SqMurmurationPlugin::xmlTypeName;
     if (s.contains ("masquerade") || s.contains ("voicechanger") || s.contains ("masq")) return SqMasqueradePlugin::xmlTypeName;
@@ -58,7 +61,9 @@ static const juce::StringArray& knownPluginSettings()
                               "harmonicOn", "retrigOn", "steps", "custom", "triggerOn", "divider", "binauralOn", "panLaw", "multiply", "algo", "bits", "syncA", "syncB", "smoothOn", "pattern",
                               "engine", "fbMode", "dynMode", "quantizeOn", "autoKeyOn", "keyRoot", "scale", "spliceSync", "delaySync", "lfo1Target", "lfo1Shape", "lfo1Sync",
                               "lfo2Target", "lfo2Shape", "lfo2Sync", "envTarget", "modShape", "shimmerSt", "freezeMode", "infiniteOn", "customEnvOn", "envShape",
-                              "linkOn", "voiceType", "robotNote", "driveVoicing" };
+                              "linkOn", "voiceType", "robotNote", "driveVoicing",
+                              "routing", "analogPostOn", "modMode", "modSync", "modSmooth", "modTrigger", "classicOn", "resMode", "polarity", "tzOn", "syncDiv", "chain" };
+        for (int b = 1; b <= 8; ++b) { k.add ("resp" + juce::String (b)); k.add ("model" + juce::String (b)); }
         for (int b = 1; b <= 6; ++b) for (auto pre : { "solo", "bypass", "flip", "auto" }) k.add (juce::String (pre) + juce::String (b));
         return k;
     }();
@@ -176,6 +181,34 @@ juce::var describeApex (te::Plugin& p)
         set (o, "mode", Masquerade::modeName (kp.mode)); set (o, "latency_ms", mq->getLatencySeconds() * 1000.0); set (o, "input_hz", mq->liveHz.load());
         set (o, "key", SqSessionKey::rootNames()[kp.keyRoot]); set (o, "formant_follows_pitch", kp.link);
     }
+    if (auto l2 = dynamic_cast<SqLarvaFilter2Plugin*> (&p))
+    {
+        const auto kp = l2->knobParams();
+        set (o, "routing", Larva2::routingName (kp.routing)); set (o, "stages", kp.stages); set (o, "mod_mode", Eng::WingMod::modeName (kp.mod.mode));
+        juce::String st; for (int i = 0; i < kp.stages; ++i) st << SqLarvaFilter2Plugin::responseNames()[kp.response[i]] << " " << SqLarvaFilter2Plugin::modelNames()[kp.model[i]] << (i + 1 < kp.stages ? ", " : "");
+        set (o, "stage_types", st); set (o, "live_cutoff_hz", l2->proc.modulatedCutoff()); set (o, "rhythm_step", l2->proc.currentStep()); set (o, "latency_ms", l2->getLatencySeconds() * 1000.0);
+    }
+    if (auto p2 = dynamic_cast<SqTwelvePhase2Plugin*> (&p))
+    {
+        const auto kp = p2->knobParams();
+        set (o, "style", SqTwelvePhase2Plugin::styleNames()[juce::jlimit (0, SqTwelvePhase2Plugin::styleNames().size() - 1, p2->style.get())]); set (o, "stages", kp.stages);
+        set (o, "through_zero", kp.throughZero); set (o, "resonance_routing", kp.resMode == 0 ? "around the chain" : "inside the chain"); set (o, "live_sweep_0_to_1", p2->proc.sweepNow());
+        set (o, "loop_limiter_db", p2->proc.limiterDb()); set (o, "mod_mode", Eng::WingMod::modeName (kp.mod.mode));
+    }
+    if (auto hr = dynamic_cast<SqHiveRackPlugin*> (&p))
+    {
+        juce::Array<juce::var> sl;
+        for (int i = 0; i < SqHiveRackPlugin::numSlots; ++i)
+        {
+            const auto si = hr->slotInfo (i); auto so = obj(); set (so, "slot", i + 1); set (so, "plugin", si.name.isEmpty() ? juce::String ("Empty") : si.name);
+            if (si.preset.isNotEmpty()) set (so, "preset", si.preset);
+            if (! si.allowed) set (so, "locked_by", si.lockedBy);
+            sl.add (so);
+        }
+        set (o, "slots", sl); set (o, "routing", SqHiveRackPlugin::routingNames()[juce::jlimit (0, 1, hr->routing.get())]);
+        set (o, "chain", hr->loadedChain >= 0 ? juce::String (HiveChains::chains()[(size_t) hr->loadedChain].name) : juce::String ("(custom)"));
+        set (o, "macro_map", hr->macroMap.get()); set (o, "latency_ms", hr->getLatencySeconds() * 1000.0);
+    }
     if (auto sh = dynamic_cast<SqShutterBase*> (&p))
     {
         if (! p.edit.getTransport().isPlaying()) sh->refreshSettings();
@@ -211,7 +244,15 @@ void registerApexTools()
          " vellum (Vellum EQ, broadcast EQ, 80 presets) | tremor (Tremor, tremolo / gate, 100 presets) | orbit (Orbit Pan, auto-pan, 90 presets) |\n"
          " mirror (Mirror Shift, micro-pitch widener, 60 presets - 'get' returns correlation and mono-sum loss) | mirrorlite (Mirror Shift Lite, 20) |\n"
          " shutter (Shutter Delay, digital rack delay, 100 presets) | shutterlite (Shutter Lite, 30) |\n"
-         " shard (Shard, granular reverse pitch echo, 220 presets) | murmuration (Murmuration, tap-cloud space, 120 presets) | masquerade (Masquerade, voice changer, 100 presets).\n"
+         " shard (Shard, granular reverse pitch echo, 220 presets) | murmuration (Murmuration, tap-cloud space, 120 presets) | masquerade (Masquerade, voice changer, 100 presets) |\n"
+         " larva2 (Larva Filter 2, eight-stage multi-filter, 150 presets) | phase2 (Twelve Phase 2, 2-24 stage phaser, 130 presets) | hive (Hive Rack, 8-slot effects rack, 200 chains - slots via the hive_rack tool).\n"
+         " Larva Filter 2: Cutoff, Resonance, Freq Mod (oct), Res Mod, L/R Offset, Drive, Mix, Output, Input, Stage 1-8 Offset (oct), Mod Rate, Groove, Feel, Env Attack / Release / Sensitivity,\n"
+         "   Attack, Decay, Sustain, Release. Settings: stages (1-8), routing (0 Series 1 Parallel 2 4+4), resp1-8 (0 LP 1 HP 2 BP 3 Notch), model1-8 (0 Transistor 1 Diode 2 Sallen-Key 3 SVF),\n"
+         "   analog (0 off, 1-7 Clean Fat Squash Dirt Crunch Shred Pump), analogPostOn, keyOn, and the Wing Mod: modMode (0 LFO 1 Rhythm 2 Envelope 3 Random 4 Step 5 ADSR), modShape (0-8),\n"
+         "   modSync (0 free, 1-27 division), modSmooth (0-4), modTrigger (0 audio 1 MIDI 2 button), numSteps, stepDivision, pattern (0-23), steps (16 levels 0-1).\n"
+         " Twelve Phase 2: Centre, Sweep (oct), Resonance, Intensity, Stereo Phase (deg), Mix, Output, Drive, Mod Rate, Groove, Feel, Env / ADSR as above. Settings: style (0-71, loads that style),\n"
+         "   stages (2-24), classicOn (classic stage spread), resMode (0 around the chain 1 inside it), polarity (0/1), tzOn (through-zero), analog, analogPostOn, keyOn, the Wing Mod settings.\n"
+         " Hive Rack: Input, Output, Mix, Recycle, Recycle Time, Lane Balance, Macro 1-8; settings routing (0 serial 1 two lanes), syncOn + syncDiv (Recycle Time synced), chain (0-199 loads a factory chain).\n"
          " Shard settings: engine (0 Vintage 1 Clean), fbMode (0 Mixed 1 Dual 2 Ping-Pong), dynMode (0 off 1 gate 2 duck), keyOn, quantizeOn, autoKeyOn (follow Moth Key's key) or keyRoot (0-11) + scale,\n"
          "   spliceSync / delaySync (0 free, 1-27 division), lfo1Target / lfo2Target / envTarget (0 off 1 pitch 2 splice 3 delay 4 recycle 5 spray 6 mix 7 reverse), lfo1Shape / lfo2Shape (0-8), lfo1Sync / lfo2Sync.\n"
          " Murmuration settings: sync (0 free, 1-27 division; or the Beats knob), modShape, shimmerSt (0 -24, 1 -12, 2 +12, 3 +24 st), freezeOn, freezeMode (0 loop 1 spectral), infiniteOn,\n"
@@ -254,8 +295,82 @@ void registerApexTools()
          [this] (const juce::var& a)
          {
              const auto type = colourTypeFor (str (a, "which"));
-             if (type.isEmpty()) return ToolResult::error ("which must be aurora, opto, pulse, oilcan, ladder, ring, phaser, bbd, cinder, wingbeat wingbeatjr, foilplate, foilplatelite, radiant, radiantpre, maw or mawlite");
+             if (type.isEmpty()) return ToolResult::error ("which must be aurora, opto, pulse, oilcan, ladder, ring, phaser, bbd, cinder, wingbeat, wingbeatjr, foilplate, foilplatelite, radiant, radiantpre, maw, mawlite, vellum, tremor, orbit, mirror, mirrorlite, shutter, shutterlite, shard, murmuration, masquerade, larva2, phase2 or hive");
              return runSeriesTool (a, type);
+         });
+
+    add ("hive_rack",
+         "Hive Rack (8-slot effects rack) on a track or 'master' - add it first with studio_fx which=hive action=add. Actions:\n"
+         " get - slots, routing, chain, macro map. set_slot - slot (1-8), plugin (any Signature effect name, or 'Empty'), optional preset.\n"
+         " clear_slot - slot. chain - name or index (0-199) loads a factory chain ('list' lists them by category). routing - 0 serial / 1 two lanes (slots 1-4 and 5-8 in parallel).\n"
+         " map_macro - macro (1-8), slot (1-8), param (name or index in that slot), lo / hi (0-1 of the parameter's range). clear_macros.\n"
+         " open_slot - slot: opens that slot's plug-in window. slot_set - slot + settings {param: value} on the plug-in in that slot.",
+         R"json({"type":"object","properties":{"track":{"type":["string","integer"]},"action":{"type":"string","enum":["get","set_slot","clear_slot","chain","routing","map_macro","clear_macros","open_slot","slot_set"]},
+            "slot":{"type":"integer"},"plugin":{"type":"string"},"preset":{"type":"string"},"chain":{"type":["string","integer"]},"routing":{"type":"integer"},
+            "macro":{"type":"integer"},"param":{"type":["string","integer"]},"lo":{"type":"number"},"hi":{"type":"number"},"settings":{"type":"object"}},"required":["track","action"]})json",
+         [this] (const juce::var& a)
+         {
+             juce::String err; te::AudioTrack* t = nullptr;
+             auto list = pluginListArg (a, err, t);
+             if (list == nullptr) return ToolResult::error (err);
+             SqHiveRackPlugin* hr = nullptr;
+             for (auto pl : *list) if (auto h = dynamic_cast<SqHiveRackPlugin*> (pl)) { hr = h; break; }
+             if (hr == nullptr) return ToolResult::error ("No Hive Rack on that track - add one with studio_fx which=hive action=add");
+             const auto action = str (a, "action").toLowerCase();
+             const int slot = has (a, "slot") ? (int) a["slot"] : 0;
+             auto um = &hr->edit.getUndoManager();
+             auto done = [&] (const juce::String& e) { if (ui.refresh) ui.refresh(); return e.isEmpty() ? ToolResult::ok (describeApex (*hr)) : ToolResult::error (e); };
+             if (action == "get") return ToolResult::ok (describeApex (*hr));
+             if (action == "set_slot") return done (hr->setSlot (slot - 1, str (a, "plugin"), str (a, "preset")));
+             if (action == "clear_slot") { if (slot < 1 || slot > 8) return ToolResult::error ("slot must be 1-8"); hr->clearSlot (slot - 1); return done ({}); }
+             if (action == "routing") { hr->routing.setValue (juce::jlimit (0, 1, (int) a["routing"]), um); return done ({}); }
+             if (action == "clear_macros") { hr->macroMap.setValue ({}, um); return done ({}); }
+             if (action == "map_macro")
+                 return done (hr->mapMacro (juce::jlimit (1, 8, (int) a["macro"]), slot, a["param"].toString(), has (a, "lo") ? (float) (double) a["lo"] : 0.0f, has (a, "hi") ? (float) (double) a["hi"] : 1.0f));
+             if (action == "open_slot")
+             {
+                 auto* sp = hr->slotPlugin (slot - 1); if (sp == nullptr) return ToolResult::error ("Slot " + juce::String (slot) + " is empty");
+                 sp->showWindowExplicitly(); return ToolResult::ok ("Window open");
+             }
+             if (action == "slot_set")
+             {
+                 auto* sp = hr->slotPlugin (slot - 1); if (sp == nullptr) return ToolResult::error ("Slot " + juce::String (slot) + " is empty");
+                 auto st = a["settings"]; if (! st.isObject()) return ToolResult::error ("settings must be an object");
+                 juce::StringArray problems;
+                 for (auto& pr : st.getDynamicObject()->getProperties())
+                 {
+                     if (auto ap = SqHiveRackPlugin::findParam (*sp, pr.name.toString())) { ap->setParameter (ap->getValueRange().clipValue ((float) (double) pr.value), juce::sendNotification); continue; }
+                     if (auto ap = Signature::findParam (*sp, pr.name.toString())) { ap->setParameter (ap->getValueRange().clipValue ((float) (double) pr.value), juce::sendNotification); continue; }
+                     if (sp->state.hasProperty (pr.name)) { sp->state.setProperty (pr.name, pr.value, um); continue; }
+                     problems.add ("unknown parameter '" + pr.name.toString() + "'");
+                 }
+                 return done (problems.joinIntoString ("; "));
+             }
+             if (action == "chain")
+             {
+                 const auto& cs = HiveChains::chains();
+                 auto c = a["chain"];
+                 if (c.toString().equalsIgnoreCase ("list") || c.isVoid())
+                 {
+                     auto o = obj();
+                     for (int i = 0; i < (int) cs.size(); ++i)
+                     {
+                         const juce::String cat (cs[(size_t) i].category);
+                         auto cur = o.getProperty (cat, juce::var());
+                         if (! cur.isArray()) { juce::Array<juce::var> arr; cur = arr; }
+                         cur.append (juce::String (i) + " " + cs[(size_t) i].name);
+                         o.getDynamicObject()->setProperty (cat, cur);
+                     }
+                     return ToolResult::ok (o);
+                 }
+                 int ci = c.isString() ? -1 : (int) c;
+                 if (c.isString()) { for (int i = 0; i < (int) cs.size(); ++i) if (juce::String (cs[(size_t) i].name).equalsIgnoreCase (c.toString())) ci = i;
+                                     if (ci < 0) for (int i = 0; i < (int) cs.size(); ++i) if (juce::String (cs[(size_t) i].name).containsIgnoreCase (c.toString())) { ci = i; break; } }
+                 if (ci < 0 || ci >= (int) cs.size()) return ToolResult::error ("No chain '" + c.toString() + "' - use chain 'list'");
+                 hr->loadChain (ci); hr->chain.setValue (ci, um);
+                 return done ({});
+             }
+             return ToolResult::error ("unknown action");
          });
 }
 
@@ -339,6 +454,22 @@ ToolResult runSeriesTool (const juce::var& a, const juce::String& type)
                      if (! isSetting) if (auto ap = Signature::findParam (*p, key)) { ap->setParameter (ap->getValueRange().clipValue ((float) (double) v), juce::sendNotification); continue; }
                      // settings with names
                      juce::String id = key;
+                     if (auto ph2 = dynamic_cast<SqTwelvePhase2Plugin*> (p); ph2 != nullptr && key.equalsIgnoreCase ("style"))
+                     {
+                         const auto names = SqTwelvePhase2Plugin::styleNames(); int si = v.isString() ? names.indexOf (v.toString(), true) : (int) v;
+                         if (si < 0 && v.isString()) for (int i = 0; i < names.size(); ++i) if (names[i].containsIgnoreCase (v.toString())) { si = i; break; }
+                         if (si < 0 || si >= names.size()) { problems.add ("unknown style '" + v.toString() + "'"); continue; }
+                         ph2->applyStyle (si, um); continue;
+                     }
+                     if (auto hr = dynamic_cast<SqHiveRackPlugin*> (p); hr != nullptr && key.equalsIgnoreCase ("chain"))
+                     {
+                         int ci = v.isString() ? -1 : (int) v;
+                         if (v.isString()) for (int i = 0; i < (int) HiveChains::chains().size(); ++i) if (juce::String (HiveChains::chains()[(size_t) i].name).containsIgnoreCase (v.toString())) { ci = i; break; }
+                         if (ci < 0 || ci >= (int) HiveChains::chains().size()) { problems.add ("unknown chain '" + v.toString() + "'"); continue; }
+                         hr->chain.setValue (ci, um); if (hr->loadedChain != ci) hr->loadChain (ci); continue;
+                     }
+                     if ((dynamic_cast<SqTwelvePhase2Plugin*> (p) != nullptr || dynamic_cast<SqLarvaFilter2Plugin*> (p) != nullptr) && key.equalsIgnoreCase ("pattern") && v.isString())
+                     { int pi = 0; const auto& pats = Tremor::patterns(); for (int i = 0; i < (int) pats.size(); ++i) if (juce::String (pats[(size_t) i].name).containsIgnoreCase (v.toString())) { pi = i; break; } v = pi; }
                      if (key.equalsIgnoreCase ("mode") && v.isString() && dynamic_cast<SqWingbeatBase*> (p) == nullptr) v = SqApexDynamicsPlugin::modeNames().indexOf (v.toString().toUpperCase());
                      if (key.equalsIgnoreCase ("detection") && v.isString()) v = SqApexDynamicsPlugin::detectionNames().indexOf (v.toString().toUpperCase());
                      if (key.equalsIgnoreCase ("driveType") && v.isString()) v = SqApexSubPlugin::driveNames().indexOf (v.toString().toUpperCase());
@@ -372,7 +503,7 @@ ToolResult runSeriesTool (const juce::var& a, const juce::String& type)
                      }
                      if (key.equalsIgnoreCase ("msMode") && v.isString()) v = juce::jmax (0, SqCinderPlugin::msNames().indexOf (v.toString(), true));
                      if (key.equalsIgnoreCase ("oversample") && v.isString()) v = juce::jmax (0, SqCinderPlugin::osNames().indexOf (v.toString().trim().toLowerCase(), true));
-                     if (key.equalsIgnoreCase ("stages") && (int) v >= 4) { const int want = (int) v; int best = 0; for (int i = 0; i < 4; ++i) if (std::abs (SqPhase12Plugin::stageCount (i) - want) < std::abs (SqPhase12Plugin::stageCount (best) - want)) best = i; v = best; }
+                     if (key.equalsIgnoreCase ("stages") && (int) v >= 4 && dynamic_cast<SqPhase12Plugin*> (p) != nullptr) { const int want = (int) v; int best = 0; for (int i = 0; i < 4; ++i) if (std::abs (SqPhase12Plugin::stageCount (i) - want) < std::abs (SqPhase12Plugin::stageCount (best) - want)) best = i; v = best; }
                      if (dynamic_cast<SqPulseEqPlugin*> (p) != nullptr && key.endsWithIgnoreCase ("Freq") && (double) v > 10.0)
                      {
                          const std::vector<float>* tbl = nullptr;

@@ -1511,13 +1511,14 @@ namespace Skins
     #include "SkinsVoice111.inl"
     #include "SkinsColor111b.inl"
     #include "SkinsColor111c.inl"
+    #include "SkinsColor111d.inl"
     #include "SkinsSynths.inl"
     #include "SkinsSynths2.inl"
     #include "SkinsFx181.inl"
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -1532,6 +1533,7 @@ namespace Skins
         int vizH = 0;          // 0 = automatic
         int rowSplit = -1;     // >= 0: groups from this index go on a second row
         float row1Share = 0.4f;
+        bool resizable = false;   // the window can be dragged larger or smaller (same proportions)
         juce::StringArray hiddenPrefixes;   // parameters drawn by the visualiser instead of knobs
         bool hideWetDry = true;     // AirWindows add Dry/Wet to everything - keep them in a 'Mix' group instead
     };
@@ -1887,6 +1889,26 @@ namespace Skins
                                             s.groups = { G ("VOICE", { "Mode", "Pitch", "Formant", "Link" }, true, 2), G ("DRIVE", { "Drive Type", "Drive" }, true, 2), G ("OUT", { "Mix", "Output" }, true, 1),
                                                          G ("KEY", { "Session Key", "Key", "Scale", "Retune" }, false, 2), G ("ROBOT / MIDI", { "Robot Note", "Chord Level", "Chord Spread" }, false, 3),
                                                          G ("ENGINE", { "Engine", "Voice Range" }, false, 2) }; }
+        else if (name == "Larva Filter 2") { s.family = Family::larva2; s.knob = KnobStyle::chicken; s.width = 1440; s.height = 900; s.vizH = 250; s.rowSplit = 3; s.row1Share = 0.5f;
+                                            s.groups = { G ("FILTER", { "Cutoff", "Resonance", "Stages", "Routing", "L/R Offset", "Input" }, true, 3),
+                                                         G ("WING MOD", { "Mod Mode", "Mod Shape", "Mod Sync", "Mod Rate", "Freq Mod", "Res Mod" }, true, 3),
+                                                         G ("OUT", { "Analog", "Drive", "Mix", "Output" }, true, 2),
+                                                         G ("STAGES", { "Stage 1", "Stage 2", "Stage 3", "Stage 4", "Stage 5", "Stage 6", "Stage 7", "Stage 8",
+                                                                        "Stage 1 Offset", "Stage 2 Offset", "Stage 3 Offset", "Stage 4 Offset", "Stage 5 Offset", "Stage 6 Offset", "Stage 7 Offset", "Stage 8 Offset" }, false, 8),
+                                                         G ("RHYTHM", { "Pattern", "Step Length", "Steps", "Groove", "Feel", "Smoothing" }, false, 3),
+                                                         G ("ENVELOPE / ADSR", { "Trigger", "Fire", "Env Attack", "Env Release", "Env Sensitivity", "Key Input", "Attack", "Decay", "Sustain", "Release", "Analog Post" }, false, 4) }; }
+        else if (name == "Twelve Phase 2") { s.family = Family::phase2; s.knob = KnobStyle::vintage; s.width = 1400; s.height = 860; s.vizH = 250; s.rowSplit = 3; s.row1Share = 0.5f;
+                                            s.groups = { G ("PHASER", { "Style", "Stages", "Centre", "Sweep", "Resonance", "Intensity" }, true, 3),
+                                                         G ("WING MOD", { "Mod Mode", "Mod Shape", "Mod Sync", "Mod Rate", "Stereo Phase" }, true, 3),
+                                                         G ("OUT", { "Mix", "Output" }, true, 1),
+                                                         G ("COLOUR", { "Classic Spread", "Resonance Path", "Polarity", "Through-Zero", "Analog", "Drive", "Analog Post" }, false, 4),
+                                                         G ("RHYTHM", { "Pattern", "Step Length", "Steps", "Groove", "Feel", "Smoothing" }, false, 3),
+                                                         G ("ENVELOPE / ADSR", { "Trigger", "Env Attack", "Env Release", "Env Sensitivity", "Key Input", "Attack", "Decay", "Sustain", "Release" }, false, 5) }; }
+        else if (name == "Hive Rack")     { s.family = Family::hiverack; s.knob = KnobStyle::ring; s.width = 1400; s.height = 880; s.vizH = 300; s.rowSplit = 3; s.row1Share = 0.55f; s.resizable = true;
+                                            s.groups = { G ("SLOTS", { "Slot 1", "Slot 2", "Slot 3", "Slot 4", "Slot 5", "Slot 6", "Slot 7", "Slot 8" }, true, 4),
+                                                         G ("RACK", { "Chain", "Routing", "Open Slot", "Lane Balance", "Input", "Output", "Mix" }, true, 3),
+                                                         G ("RECYCLE", { "Recycle", "Recycle Time", "Recycle Sync", "Recycle Division" }, true, 2),
+                                                         G ("MACROS", { "Macro 1", "Macro 2", "Macro 3", "Macro 4", "Macro 5", "Macro 6", "Macro 7", "Macro 8" }, false, 8) }; }
         else if (name == "Silk Ladder")   { s.family = Family::ladder; s.knob = KnobStyle::chicken; s.width = 940; s.height = 580; s.vizH = 220;
                                             s.groups = { G ("FILTER", { "Cutoff", "Resonance" }, true, 2), G ("ENVELOPE", { "Env Amount", "Fast Envelope" }, false, 1), G ("DRIVE", { "Poles", "Drive" }, false, 1), G ("OUTPUT", { "Output", "Mix" }, false, 1) }; }
         else if (name == "Halo Ring")     { s.family = Family::ring; s.knob = KnobStyle::chicken; s.width = 900; s.height = 560; s.vizH = 220;
@@ -1920,8 +1942,15 @@ namespace Skins
 
         ~SkinEditor() override   { plugin.edit.flushPluginStateIfNeeded (plugin); }
 
-        bool allowWindowResizing() override                                 { return false; }
-        juce::ComponentBoundsConstrainer* getBoundsConstrainer() override   { return nullptr; }
+        bool allowWindowResizing() override                                 { return spec.resizable; }
+        juce::ComponentBoundsConstrainer* getBoundsConstrainer() override
+        {
+            if (! spec.resizable) return nullptr;
+            constrainer.setFixedAspectRatio ((double) spec.width / (double) spec.height);
+            constrainer.setSizeLimits (spec.width * 3 / 4, spec.height * 3 / 4, spec.width * 2, spec.height * 2);
+            return &constrainer;
+        }
+        juce::ComponentBoundsConstrainer constrainer;
 
         //==========================================================================
         void paint (juce::Graphics& g) override
@@ -2543,6 +2572,58 @@ namespace Skins
                 add (choice ("Voice Range", SqMasqueradePlugin::voiceNames(), [mqp] { return mqp->voiceType.get(); }, [mqp, um] (int i) { mqp->voiceType.setValue (i, um); }));
                 for (auto& hs : handleStore) if (hs->name == "Pitch" || hs->name == "Formant" || hs->name == "Output") hs->bipolar = true;
             }
+            else if (auto l2p = dynamic_cast<SqLarvaFilter2Plugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                auto ci = [&] (const juce::String& nm, juce::StringArray names, juce::CachedValue<int>& cv, int offset = 0) { add (choice (nm, names, [&cv, offset] { return cv.get() - offset; }, [&cv, um, offset] (int i) { cv.setValue (i + offset, um); })); };
+                auto tb = [&] (const juce::String& nm, juce::CachedValue<bool>& cv) { add (toggle (nm, [&cv] { return cv.get(); }, [&cv, um] (bool b) { cv.setValue (b, um); })); };
+                ci ("Stages", { "1","2","3","4","5","6","7","8" }, l2p->stages, 1); ci ("Routing", SqLarvaFilter2Plugin::routingNames(), l2p->routing);
+                juce::StringArray types; for (auto& m : SqLarvaFilter2Plugin::modelNames()) for (auto& rsp : SqLarvaFilter2Plugin::responseNames()) types.add (rsp + " " + m);
+                for (int i = 0; i < 8; ++i)
+                    add (choice ("Stage " + juce::String (i + 1), types, [l2p, i] { return l2p->model[(size_t) i].get() * 4 + l2p->resp[(size_t) i].get(); },
+                                 [l2p, um, i] (int k) { l2p->model[(size_t) i].setValue (k / 4, um); l2p->resp[(size_t) i].setValue (k % 4, um); }));
+                ci ("Mod Mode", SqWingModProps::modeNames(), l2p->wm.mode); ci ("Mod Shape", SqColor111bBase::shapeNames(), l2p->wm.shape);
+                ci ("Mod Sync", SqColor111bBase::syncNames (true), l2p->wm.sync); ci ("Smoothing", SqWingModProps::smoothNames(), l2p->wm.smoothing);
+                ci ("Trigger", SqWingModProps::triggerNames(), l2p->wm.trigger); ci ("Step Length", SqColor111bBase::syncNames (false), l2p->wm.stepDivision);
+                ci ("Steps", { "1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16" }, l2p->wm.numSteps, 1);
+                add (choice ("Pattern", SqTremorPlugin::patternNames(), [l2p] { return l2p->wm.pattern.get(); }, [l2p, um] (int i) { l2p->wm.steps.setValue ({}, um); l2p->wm.pattern.setValue (i, um); }));
+                ci ("Analog", SqTremorPlugin::analogNames(), l2p->analog); tb ("Analog Post", l2p->analogPost); tb ("Key Input", l2p->keyOn);
+                add (toggle ("Fire", [] { return false; }, [l2p] (bool) { l2p->manualTrigger = true; }));
+                for (auto& hs : handleStore) if (hs->name == "Output" || hs->name == "Input" || hs->name == "Freq Mod" || hs->name == "Res Mod" || hs->name.endsWith ("Offset") || hs->name == "Env Sensitivity") hs->bipolar = true;
+            }
+            else if (auto p2p = dynamic_cast<SqTwelvePhase2Plugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                auto ci = [&] (const juce::String& nm, juce::StringArray names, juce::CachedValue<int>& cv, int offset = 0) { add (choice (nm, names, [&cv, offset] { return cv.get() - offset; }, [&cv, um, offset] (int i) { cv.setValue (i + offset, um); })); };
+                auto tb = [&] (const juce::String& nm, juce::CachedValue<bool>& cv) { add (toggle (nm, [&cv] { return cv.get(); }, [&cv, um] (bool b) { cv.setValue (b, um); })); };
+                add (choice ("Style", SqTwelvePhase2Plugin::styleNames(), [p2p] { return p2p->style.get(); }, [p2p, um] (int i) { p2p->applyStyle (i, um); }));
+                ci ("Stages", SqTwelvePhase2Plugin::stageNames(), p2p->stages, 2);
+                tb ("Classic Spread", p2p->classic); ci ("Resonance Path", { "Around the chain", "Inside the chain" }, p2p->resMode); ci ("Polarity", { "Positive", "Negative" }, p2p->polarity);
+                tb ("Through-Zero", p2p->tz);
+                ci ("Mod Mode", SqWingModProps::modeNames(), p2p->wm.mode); ci ("Mod Shape", SqColor111bBase::shapeNames(), p2p->wm.shape);
+                ci ("Mod Sync", SqColor111bBase::syncNames (true), p2p->wm.sync); ci ("Smoothing", SqWingModProps::smoothNames(), p2p->wm.smoothing);
+                ci ("Trigger", SqWingModProps::triggerNames(), p2p->wm.trigger); ci ("Step Length", SqColor111bBase::syncNames (false), p2p->wm.stepDivision);
+                ci ("Steps", { "1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16" }, p2p->wm.numSteps, 1);
+                add (choice ("Pattern", SqTremorPlugin::patternNames(), [p2p] { return p2p->wm.pattern.get(); }, [p2p, um] (int i) { p2p->wm.steps.setValue ({}, um); p2p->wm.pattern.setValue (i, um); }));
+                ci ("Analog", SqTremorPlugin::analogNames(), p2p->analog); tb ("Analog Post", p2p->analogPost); tb ("Key Input", p2p->keyOn);
+                for (auto& hs : handleStore) if (hs->name == "Output" || hs->name == "Env Sensitivity") hs->bipolar = true;
+            }
+            else if (auto hrp = dynamic_cast<SqHiveRackPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                const auto slotNames = SqHiveRackPlugin::slotChoices();
+                for (int i = 0; i < SqHiveRackPlugin::numSlots; ++i)
+                    add (choice ("Slot " + juce::String (i + 1), slotNames, [hrp, i, slotNames] { const auto nm = hrp->slotInfo (i).name; return nm.isEmpty() ? 0 : juce::jmax (0, slotNames.indexOf (nm)); },
+                                 [hrp, i, slotNames] (int k) { hrp->setSlot (i, slotNames[k]); }));
+                juce::StringArray chainNames { "(custom)" }; for (auto& c : HiveChains::chains()) chainNames.add (c.name);
+                add (choice ("Chain", chainNames, [hrp] { return hrp->loadedChain + 1; }, [hrp, um] (int k) { if (k > 0) { hrp->loadChain (k - 1); hrp->chain.setValue (k - 1, um); } }));
+                add (choice ("Routing", SqHiveRackPlugin::routingNames(), [hrp] { return hrp->routing.get(); }, [hrp, um] (int i) { hrp->routing.setValue (i, um); }));
+                add (choice ("Open Slot", { "-", "Slot 1", "Slot 2", "Slot 3", "Slot 4", "Slot 5", "Slot 6", "Slot 7", "Slot 8" }, [] { return 0; },
+                             [hrp] (int k) { if (k > 0) if (auto* sp = hrp->slotPlugin (k - 1)) sp->showWindowExplicitly(); }));
+                add (toggle ("Recycle Sync", [hrp] { return hrp->syncOn.get(); }, [hrp, um] (bool b) { hrp->syncOn.setValue (b, um); }));
+                add (choice ("Recycle Division", SqColor111bBase::syncNames (false), [hrp] { return hrp->syncDiv.get(); }, [hrp, um] (int i) { hrp->syncDiv.setValue (i, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output" || hs->name == "Input" || hs->name == "Lane Balance") hs->bipolar = true;
+            }
             else if (auto mwp = dynamic_cast<SqMawPlugin*> (&plugin))
             {
                 auto um = &plugin.edit.getUndoManager();
@@ -2768,6 +2849,9 @@ namespace Skins
                 case Family::shard:     viz = std::make_unique<ShardViz> (handles, plugin, accent); break;
                 case Family::murmuration: viz = std::make_unique<MurmurationViz> (handles, plugin, accent); break;
                 case Family::masquerade: viz = std::make_unique<MasqueradeViz> (handles, plugin, accent); break;
+                case Family::larva2: viz = std::make_unique<Larva2Viz> (handles, plugin, accent); break;
+                case Family::phase2: viz = std::make_unique<Phase2Viz> (handles, plugin, accent); break;
+                case Family::hiverack: viz = std::make_unique<HiveRackViz> (handles, plugin, accent); break;
                 case Family::ring:      viz = std::make_unique<RingViz> (handles, plugin, accent); break;
                 case Family::phase12:   viz = std::make_unique<Phase12Viz> (handles, plugin, accent); break;
                 case Family::bbd:       viz = std::make_unique<BucketViz> (handles, plugin, accent); break;
