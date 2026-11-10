@@ -978,7 +978,7 @@ namespace SqVocal
         int latency() const { return L; }
         int engineMode() const { return eng; }
         /** The newest analysis result (Moth Tune FX uses it to drive pitch-tracked effects). */
-        const FrameResult& latestResult() const { return results[(size_t) ((resultW - 1) & 2047)].r; }
+        const FrameResult& latestResult() const { static const FrameResult none {}; return results.empty() || resultW == 0 ? none : results[(size_t) ((resultW - 1) & 2047)].r; }
         float latestHz() const { return lastVoiced ? lastHz : 0.0f; }
 
         void prepare (double sampleRate, int engineMode, int voiceType)

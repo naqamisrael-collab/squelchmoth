@@ -215,14 +215,14 @@ inline int runSelfTest()
         bool isErr = (bool) r["result"]["isError"];
         bool good = (isErr != expectOk);
         (good ? passes : failures)++;
-        std::cout << (good ? "  PASS " : "  FAIL ") << tool << " " << argsJson.substring (0, 90) << "\n       -> " << text.substring (0, 300).replace ("\n", " ") << "\n";
+        std::cout << (good ? "  PASS " : "  FAIL ") << tool << " " << argsJson.substring (0, 90) << "\n       -> " << text.substring (0, 300).replace ("\n", " ") << std::endl;
         return text;
     };
 
     auto check = [&] (bool cond, const juce::String& what)
     {
         (cond ? passes : failures)++;
-        std::cout << (cond ? "  PASS " : "  FAIL ") << what << "\n";
+        std::cout << (cond ? "  PASS " : "  FAIL ") << what << std::endl;
     };
 
     std::cout << "== Squelchmoth MCP self-test ==\n";
