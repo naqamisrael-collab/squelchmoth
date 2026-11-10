@@ -132,6 +132,7 @@ public:
             for (int i = 0; i < args.size(); ++i)
             {
                 if (args[i].text == "--render-faces" && i + 1 < args.size() && ! args[i + 1].text.startsWith ("--")) SelfTestMode::facesDir = args[i + 1].text.unquoted();
+                if (args[i].text == "--face-preset" && i + 1 < args.size()) SelfTestMode::facePreset = args[i + 1].text.unquoted();
                 if (args[i].text == "--only" && i + 1 < args.size()) SelfTestMode::only = juce::StringArray::fromTokens (args[i + 1].text.unquoted(), ",", "\"");
             }
             for (auto& o : SelfTestMode::only) o = o.trim();

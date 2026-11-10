@@ -10,7 +10,7 @@
 #include "SqEngine111.h"
 
 /** Set by Main for "--preset-audit [report.md]": the self-test sets up the engine, runs the audit and returns. */
-struct SelfTestMode { static inline bool presetAuditOnly = false, renderFaces = false; static inline juce::String reportPath, facesDir; static inline juce::StringArray only; };
+struct SelfTestMode { static inline bool presetAuditOnly = false, renderFaces = false; static inline juce::String reportPath, facesDir, facePreset; static inline juce::StringArray only; };
 
 inline int runSelfTest()
 {
@@ -160,6 +160,9 @@ inline int runSelfTest()
             auto p = Signature::create (*session->edit, e);
             if (p == nullptr) continue;
             track->pluginList.insertPlugin (p, 0, nullptr);
+            // --face-preset "name": show the face with that factory preset loaded (when the plug-in has it)
+            if (SelfTestMode::facePreset.isNotEmpty())
+                for (auto& pr : e.presets) if (juce::String (pr.name).containsIgnoreCase (SelfTestMode::facePreset)) { Signature::applyPreset (*p, pr); if (auto fx = dynamic_cast<SqTuneFxPlugin*> (p.get())) for (auto& prop : pr.props) if (juce::String (prop.id) == "motionPattern") fx->applyPattern ((int) prop.value, nullptr); break; }
             p->baseClassInitialise ({ te::TimePosition(), 48000.0, 256 });
             juce::AudioBuffer<float> buf (2, 256); te::MidiMessageArray midi;
             for (size_t q = 0; q + 256 <= vl.size(); q += 256)
