@@ -95,6 +95,8 @@ namespace SqVoiceCore
             snap.hnrDb = 10.0f * std::log10 ((eH + 1.0e-12f) / (eN + 1.0e-12f));
         }
 
+        /** The singer's range for the tracker (Hz). */
+        void setRange (float lo, float hi)  { tracker.setRange (lo, hi); }
         const Snapshot& latest() const      { return snap; }
         const SqVocal::PitchTracker& pitchTracker() const { return tracker; }
         int analysisLag() const             { return tracker.lagSamples(); }

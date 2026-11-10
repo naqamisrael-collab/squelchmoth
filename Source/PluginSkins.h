@@ -1513,13 +1513,14 @@ namespace Skins
     #include "SkinsColor111c.inl"
     #include "SkinsColor111d.inl"
     #include "SkinsVoice111e.inl"
+    #include "SkinsVoice111f.inl"
     #include "SkinsSynths.inl"
     #include "SkinsSynths2.inl"
     #include "SkinsFx181.inl"
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -1929,6 +1930,22 @@ namespace Skins
                                                          G ("SHAPE", { "Glottis", "Lower Throat", "Upper Throat", "Pharynx", "Back Tongue", "Mid Tongue", "Front Tongue", "Lips" }, false, 8) }; }
         else if (name == "Exhale")        { s.family = Family::exhale; s.knob = KnobStyle::vintage; s.width = 1100; s.height = 680; s.vizH = 240; s.resizable = true;
                                             s.groups = { G ("BREATH", { "Breath", "Breath Tone", "Consonants" }, true, 3), G ("TONE", { "Body" }, true, 1), G ("OUT", { "Mix", "Output" }, true, 2) }; }
+        else if (name == "Hive Choir")    { s.family = Family::hivechoir; s.knob = KnobStyle::vintage; s.width = 1560; s.height = 1060; s.vizH = 240; s.rowSplit = 3; s.row1Share = 0.33f; s.resizable = true;
+                                            s.groups = { G ("KEY + ENGINE", { "Engine", "Voice Range", "Session Key", "Key", "Scale", "Lead Level" }, true, 3),
+                                                         G ("HUMANIZE", { "Humanize Pitch", "Humanize Time", "Consonants" }, true, 3),
+                                                         G ("OUT", { "Width", "Mix", "Output" }, true, 3),
+                                                         G ("VOICE 1", { "Voice 1 Mode", "Voice 1 Interval", "Voice 1 Level", "Voice 1 Pan", "Voice 1 Throat", "Voice 1 Singers", "Voice 1 Pitch Variation", "Voice 1 Time Variation", "Voice 1 Timbre Variation", "Voice 1 Spread", "Voice 1 Vibrato Rate", "Voice 1 Vibrato Depth" }, false, 3), G ("VOICE 2", { "Voice 2 Mode", "Voice 2 Interval", "Voice 2 Level", "Voice 2 Pan", "Voice 2 Throat", "Voice 2 Singers", "Voice 2 Pitch Variation", "Voice 2 Time Variation", "Voice 2 Timbre Variation", "Voice 2 Spread", "Voice 2 Vibrato Rate", "Voice 2 Vibrato Depth" }, false, 3), G ("VOICE 3", { "Voice 3 Mode", "Voice 3 Interval", "Voice 3 Level", "Voice 3 Pan", "Voice 3 Throat", "Voice 3 Singers", "Voice 3 Pitch Variation", "Voice 3 Time Variation", "Voice 3 Timbre Variation", "Voice 3 Spread", "Voice 3 Vibrato Rate", "Voice 3 Vibrato Depth" }, false, 3), G ("VOICE 4", { "Voice 4 Mode", "Voice 4 Interval", "Voice 4 Level", "Voice 4 Pan", "Voice 4 Throat", "Voice 4 Singers", "Voice 4 Pitch Variation", "Voice 4 Time Variation", "Voice 4 Timbre Variation", "Voice 4 Spread", "Voice 4 Vibrato Rate", "Voice 4 Vibrato Depth" }, false, 3) }; }
+        else if (name == "Double Wing 2") { s.family = Family::doublewing2; s.knob = KnobStyle::ring; s.width = 1280; s.height = 800; s.vizH = 260; s.rowSplit = 3; s.row1Share = 0.5f; s.resizable = true;
+                                            s.groups = { G ("DOUBLES", { "Doubles", "Voice Range", "Doubles Level", "Lead Level" }, true, 2),
+                                                         G ("VARIATION", { "Pitch Variation", "Timing Variation", "Timbre Variation", "Spread" }, true, 2),
+                                                         G ("OUT", { "Width", "Output" }, true, 1),
+                                                         G ("VIBRATO", { "Vibrato Rate", "Vibrato Depth", "Straight Notes Only", "New Voices" }, false, 4) }; }
+        else if (name == "Mutant")        { s.family = Family::mutant; s.knob = KnobStyle::chicken; s.width = 1360; s.height = 860; s.vizH = 270; s.rowSplit = 3; s.row1Share = 0.5f; s.resizable = true;
+                                            s.groups = { G ("MUTATE", { "Pitch", "Throat", "Engine", "Voice Range" }, true, 2),
+                                                         G ("RING", { "Ring Mod", "Ring Ratio", "Ring Unvoiced" }, true, 3),
+                                                         G ("OUT", { "Drive Type", "Drive", "Mix", "Output" }, true, 2),
+                                                         G ("ALIENIZATION", { "Alienization", "Alien Rate", "Alien Glide", "New Mutation" }, false, 4),
+                                                         G ("STUTTER", { "Stutter", "Stutter Length", "Repeats" }, false, 3) }; }
         else if (name == "Silk Ladder")   { s.family = Family::ladder; s.knob = KnobStyle::chicken; s.width = 940; s.height = 580; s.vizH = 220;
                                             s.groups = { G ("FILTER", { "Cutoff", "Resonance" }, true, 2), G ("ENVELOPE", { "Env Amount", "Fast Envelope" }, false, 1), G ("DRIVE", { "Poles", "Drive" }, false, 1), G ("OUTPUT", { "Output", "Mix" }, false, 1) }; }
         else if (name == "Halo Ring")     { s.family = Family::ring; s.knob = KnobStyle::chicken; s.width = 900; s.height = 560; s.vizH = 220;
@@ -2676,6 +2693,41 @@ namespace Skins
             {
                 for (auto& hs : handleStore) if (hs->name == "Output" || hs->name == "Breath Tone" || hs->name == "Body") hs->bipolar = true;
             }
+            else if (auto hcp = dynamic_cast<SqHiveChoirPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                for (int k = 0; k < 4; ++k)
+                    add (choice ("Voice " + juce::String (k + 1) + " Mode", SqHiveChoirPlugin::modeNames(), [hcp, k] { return hcp->mode[(size_t) k].get(); }, [hcp, um, k] (int i) { hcp->mode[(size_t) k].setValue (i, um); }));
+                add (choice ("Engine", SqHiveChoirPlugin::engineNames(), [hcp] { return hcp->engine.get(); }, [hcp, um] (int i) { hcp->engine.setValue (i, um); }));
+                add (choice ("Voice Range", SqHiveChoirPlugin::voiceNames(), [hcp] { return hcp->voiceType.get(); }, [hcp, um] (int i) { hcp->voiceType.setValue (i, um); }));
+                add (toggle ("Session Key", [hcp] { return hcp->autoKey.get(); }, [hcp, um] (bool b) { hcp->autoKey.setValue (b, um); }));
+                add (choice ("Key", SqSessionKey::rootNames(), [hcp] { return hcp->keyRoot.get(); }, [hcp, um] (int i) { hcp->keyRoot.setValue (i, um); }));
+                add (choice ("Scale", SqSessionKey::scaleNames(), [hcp] { return hcp->scale.get(); }, [hcp, um] (int i) { hcp->scale.setValue (i, um); }));
+                for (auto& hs : handleStore) if (hs->name.endsWith ("Interval") || hs->name.endsWith ("Pan") || hs->name.endsWith ("Throat") || hs->name == "Output") hs->bipolar = true;
+                for (auto& hs : handleStore) if (hs->name.startsWith ("Voice ") && hs->name != "Voice Range") hs->label = hs->name.fromFirstOccurrenceOf (" ", false, false).fromFirstOccurrenceOf (" ", false, false);   // the group says which voice
+            }
+            else if (auto dwp = dynamic_cast<SqDoubleWing2Plugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Doubles", SqDoubleWing2Plugin::countNames(), [dwp] { return dwp->doubles.get() - 1; }, [dwp, um] (int i) { dwp->doubles.setValue (i + 1, um); }));
+                add (choice ("Voice Range", SqHiveChoirPlugin::voiceNames(), [dwp] { return dwp->voiceRange.get(); }, [dwp, um] (int i) { dwp->voiceRange.setValue (i, um); }));
+                add (toggle ("Straight Notes Only", [dwp] { return dwp->vibStraight.get(); }, [dwp, um] (bool b) { dwp->vibStraight.setValue (b, um); }));
+                handleStore.back()->label = "Straight Only";
+                add (toggle ("New Voices", [] { return false; }, [dwp, um] (bool) { dwp->seed.setValue (juce::Random::getSystemRandom().nextInt (100000) + 1, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Output") hs->bipolar = true;
+            }
+            else if (auto mup = dynamic_cast<SqMutantPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Engine", SqMutantPlugin::engineNames(), [mup] { return mup->engine.get(); }, [mup, um] (int i) { mup->engine.setValue (i, um); }));
+                add (choice ("Voice Range", SqMutantPlugin::voiceNames(), [mup] { return mup->voiceType.get(); }, [mup, um] (int i) { mup->voiceType.setValue (i, um); }));
+                add (choice ("Drive Type", SqMutantPlugin::driveNames(), [mup] { return mup->driveVoicing.get(); }, [mup, um] (int i) { mup->driveVoicing.setValue (i, um); }));
+                add (choice ("Alien Rate", SqColor111bBase::syncNames (false), [mup] { return mup->alienDiv.get(); }, [mup, um] (int i) { mup->alienDiv.setValue (i, um); }));
+                add (choice ("Stutter Length", SqColor111bBase::syncNames (false), [mup] { return mup->stutterDiv.get(); }, [mup, um] (int i) { mup->stutterDiv.setValue (i, um); }));
+                add (choice ("Repeats", SqMutantPlugin::repeatNames(), [mup] { return mup->repeats.get(); }, [mup, um] (int i) { mup->repeats.setValue (i, um); }));
+                add (toggle ("New Mutation", [] { return false; }, [mup, um] (bool) { mup->seed.setValue (juce::Random::getSystemRandom().nextInt (100000) + 1, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Pitch" || hs->name == "Throat" || hs->name == "Output") hs->bipolar = true;
+            }
             else if (auto mwp = dynamic_cast<SqMawPlugin*> (&plugin))
             {
                 auto um = &plugin.edit.getUndoManager();
@@ -2908,6 +2960,9 @@ namespace Skins
                 case Family::miccloset: viz = std::make_unique<MicClosetViz> (handles, plugin, accent); break;
                 case Family::larynx: viz = std::make_unique<LarynxViz> (handles, plugin, accent); break;
                 case Family::exhale: viz = std::make_unique<ExhaleViz> (handles, plugin, accent); break;
+                case Family::hivechoir: viz = std::make_unique<HiveChoirViz> (handles, plugin, accent); break;
+                case Family::doublewing2: viz = std::make_unique<DoubleWing2Viz> (handles, plugin, accent); break;
+                case Family::mutant: viz = std::make_unique<MutantViz> (handles, plugin, accent); break;
                 case Family::ring:      viz = std::make_unique<RingViz> (handles, plugin, accent); break;
                 case Family::phase12:   viz = std::make_unique<Phase12Viz> (handles, plugin, accent); break;
                 case Family::bbd:       viz = std::make_unique<BucketViz> (handles, plugin, accent); break;

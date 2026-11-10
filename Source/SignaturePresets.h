@@ -49,6 +49,7 @@ namespace SignaturePresets
 #include "SignaturePresets111e.inl"
 #include "SignaturePresets111f.inl"
 #include "SignaturePresets111g.inl"
+#include "SignaturePresets111h.inl"
 
     inline const std::map<juce::String, std::vector<Preset>>& bank()
     {
@@ -960,6 +961,7 @@ namespace SignaturePresets
             add111e (base);   // 1.11 Color & Space, second wave (part 2)
             add111f (base);   // 1.11 Color & Space, second wave (part 3)
             add111g (base);   // 1.11 Voice, second wave (part 1)
+            add111h (base);   // 1.11 Voice, second wave (part 2)
             return base; }();
         return b;
     }

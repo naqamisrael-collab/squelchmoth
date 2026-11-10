@@ -64,6 +64,9 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqMicClosetPlugin>();
     engine->getPluginManager().createBuiltInType<SqLarynxPlugin>();
     engine->getPluginManager().createBuiltInType<SqExhalePlugin>();
+    engine->getPluginManager().createBuiltInType<SqHiveChoirPlugin>();
+    engine->getPluginManager().createBuiltInType<SqDoubleWing2Plugin>();
+    engine->getPluginManager().createBuiltInType<SqMutantPlugin>();
     engine->getPluginManager().createBuiltInType<SqMothKeyPlugin>();
     engine->getPluginManager().createBuiltInType<SqSirenCompPlugin>();
     engine->getPluginManager().createBuiltInType<SqSirenEqPlugin>();
@@ -2557,6 +2560,76 @@ inline int runSelfTest()
             double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
             check (sum.presets >= 310 && sum.failed == 0, "Phase E1: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
             auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-e1.md");
+            if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
+        }
+        // ---------------------------------------------------------------- Phase E2: Hive Choir, Double Wing 2, Mutant
+        {
+            const double SR = 48000.0, twoPi = juce::MathConstants<double>::twoPi;
+            call ("add_track", R"({"kind":"audio","name":"E2"})");
+            for (auto w : { "hivechoir", "doublewing2", "mutant" }) call ("vocal_fx", juce::String (R"({"track":"E2","which":")") + w + R"(","action":"add"})");
+            auto* tt = session->findTrack ("E2"); SqHiveChoirPlugin* hc = nullptr; SqDoubleWing2Plugin* dw = nullptr; SqMutantPlugin* mu = nullptr;
+            if (tt != nullptr) for (auto pl : tt->pluginList) { if (auto a = dynamic_cast<SqHiveChoirPlugin*> (pl)) hc = a; if (auto b = dynamic_cast<SqDoubleWing2Plugin*> (pl)) dw = b; if (auto c = dynamic_cast<SqMutantPlugin*> (pl)) mu = c; }
+            check (hc && dw && mu, "Phase E2: Hive Choir, Double Wing 2 and Mutant added through vocal_fx");
+            call ("vocal_fx", R"({"track":"E2","which":"hivechoir","action":"set","settings":{"mode3":"MIDI Chord","Voice 3 Singers":16,"Voice 1 Interval":5,"engine":"Live","scale":"Natural Minor","keyRoot":"A"}})");
+            call ("vocal_fx", R"({"track":"E2","which":"doublewing2","action":"set","settings":{"doubles":4,"vibStraightOn":false,"Vibrato Depth":30}})");
+            call ("vocal_fx", R"({"track":"E2","which":"mutant","action":"set","settings":{"Pitch":-12,"alienDiv":"1/16","repeats":8,"driveVoicing":"Crunch"}})");
+            if (hc && dw && mu)
+                check (hc->mode[2].get() == HiveChoir::midiChord && juce::roundToInt (hc->bank[SqHiveChoirPlugin::idx (2, SqHiveChoirPlugin::vUnison)]) == 16 && std::abs (hc->bank[SqHiveChoirPlugin::idx (0, SqHiveChoirPlugin::vInterval)] - 5.0f) < 0.01f
+                       && hc->engine.get() == 0 && hc->keyRoot.get() == 9 && SqSessionKey::scaleNames()[hc->scale.get()].containsIgnoreCase ("minor")
+                       && dw->doubles.get() == 4 && ! dw->vibStraight.get() && std::abs (dw->bank[SqDoubleWing2Plugin::vibDepth] - 30.0f) < 0.01f
+                       && std::abs (mu->bank[SqMutantPlugin::pitch] + 12.0f) < 0.01f && juce::String (Eng::WingMod::syncName (mu->alienDiv.get())) == "1/16" && SqMutantPlugin::repeatsFor (mu->repeats.get()) == 8 && mu->driveVoicing.get() == 5,
+                       "Phase E2: voice modes, singers, key, doubles, divisions and repeats set by name through vocal_fx");
+            auto gh = call ("vocal_fx", R"({"track":"E2","which":"hivechoir","action":"get"})");
+            check (gh.contains ("\"voices\"") && gh.contains ("MIDI Chord") && gh.contains ("latency_ms"), "Hive Choir: get reports each voice, its mode and the latency");
+            auto voice = [&] (size_t n, double hz) { std::vector<float> v (n); double ph = 0; for (size_t i = 0; i < n; ++i) { ph += hz / SR; double y = 0; for (int h = 1; h <= 12; ++h) y += std::sin (twoPi * h * ph) / h; v[i] = 0.08f * (float) y; } return v; };
+            auto bestHz = [&] (const std::vector<float>& v, double lo, double hi) { double bp = 0, bf = 0; for (double f = lo; f < hi; f *= 1.002) { const double w = twoPi * f / SR, c = 2 * std::cos (w); double s1 = 0, s2 = 0; for (size_t i = 60000; i < 140000; ++i) { const double s0 = v[i] + c * s1 - s2; s2 = s1; s1 = s0; } const double pw = s1 * s1 + s2 * s2 - c * s1 * s2; if (pw > bp) { bp = pw; bf = f; } } return bf; };
+            {
+                auto harm = [&] (int mode, float iv)
+                {
+                    HiveChoir::Processor p; p.p.leadDb = -60; p.p.v[0].mode = mode; p.p.v[0].interval = iv; p.p.v[0].levelDb = 0; p.p.humanCents = 0; p.p.humanMs = 0; p.prepare (SR, 256);
+                    auto l = voice (144000, 220), r = l; for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; p.process (ch, 2, 256); }
+                    return bestHz (l, 180, 340);
+                };
+                const double a = harm (HiveChoir::interval, 4), b = harm (HiveChoir::scaleStep, 2);
+                check (std::abs (1200 * std::log2 (a / 277.18)) < 20 && std::abs (1200 * std::log2 (b / 261.63)) < 25,
+                       "Hive Choir: +4 st from 220 Hz gives " + juce::String (a, 1) + " Hz; scale step +2 in C major gives " + juce::String (b, 1) + " Hz");
+            }
+            {
+                HiveChoir::Processor p; p.p.engine = 1; for (int k = 0; k < 4; ++k) { p.p.v[k].mode = HiveChoir::interval; p.p.v[k].interval = (float) (k * 3 + 3); p.p.v[k].unison = 8; }
+                p.prepare (SR, 128); auto l = voice (240000, 220), r = l;
+                const double t0 = juce::Time::getMillisecondCounterHiRes();
+                for (size_t i = 0; i + 128 <= l.size(); i += 128) { float* ch[2] = { l.data() + i, r.data() + i }; p.process (ch, 2, 128); }
+                const double pct = (juce::Time::getMillisecondCounterHiRes() - t0) / 5000.0 * 100.0;
+                check (pct < 12, "Hive Choir: 32 singers (4 voices x 8), Studio engine, " + juce::String (pct, 2) + " % of one core");
+            }
+            {
+                // Double Wing 2: vibrato only where the note is straight
+                auto amt = [&] (double vibCents)
+                {
+                    DoubleWing2::Processor p; p.p.vibCents = 30; p.p.vibStraightOnly = true; p.prepare (SR, 256);
+                    std::vector<float> l (144000); double ph = 0; for (size_t i = 0; i < l.size(); ++i) { const double f = 220 * std::pow (2.0, vibCents / 1200.0 * std::sin (twoPi * 5.5 * (double) i / SR)); ph += f / SR; double y = 0; for (int h = 1; h <= 12; ++h) y += std::sin (twoPi * h * ph) / h; l[i] = 0.08f * (float) y; }
+                    auto r = l; for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; p.process (ch, 2, 256); }
+                    return p.vibratoAmount();
+                };
+                const float straight = amt (0), wobbly = amt (60);
+                check (straight > 0.8f && wobbly < 0.3f, "Double Wing 2: vibrato added on a straight note (" + juce::String (straight, 2) + "), not on a sung vibrato (" + juce::String (wobbly, 2) + ")");
+            }
+            {
+                Mutant::Processor p; p.p.pitchSt = 12; p.prepare (SR, 256); auto l = voice (144000, 220), r = l;
+                for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; p.process (ch, 2, 256); }
+                const double f = bestHz (l, 300, 600);
+                check (std::abs (1200 * std::log2 (f / 440.0)) < 20, "Mutant: Pitch +12 st turns 220 Hz into " + juce::String (f, 1) + " Hz");
+            }
+            call ("delete_track", R"({"track":"E2"})");
+            Edition::owned() = Edition::Owned {}; Edition::owned().core = true; Edition::owned().vocal = true;
+            check (Edition::isTypeAllowed ("sqmHiveChoir") && Edition::isTypeAllowed ("sqmDoubleWing2") && Edition::isTypeAllowed ("sqmMutant"), "editions: Hive Choir, Double Wing 2 and Mutant are in the Vocal Suite");
+            Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+            auto rep = session->sessionsDir.getChildFile ("preset-audit-e2.md");
+            auto sum = PresetAudit::run (*session->edit, { "Hive Choir", "Double Wing 2", "Mutant" }, { "sqmHiveChoir", "sqmDoubleWing2", "sqmMutant" }, 3.0, rep);
+            juce::String firstFail; for (auto& row : sum.rows) if (! row.pass && firstFail.isEmpty()) firstFail = row.plugin + " / " + row.preset + ": " + row.why;
+            double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
+            check (sum.presets >= 240 && sum.failed == 0, "Phase E2: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
+            auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-e2.md");
             if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
         }
         // ---------------------------------------------------------------- Phase C: Moth Tune 2, Moth Key, Siren Comp, Siren EQ, Hush De-Ess 2

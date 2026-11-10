@@ -26,7 +26,7 @@
 #include "SqFoilPlate.h"
 #include "SqRadiantMaw.h"
 #include "SqVoice111.h"
-#include "SqVoice111e.h"
+#include "SqVoice111f.h"
 
 namespace te = tracktion;
 
@@ -87,6 +87,9 @@ namespace Signature
             { "Mic Closet",       "sqmMicCloset",    "Pitch & Vocal", "Microphone modelling: 45 response archetypes (condensers, dynamics, ribbons, devices, originals), source-to-target conversion, distance and proximity, polar pattern, low cut, pad, colour and self-noise", 0xffe0a24a, "miccloset" },
             { "Larynx",           "sqmLarynx",       "Pitch & Vocal", "Vocal-tract modeller: the voice's own tract and source separated, then a new glottis (hard / soft, pulse width, breathiness) and tract (length, 8-point shape) - stereo, level matched, guarded against whistling", 0xffff4fa8, "larynx" },
             { "Exhale",           "sqmExhale",       "Pitch & Vocal", "Breathiness control: the voice split into its harmonic tone and its breath, the breath set from none to +12 dB with its own tone, consonants protected, the tone untouched", 0xff6ee6e0, "exhale" },
+            { "Hive Choir",       "sqmHiveChoir",    "Pitch & Vocal", "Harmony and choir: four voices by interval, scale step, MIDI chord or MIDI omni, each with Throat, level, pan, vibrato and its own choir of 1-32 singers with pitch, time and timbre variation - true stereo", 0xffffc857, "hivechoir" },
+            { "Double Wing 2",    "sqmDoubleWing2",  "Pitch & Vocal", "Auto-doubler: 1-4 doubles with pitch, timing and timbre variation, spread, and vibrato that can be added only where the singer holds a straight note", 0xff8ad8ff, "doublewing2" },
+            { "Mutant",           "sqmMutant",       "Pitch & Vocal", "Extreme voice designer: pitch and Throat +-24 st, a ring modulator that follows the singer, tempo-synced Alienization and grain stutter, Analog drive", 0xff9dff4a, "mutant" },
             { "Moth Tune FX",     "sqmTuneFx",       "Pitch & Vocal", "Creative tuning: editable Motion patterns plus a six-slot X/Y effects rack - Mutate, Duet, Vocode, Talkbox, Octaver, Stutter and more", 0xffff2fd6, "mothtunefx" },
             // ---------------- EQ & filters
             { "Vellum EQ",        "sqmVellum",       "EQ & Filter", "Seventies broadcast-console EQ: shelf or very-low-bell low, six-step mid whose Q narrows as it rises, a second sweepable mid, gentle low-pass or very-high-bell high, Stepped detents, Mid/Side and L/R, oversampled Drive", 0xffe8c87a, "vellum" },

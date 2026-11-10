@@ -234,6 +234,9 @@ public:
         engine->getPluginManager().createBuiltInType<SqMicClosetPlugin>();
         engine->getPluginManager().createBuiltInType<SqLarynxPlugin>();
         engine->getPluginManager().createBuiltInType<SqExhalePlugin>();
+        engine->getPluginManager().createBuiltInType<SqHiveChoirPlugin>();
+        engine->getPluginManager().createBuiltInType<SqDoubleWing2Plugin>();
+        engine->getPluginManager().createBuiltInType<SqMutantPlugin>();
         engine->getPluginManager().createBuiltInType<SqMothKeyPlugin>();
         engine->getPluginManager().createBuiltInType<SqSirenCompPlugin>();
         engine->getPluginManager().createBuiltInType<SqSirenEqPlugin>();

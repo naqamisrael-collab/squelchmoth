@@ -659,6 +659,8 @@ namespace SqVocal
         float dvPitch = 1, dvAmp = 0, dvTimbre = 0;                                         // separate depths, 0..1 (Boost up to 2)
         bool vibFxStraightOnly = false;   // created vibrato only where the singer holds a straight note
         float harmGate = 1;               // harmony trigger (MIDI / CC / latch), smoothed in the processor
+        float harmUnvoiced = 0.35f;       // how much of the unvoiced sounds (breaths, consonants) the harmony voices carry
+        bool harmSkipLead = false;        // MIDI harmony voices skip the held note the lead is on, without the lead following MIDI
     };
 
     struct FrameResult
@@ -903,7 +905,7 @@ namespace SqVocal
                 else if (h.mode == 3)
                 {
                     // MIDI: voices take the held notes in order (lowest first), skipping the one the lead is on
-                    while (midiVoice < heldCount && s.midiTargets && heldList[(size_t) midiVoice] == juce::roundToInt (base)) ++midiVoice;
+                    while (midiVoice < heldCount && (s.midiTargets || s.harmSkipLead) && heldList[(size_t) midiVoice] == juce::roundToInt (base)) ++midiVoice;
                     if (midiVoice >= heldCount) continue;
                     hn = (float) heldList[(size_t) midiVoice++] + micro * 0.5f;
                 }
@@ -962,6 +964,8 @@ namespace SqVocal
             const std::vector<TimedNote>* trackNotes = nullptr;
             const std::array<bool, 128>* heldIn = nullptr;
             float mix = 1, outGain = 1, tracking = 50;
+            float leadGain = 1;                         // the corrected lead's level in the output (Hive Choir sets it)
+            float* harmTap[4] { nullptr, nullptr, nullptr, nullptr };   // each harmony voice, mono, before its gain and pan
         };
         std::function<void (const FrameResult&, const std::array<bool, 128>&)> onFrame;
 
@@ -1063,16 +1067,17 @@ namespace SqVocal
                         const int h = st - 1;
                         g.monoSource = true;
                         if (s.harm[(size_t) h].mode == 0) { g.silent = true; return g; }
-                        if (! r.voiced) { g.ratio = 1.0f; g.formant = 1.0f; g.gain = 0.35f; return g; }
+                        if (! r.voiced) { g.ratio = 1.0f; g.formant = 1.0f; g.gain = s.harmUnvoiced; return g; }
                         if (! r.hOn[h]) { g.silent = true; return g; }
                         g.ratio = r.hRatio[h]; g.formant = r.hFormant[h];
                         return g;
                     }, anyHarm ? 5 : 1);
-                    outL = psola.readAndClear (0, 0, n); outR = psola.readAndClear (0, 1, n);
+                    outL = psola.readAndClear (0, 0, n) * ctx.leadGain; outR = psola.readAndClear (0, 1, n) * ctx.leadGain;
                     if (anyHarm)
                         for (int h = 0; h < 4; ++h)
                         {
                             const float v = harmTime (h, psola.readAndClear (h + 1, 0, n), s.harmTimingMs) * gateSm;
+                            if (ctx.harmTap[h] != nullptr) ctx.harmTap[h][i] = v;
                             outL += v * hGain[h] * hPanL[h]; outR += v * hGain[h] * hPanR[h];
                         }
                     dryL = psola.input (0).at (n - L); dryR = psola.input (1).at (n - L);
@@ -1102,7 +1107,7 @@ namespace SqVocal
                     }
                     lead.endSample();
                     gSm += ((r.voiced ? r.gain : 1.0f) - gSm) * 0.08f;
-                    outL *= gSm; outR *= gSm;
+                    outL *= gSm * ctx.leadGain; outR *= gSm * ctx.leadGain;
                     if (anyHarm)
                         for (int h = 0; h < 4; ++h)
                         {
@@ -1119,8 +1124,9 @@ namespace SqVocal
                                 lpcHMix[h] += (want - lpcHMix[h]) * lpcK;
                                 if (lpcHMix[h] > 1.0e-4f) v += lpcHMix[h] * (z - v);
                             }
-                            if (! on) v = 0; else if (! r.voiced) v *= 0.35f;
+                            if (! on) v = 0; else if (! r.voiced) v *= s.harmUnvoiced;
                             v = harmTime (h, v, s.harmTimingMs) * gateSm;
+                            if (ctx.harmTap[h] != nullptr) ctx.harmTap[h][i] = v;
                             outL += v * hGain[h] * hPanL[h]; outR += v * hGain[h] * hPanR[h];
                         }
                     dryL = liveIn[0].at (livePos - L); dryR = liveIn[1].at (livePos - L);
