@@ -1952,7 +1952,9 @@ namespace Skins
                                                          G ("BANK", { "Bands", "Low Band", "High Band", "Filter Shape", "Resonance", "Stretch", "Slide", "Band Shift" }, true, 4),
                                                          G ("ENVELOPE", { "Attack", "Release", "Smear", "Tilt", "Sibilance", "Noise Carrier" }, true, 3),
                                                          G ("TUNER", { "Tune Amount", "Retune Speed", "Session Key", "Key", "Scale", "Voice Range" }, false, 3),
-                                                         G ("OUTPUT FX", { "Ring Mod", "Ring Freq", "Drive Type", "Drive", "Chorus", "Width" }, false, 3),
+                                                         G ("OUTPUT FX + X/Y", { "Ring Mod", "Ring Freq", "Drive Type", "Drive", "Chorus", "Width", "X", "Y" }, false, 4),
+                                                         G ("BAND LEVELS (or drag the line above)", { "Level 1", "Level 2", "Level 3", "Level 4", "Level 5", "Level 6", "Level 7", "Level 8",
+                                                                                                   "Level 9", "Level 10", "Level 11", "Level 12", "Level 13", "Level 14", "Level 15", "Level 16" }, false, 8),
                                                          G ("OUT", { "Mix", "Output" }, false, 1) }; }
         else if (name == "Talk Wing")     { s.family = Family::talkwing; s.knob = KnobStyle::vintage; s.width = 1360; s.height = 860; s.vizH = 270; s.rowSplit = 3; s.row1Share = 0.5f; s.resizable = true;
                                             s.groups = { G ("ROUTING", { "Source", "Engine", "Voice Range", "Buzz Octave", "Buzz Tone", "Buzz Glide" }, true, 3),
@@ -2763,7 +2765,8 @@ namespace Skins
                 add (choice ("Scale", SqSessionKey::scaleNames(), [vmp] { return vmp->scale.get(); }, [vmp, um] (int i) { vmp->scale.setValue (i, um); }));
                 add (choice ("Voice Range", SqHiveChoirPlugin::voiceNames(), [vmp] { return vmp->voiceType.get(); }, [vmp, um] (int i) { vmp->voiceType.setValue (i, um); }));
                 add (toggle ("Dice", [] { return false; }, [vmp, um] (bool) { um->beginNewTransaction ("Vox Moth: dice"); vmp->dice (um); }));
-                for (auto& hs : handleStore) if (hs->name == "Slide" || hs->name == "Band Shift" || hs->name == "Tilt" || hs->name == "Osc 2 Interval" || hs->name == "Output") hs->bipolar = true;
+                for (auto& hs : handleStore) if (hs->name == "Slide" || hs->name == "Band Shift" || hs->name == "Tilt" || hs->name == "Osc 2 Interval" || hs->name == "Output" || hs->name.startsWith ("Level ")) hs->bipolar = true;
+                for (auto& hs : handleStore) if (hs->name.startsWith ("Level ")) hs->label = hs->name.fromFirstOccurrenceOf (" ", false, false);
             }
             else if (auto twp = dynamic_cast<SqTalkWingPlugin*> (&plugin))
             {
