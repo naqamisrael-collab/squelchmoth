@@ -715,6 +715,7 @@ namespace SqVocal
             for (auto& d : driftTarget) d = 0;
             rateNoise = depthNoise = 0;
             vibEnv = 0; vibOnT = 0; dvAmt = 0; rmsFast = rmsSlow1 = rmsSlow2 = 0; dvNoise = 0;
+            rng.setSeed (0x5eed1234);      // the same take always humanises the same way (renders and bounces repeat exactly)
         }
 
         FrameResult process (const PitchTracker::Frame& f, const TuneSettings& s, const std::array<bool, 128>& held, const GraphNote* gn)
@@ -846,7 +847,7 @@ namespace SqVocal
             if (s.dvMode >= 2 && gn == nullptr)
             {
                 const float sign = s.dvMode == 2 ? -1.0f : 1.0f;
-                if (s.dvVariation > 0) dvNoise += ((juce::Random::getSystemRandom().nextFloat() * 2 - 1) * 0.06f - dvNoise * 0.02f);
+                if (s.dvVariation > 0) dvNoise += ((rng.nextFloat() * 2 - 1) * 0.06f - dvNoise * 0.02f);
                 const float depth = s.dvPitch * dvAmt * (s.dvMode == 3 ? 1.0f + s.dvVariation * juce::jlimit (-0.5f, 0.5f, dvNoise) : 1.0f);
                 out += sign * depth * vib;
                 if (s.dvAmp > 0 && rmsSlow2 > 0)
@@ -875,8 +876,8 @@ namespace SqVocal
             // ---- create vibrato
             if (s.vibDepth > 0.01f && ! (s.vibFxStraightOnly && dvAmt > 0.5f))
             {
-                rateNoise += (juce::Random::getSystemRandom().nextFloat() * 2 - 1) * 0.08f - rateNoise * 0.01f;
-                depthNoise += (juce::Random::getSystemRandom().nextFloat() * 2 - 1) * 0.08f - depthNoise * 0.01f;
+                rateNoise += (rng.nextFloat() * 2 - 1) * 0.08f - rateNoise * 0.01f;
+                depthNoise += (rng.nextFloat() * 2 - 1) * 0.08f - depthNoise * 0.01f;
                 const float rate = s.vibRate * (1.0f + s.vibVar * 0.25f * juce::jlimit (-1.0f, 1.0f, rateNoise));
                 vibPhase += rate * dt; vibPhase -= std::floor (vibPhase);
                 const float onsetT = noteTime - s.vibDelay;
@@ -912,7 +913,7 @@ namespace SqVocal
                 // slow humanising drift per voice
                 if (s.harmDetune > 0)
                 {
-                    if (juce::Random::getSystemRandom().nextFloat() < dt * 1.5f) driftTarget[(size_t) i] = (juce::Random::getSystemRandom().nextFloat() * 2 - 1) * s.harmDetune;
+                    if (rng.nextFloat() < dt * 1.5f) driftTarget[(size_t) i] = (rng.nextFloat() * 2 - 1) * s.harmDetune;
                     drift[(size_t) i] += (driftTarget[(size_t) i] - drift[(size_t) i]) * dt * 2.0f;
                     hn += drift[(size_t) i] / 100.0f;
                 }
@@ -934,6 +935,7 @@ namespace SqVocal
             return 1.0f / juce::jmax (0.5f, std::abs (1.0f - h));
         }
         float c = 0, cv = 0, centre1 = 0, centre2 = 0, target = -1000, noteTime = 0, vibPhase = 0, vibAmp = 0, rateNoise = 0, depthNoise = 0;
+        juce::Random rng { 0x5eed1234 };
         float vibEnv = 0, vibOnT = 0, dvAmt = 0, rmsFast = 0, rmsSlow1 = 0, rmsSlow2 = 0, dvNoise = 0;
         float cHist[256] {}; int cW = 0, cLen = 0; double cSum = 0;
         bool haveCentre = false;
