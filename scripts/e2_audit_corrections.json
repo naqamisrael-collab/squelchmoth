@@ -1,0 +1,41 @@
+{
+ "Double Wing 2": {
+  "By Source / Bass Doubler Mono": 2.0,
+  "By Source / Bass Voice Doubles": -1.0,
+  "By Source / Child Voice Pair": -0.9,
+  "By Source / Guitar Doubler": 0.9,
+  "By Source / Keys Widener": -2.0,
+  "By Source / Narrator Double": -1.3,
+  "By Source / Strings Section": -1.0,
+  "By Source / Synth Lead Doubler": 0.9,
+  "By Source / Tenor Doubles": 1.7,
+  "By Source / Wide Range Auto": -1.0,
+  "Character / Arena Gang": 0.8,
+  "Character / Bright Air Doubles": 1.7,
+  "Character / Chorus Double": -0.6,
+  "Character / Ghost Echo Double": -0.9,
+  "Rap Doubles / Gang Vocal": 1.0,
+  "Rap Doubles / Low Rap Shadow": -0.8,
+  "Rap Doubles / Rap Ad-Lib Wide": -0.9,
+  "Rap Doubles / Trap Stack": -0.8,
+  "Vibrato Doubles / Ballad Vibrato Doubles": -0.6,
+  "Vibrato Doubles / Gentle Wobble": 1.4,
+  "Vibrato Doubles / Soft Vibrato Halo": 1.0,
+  "Vibrato Doubles / Straight Note Shimmer": -1.4,
+  "Vintage ADT / Beat Era Double": 1.0,
+  "Vintage ADT / Fifties Double": -2.4,
+  "Vintage ADT / Slap Double": -2.0,
+  "Vintage ADT / Soul Double": 0.6,
+  "Vintage ADT / Tape Double Track": -3.8,
+  "Vintage ADT / Wide ADT": -1.3,
+  "Vocal Doubles / Loose Wide Pair": -0.9,
+  "Vocal Doubles / Natural Double": 2.1,
+  "Vocal Doubles / Quad Stack": -0.8,
+  "Vocal Doubles / Tight Pair": 0.7,
+  "Vocal Doubles / Tight Pop Double": -0.9,
+  "Vocal Doubles / Triple Stack": -1.3
+ },
+ "Mutant": {
+  "Ring Mod / Sideband Shimmer": 0.6
+ }
+}

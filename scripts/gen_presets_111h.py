@@ -234,12 +234,16 @@ def main():
         assert len(lst) == WANT[nm], nm
     write_table(os.path.join(ROOT, 'tests', 'presets111h_table.h'))
     trims = calibrate()
+    # corrections measured by the app's own preset audit (its sung-vocal signal), in dB, applied on top of the calibration
+    cpath = os.path.join(ROOT, 'scripts', 'e2_audit_corrections.json')
+    corr = json.load(open(cpath)) if os.path.exists(cpath) else {}
     fns, adds = [], []; worst = 0
     for k, (nm, (params, props, lst, defs)) in enumerate(PLUGS.items()):
         lines = []
         for p in lst:
             trim, peak = trims[(nm, p['name'])]
-            trim = max(-24.0, min(12.0, min(trim, 3.0 - peak))); worst = max(worst, abs(trim))
+            trim = min(trim, 3.0 - peak) + corr.get(nm, {}).get(p['name'].replace(' | ', ' / '), 0.0)
+            trim = max(-24.0, min(12.0, trim)); worst = max(worst, abs(trim))
             vals = ', '.join('N (%s, %s)' % (json.dumps(kk), num(vv)) for kk, vv in p['vals'].items()) + ', N ("output", %s)' % num(round(trim, 2))
             prs = ', '.join('{ "%s", %d }' % (kk, int(vv)) for kk, vv in p['props'].items())
             lines.append('        B (%s, { %s },\n            { %s }),' % (json.dumps(p['name']), vals, prs))

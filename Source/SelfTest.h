@@ -2625,7 +2625,11 @@ inline int runSelfTest()
             check (Edition::isTypeAllowed ("sqmHiveChoir") && Edition::isTypeAllowed ("sqmDoubleWing2") && Edition::isTypeAllowed ("sqmMutant"), "editions: Hive Choir, Double Wing 2 and Mutant are in the Vocal Suite");
             Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
             auto rep = session->sessionsDir.getChildFile ("preset-audit-e2.md");
+            // Hive Choir's scale steps follow the session key: audit the presets with no session key (their own key), as a fresh song has
+            auto& es = session->edit->state; juce::NamedValueSet savedKey;
+            for (auto id : { "sqmKeyRoot", "sqmKeyScale", "sqmKeyMap" }) if (es.hasProperty (id)) { savedKey.set (id, es[id]); es.removeProperty (id, nullptr); }
             auto sum = PresetAudit::run (*session->edit, { "Hive Choir", "Double Wing 2", "Mutant" }, { "sqmHiveChoir", "sqmDoubleWing2", "sqmMutant" }, 3.0, rep);
+            for (auto& kv : savedKey) es.setProperty (kv.name, kv.value, nullptr);
             juce::String firstFail; for (auto& row : sum.rows) if (! row.pass && firstFail.isEmpty()) firstFail = row.plugin + " / " + row.preset + ": " + row.why;
             double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
             check (sum.presets >= 240 && sum.failed == 0, "Phase E2: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
