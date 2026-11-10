@@ -149,7 +149,10 @@ juce_add_binary_data (${TARGET_NAME}BinaryData SOURCES
     Resources/plugart/pa_exhale.jpg
     Resources/plugart/pa_hivechoir.jpg
     Resources/plugart/pa_doublewing2.jpg
-    Resources/plugart/pa_mutant.jpg)
+    Resources/plugart/pa_mutant.jpg
+    Resources/plugart/pa_voxmoth.jpg
+    Resources/plugart/pa_talkwing.jpg
+    Resources/plugart/pa_cleanroom.jpg)
 
 target_sources (${TARGET_NAME} PRIVATE
     Source/Main.cpp)

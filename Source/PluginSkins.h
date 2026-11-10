@@ -1514,13 +1514,14 @@ namespace Skins
     #include "SkinsColor111d.inl"
     #include "SkinsVoice111e.inl"
     #include "SkinsVoice111f.inl"
+    #include "SkinsVoice111g.inl"
     #include "SkinsSynths.inl"
     #include "SkinsSynths2.inl"
     #include "SkinsFx181.inl"
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -1946,6 +1947,25 @@ namespace Skins
                                                          G ("OUT", { "Drive Type", "Drive", "Mix", "Output" }, true, 2),
                                                          G ("ALIENIZATION", { "Alienization", "Alien Rate", "Alien Glide", "New Mutation" }, false, 4),
                                                          G ("STUTTER", { "Stutter", "Stutter Length", "Repeats" }, false, 3) }; }
+        else if (name == "Vox Moth")      { s.family = Family::voxmoth; s.knob = KnobStyle::chicken; s.width = 1600; s.height = 1040; s.vizH = 300; s.rowSplit = 3; s.row1Share = 0.42f; s.resizable = true;
+                                            s.groups = { G ("CARRIER", { "Voicing", "Carrier", "Voices", "Glide", "Wave 1", "Wave 2", "Pulse Width", "Osc 2 Level", "Osc 2 Octave", "Osc 2 Interval", "Detune", "Dice" }, true, 4),
+                                                         G ("BANK", { "Bands", "Low Band", "High Band", "Filter Shape", "Resonance", "Stretch", "Slide", "Band Shift" }, true, 4),
+                                                         G ("ENVELOPE", { "Attack", "Release", "Smear", "Tilt", "Sibilance", "Noise Carrier" }, true, 3),
+                                                         G ("TUNER", { "Tune Amount", "Retune Speed", "Session Key", "Key", "Scale", "Voice Range" }, false, 3),
+                                                         G ("OUTPUT FX", { "Ring Mod", "Ring Freq", "Drive Type", "Drive", "Chorus", "Width" }, false, 3),
+                                                         G ("OUT", { "Mix", "Output" }, false, 1) }; }
+        else if (name == "Talk Wing")     { s.family = Family::talkwing; s.knob = KnobStyle::vintage; s.width = 1360; s.height = 860; s.vizH = 270; s.rowSplit = 3; s.row1Share = 0.5f; s.resizable = true;
+                                            s.groups = { G ("ROUTING", { "Source", "Engine", "Voice Range", "Buzz Octave", "Buzz Tone", "Buzz Glide" }, true, 3),
+                                                         G ("MOUTH", { "Mouth", "Formant", "Precision", "Articulation", "Follow" }, true, 3),
+                                                         G ("OUT", { "Mix", "Output" }, true, 1),
+                                                         G ("CONSONANTS", { "Sibilance", "Gate" }, false, 2),
+                                                         G ("TUBE", { "Tube", "Brightness" }, false, 2) }; }
+        else if (name == "Clean Room")    { s.family = Family::cleanroom; s.knob = KnobStyle::ring; s.width = 1360; s.height = 860; s.vizH = 280; s.rowSplit = 3; s.row1Share = 0.45f; s.resizable = true;
+                                            s.groups = { G ("CLEAN", { "Clean", "Engine", "Artefact Guard" }, true, 3),
+                                                         G ("WHAT TO TAKE OUT", { "Hum", "Buzz", "Hiss", "Noise", "Room", "Clicks" }, true, 3),
+                                                         G ("OUT", { "Mix", "Output" }, true, 1),
+                                                         G ("HUM + ROOM", { "Mains", "Room Decay" }, false, 2),
+                                                         G ("PROFILE", { "Learn Noise", "Clear Profile", "Residual Listen" }, false, 3) }; }
         else if (name == "Silk Ladder")   { s.family = Family::ladder; s.knob = KnobStyle::chicken; s.width = 940; s.height = 580; s.vizH = 220;
                                             s.groups = { G ("FILTER", { "Cutoff", "Resonance" }, true, 2), G ("ENVELOPE", { "Env Amount", "Fast Envelope" }, false, 1), G ("DRIVE", { "Poles", "Drive" }, false, 1), G ("OUTPUT", { "Output", "Mix" }, false, 1) }; }
         else if (name == "Halo Ring")     { s.family = Family::ring; s.knob = KnobStyle::chicken; s.width = 900; s.height = 560; s.vizH = 220;
@@ -2728,6 +2748,42 @@ namespace Skins
                 add (toggle ("New Mutation", [] { return false; }, [mup, um] (bool) { mup->seed.setValue (juce::Random::getSystemRandom().nextInt (100000) + 1, um); }));
                 for (auto& hs : handleStore) if (hs->name == "Pitch" || hs->name == "Throat" || hs->name == "Output") hs->bipolar = true;
             }
+            else if (auto vmp = dynamic_cast<SqVoxMothPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Voicing", SqVoxMothPlugin::voicingNames(), [vmp] { return vmp->voicing.get(); }, [vmp, um] (int i) { um->beginNewTransaction ("Vox Moth: voicing"); vmp->loadVoicing (i, um); }));
+                add (choice ("Carrier", SqVoxMothPlugin::carrierNames(), [vmp] { return vmp->carrier.get(); }, [vmp, um] (int i) { vmp->carrier.setValue (i, um); }));
+                add (choice ("Wave 1", SqVoxMothPlugin::waveNames(), [vmp] { return vmp->wave1.get(); }, [vmp, um] (int i) { vmp->wave1.setValue (i, um); }));
+                add (choice ("Wave 2", SqVoxMothPlugin::waveNames(), [vmp] { return vmp->wave2.get(); }, [vmp, um] (int i) { vmp->wave2.setValue (i, um); }));
+                add (choice ("Osc 2 Octave", SqVoxMothPlugin::octaveNames(), [vmp] { return vmp->octave2.get(); }, [vmp, um] (int i) { vmp->octave2.setValue (i, um); }));
+                add (choice ("Filter Shape", SqVoxMothPlugin::shapeNames(), [vmp] { return vmp->shape.get(); }, [vmp, um] (int i) { vmp->shape.setValue (i, um); }));
+                add (choice ("Drive Type", SqVoxMothPlugin::driveNames(), [vmp] { return vmp->driveVoicing.get(); }, [vmp, um] (int i) { vmp->driveVoicing.setValue (i, um); }));
+                add (toggle ("Session Key", [vmp] { return vmp->autoKey.get(); }, [vmp, um] (bool b) { vmp->autoKey.setValue (b, um); }));
+                add (choice ("Key", SqSessionKey::rootNames(), [vmp] { return vmp->keyRoot.get(); }, [vmp, um] (int i) { vmp->keyRoot.setValue (i, um); }));
+                add (choice ("Scale", SqSessionKey::scaleNames(), [vmp] { return vmp->scale.get(); }, [vmp, um] (int i) { vmp->scale.setValue (i, um); }));
+                add (choice ("Voice Range", SqHiveChoirPlugin::voiceNames(), [vmp] { return vmp->voiceType.get(); }, [vmp, um] (int i) { vmp->voiceType.setValue (i, um); }));
+                add (toggle ("Dice", [] { return false; }, [vmp, um] (bool) { um->beginNewTransaction ("Vox Moth: dice"); vmp->dice (um); }));
+                for (auto& hs : handleStore) if (hs->name == "Slide" || hs->name == "Band Shift" || hs->name == "Tilt" || hs->name == "Osc 2 Interval" || hs->name == "Output") hs->bipolar = true;
+            }
+            else if (auto twp = dynamic_cast<SqTalkWingPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Source", SqTalkWingPlugin::sourceNames(), [twp] { return twp->source.get(); }, [twp, um] (int i) { twp->source.setValue (i, um); }));
+                add (choice ("Engine", SqTalkWingPlugin::engineNames(), [twp] { return twp->engine.get(); }, [twp, um] (int i) { twp->engine.setValue (i, um); }));
+                add (choice ("Voice Range", SqHiveChoirPlugin::voiceNames(), [twp] { return twp->voiceType.get(); }, [twp, um] (int i) { twp->voiceType.setValue (i, um); }));
+                add (choice ("Buzz Octave", SqTalkWingPlugin::octaveNames(), [twp] { return twp->buzzOctave.get(); }, [twp, um] (int i) { twp->buzzOctave.setValue (i, um); }));
+                for (auto& hs : handleStore) if (hs->name == "Formant" || hs->name == "Brightness" || hs->name == "Output") hs->bipolar = true;
+            }
+            else if (auto crp = dynamic_cast<SqCleanRoomPlugin*> (&plugin))
+            {
+                auto um = &plugin.edit.getUndoManager();
+                add (choice ("Engine", SqCleanRoomPlugin::engineNames(), [crp] { return crp->engine.get(); }, [crp, um] (int i) { crp->engine.setValue (i, um); }));
+                add (choice ("Mains", SqCleanRoomPlugin::humNames(), [crp] { return crp->humMode.get(); }, [crp, um] (int i) { crp->humMode.setValue (i, um); }));
+                add (toggle ("Learn Noise", [crp] { return crp->isLearning(); }, [crp] (bool b) { if (b) crp->startLearning(); else crp->stopLearning(); }));
+                add (toggle ("Clear Profile", [] { return false; }, [crp, um] (bool) { crp->clearProfile (um); }));
+                add (toggle ("Residual Listen", [crp] { return crp->residual.get(); }, [crp] (bool b) { crp->residual.setValue (b, nullptr); }));
+                for (auto& hs : handleStore) if (hs->name == "Output") hs->bipolar = true;
+            }
             else if (auto mwp = dynamic_cast<SqMawPlugin*> (&plugin))
             {
                 auto um = &plugin.edit.getUndoManager();
@@ -2963,6 +3019,9 @@ namespace Skins
                 case Family::hivechoir: viz = std::make_unique<HiveChoirViz> (handles, plugin, accent); break;
                 case Family::doublewing2: viz = std::make_unique<DoubleWing2Viz> (handles, plugin, accent); break;
                 case Family::mutant: viz = std::make_unique<MutantViz> (handles, plugin, accent); break;
+                case Family::voxmoth: viz = std::make_unique<VoxMothViz> (handles, plugin, accent); break;
+                case Family::talkwing: viz = std::make_unique<TalkWingViz> (handles, plugin, accent); break;
+                case Family::cleanroom: viz = std::make_unique<CleanRoomViz> (handles, plugin, accent); break;
                 case Family::ring:      viz = std::make_unique<RingViz> (handles, plugin, accent); break;
                 case Family::phase12:   viz = std::make_unique<Phase12Viz> (handles, plugin, accent); break;
                 case Family::bbd:       viz = std::make_unique<BucketViz> (handles, plugin, accent); break;

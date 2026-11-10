@@ -67,6 +67,9 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqHiveChoirPlugin>();
     engine->getPluginManager().createBuiltInType<SqDoubleWing2Plugin>();
     engine->getPluginManager().createBuiltInType<SqMutantPlugin>();
+    engine->getPluginManager().createBuiltInType<SqVoxMothPlugin>();
+    engine->getPluginManager().createBuiltInType<SqTalkWingPlugin>();
+    engine->getPluginManager().createBuiltInType<SqCleanRoomPlugin>();
     engine->getPluginManager().createBuiltInType<SqMothKeyPlugin>();
     engine->getPluginManager().createBuiltInType<SqSirenCompPlugin>();
     engine->getPluginManager().createBuiltInType<SqSirenEqPlugin>();
@@ -2634,6 +2637,87 @@ inline int runSelfTest()
             double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
             check (sum.presets >= 240 && sum.failed == 0, "Phase E2: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
             auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-e2.md");
+            if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
+        }
+        // ---------------------------------------------------------------- Phase E3: Vox Moth, Talk Wing, Clean Room
+        {
+            const double SR = 48000.0, twoPi = juce::MathConstants<double>::twoPi;
+            call ("add_track", R"({"kind":"audio","name":"E3"})");
+            for (auto w : { "voxmoth", "talkwing", "cleanroom" }) call ("vocal_fx", juce::String (R"({"track":"E3","which":")") + w + R"(","action":"add"})");
+            auto* tt = session->findTrack ("E3"); SqVoxMothPlugin* vm = nullptr; SqTalkWingPlugin* tw = nullptr; SqCleanRoomPlugin* cr = nullptr;
+            if (tt != nullptr) for (auto pl : tt->pluginList) { if (auto a = dynamic_cast<SqVoxMothPlugin*> (pl)) vm = a; if (auto b = dynamic_cast<SqTalkWingPlugin*> (pl)) tw = b; if (auto c = dynamic_cast<SqCleanRoomPlugin*> (pl)) cr = c; }
+            check (vm && tw && cr, "Phase E3: Vox Moth, Talk Wing and Clean Room added through vocal_fx");
+            call ("vocal_fx", R"({"track":"E3","which":"voxmoth","action":"set","settings":{"voicing":"Digital 64","carrier":"Voice Track","shape":"Resonant","octave2":-1,"Slide":3,"Level 4":-6}})");
+            call ("vocal_fx", R"({"track":"E3","which":"talkwing","action":"set","settings":{"source":"Built-in Buzz","engine":"Live","buzzOctave":-1,"Formant":2}})");
+            call ("vocal_fx", R"({"track":"E3","which":"cleanroom","action":"set","settings":{"humMode":"50 Hz","engine":"Live","residualOn":true,"Clean":70}})");
+            if (vm && tw && cr)
+                check (juce::roundToInt (vm->bank[SqVoxMothPlugin::bands]) == 64 && vm->voicing.get() == 7 && vm->carrier.get() == VoxMoth::voiceTrack && vm->shape.get() == VoxMoth::resonant && vm->octave2.get() == 1
+                       && std::abs (vm->bank[SqVoxMothPlugin::slide] - 3.0f) < 0.01f && std::abs (vm->bank[SqVoxMothPlugin::lv1 + 3] + 6.0f) < 0.01f
+                       && tw->source.get() == TalkWing::buzz && tw->engine.get() == 0 && tw->buzzOctave.get() == 1 && std::abs (tw->bank[SqTalkWingPlugin::formant] - 2.0f) < 0.01f
+                       && cr->humMode.get() == 1 && cr->engine.get() == 0 && cr->residual.get() && std::abs (cr->bank[SqCleanRoomPlugin::clean] - 70.0f) < 0.01f,
+                       "Phase E3: voicing, carrier, filter shape, octave, band level, routing, engine, mains and residual set by name through vocal_fx");
+            auto gv = call ("vocal_fx", R"({"track":"E3","which":"voxmoth","action":"get"})");
+            auto gt = call ("vocal_fx", R"({"track":"E3","which":"talkwing","action":"get"})");
+            auto gc = call ("vocal_fx", R"({"track":"E3","which":"cleanroom","action":"get"})");
+            check (gv.contains ("Digital 64") && gv.contains ("carrier_notes") && gt.contains ("routing_now") && gt.contains ("latency_ms") && gc.contains ("mains_hz") && gc.contains ("clicks_repaired"),
+                   "Vox Moth, Talk Wing and Clean Room: get reports the voicing and carrier, the routing, the mains and the repairs");
+            if (vm != nullptr)
+            {
+                const float before = vm->bank[SqVoxMothPlugin::resonance]; const int sh = vm->shape.get(); const float rel = vm->bank[SqVoxMothPlugin::release];
+                call ("vocal_fx", R"({"track":"E3","which":"voxmoth","action":"dice"})");
+                check (before != vm->bank[SqVoxMothPlugin::resonance] || sh != vm->shape.get() || rel != vm->bank[SqVoxMothPlugin::release], "Vox Moth: dice makes a new sound");
+            }
+            check (! call ("vocal_fx", R"({"track":"E3","which":"cleanroom","action":"learn_start"})").containsIgnoreCase ("error") && call ("vocal_fx", R"({"track":"E3","which":"cleanroom","action":"learn_stop"})").contains ("noise_profile"),
+                   "Clean Room: learn_start / learn_stop through vocal_fx");
+            auto vowel = [&] (size_t n, double f0, double F1, double F2)
+            {
+                std::vector<float> v (n); double ph = 0;
+                for (size_t i = 0; i < n; ++i) { ph += f0 / SR; double y = 0; for (int h = 1; h * f0 < 9000; ++h) { const double f = h * f0; y += (1.0 / (1.0 + std::pow ((f - F1) / 90.0, 2)) + 0.6 / (1.0 + std::pow ((f - F2) / 140.0, 2)) + 0.02) * std::sin (twoPi * h * ph) / std::sqrt ((double) h); } v[i] = 0.1f * (float) y; }
+                return v;
+            };
+            auto pw = [&] (const std::vector<float>& v, size_t a, size_t b, double hz) { const double w = twoPi * hz / SR, c = 2 * std::cos (w); double s1 = 0, s2 = 0; for (size_t i = a; i < b; ++i) { const double s0 = v[i] + c * s1 - s2; s2 = s1; s1 = s0; } return (s1 * s1 + s2 * s2 - c * s1 * s2) / (double) (b - a) / (double) (b - a); };
+            auto bandE = [&] (const std::vector<float>& v, double lo, double hi) { double e = 0; for (double f = lo; f < hi; f += 20) e += pw (v, 60000, 140000, f); return 10 * std::log10 (e + 1e-30); };
+            {
+                VoxMoth::Processor p; p.prepare (SR, 256); std::array<bool, 128> h {}; h[60] = true; p.setHeld (h);
+                auto l = vowel (144000, 220, 700, 1200), r = l;
+                for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; p.process (ch, 2, nullptr, 256); }
+                double bp = 0, bf = 0; for (double f = 150; f < 400; f *= 1.002) { const double q = pw (l, 60000, 140000, f); if (q > bp) { bp = q; bf = f; } }
+                check (std::abs (1200 * std::log2 (bf / 261.63)) < 25, "Vox Moth: a held C4 plays the voice's words on " + juce::String (bf, 1) + " Hz");
+            }
+            {
+                auto talk = [&] (double F1, double F2)
+                {
+                    TalkWing::Processor p; p.p.tube = 0; p.p.sibilance = 0; p.prepare (SR, 256);
+                    std::vector<float> l (144000); double ph = 0; for (auto& x : l) { ph += 110.0 / SR; ph -= std::floor (ph); x = 0.2f * (float) (2 * ph - 1); }
+                    auto r = l; auto key = vowel (144000, 196, F1, F2);
+                    for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; const float* k[2] = { key.data() + i, key.data() + i }; p.process (ch, 2, k, 256); }
+                    return bandE (l, 1900, 2700) - bandE (l, 500, 900);
+                };
+                const double d = talk (300, 2300) - talk (750, 1150);
+                check (d > 10, "Talk Wing: the instrument says the vowel ('ee' vs 'ah' at 2-2.7 kHz: " + juce::String (d, 1) + " dB)");
+            }
+            {
+                CleanRoom::Processor p; p.p.clean = 0.5f; p.p.hum = 1; p.p.buzz = 1; p.p.hiss = p.p.noise = p.p.room = p.p.clicks = 0; p.prepare (SR, 256);
+                auto in = vowel (192000, 233, 700, 1200); for (size_t i = 0; i < in.size(); ++i) { double hm = 0; for (int k = 1; k <= 6; ++k) hm += std::sin (twoPi * 60.0 * k * (double) i / SR) / k; in[i] += 0.05f * (float) hm; }
+                auto l = in, r = in; for (size_t i = 0; i + 256 <= l.size(); i += 256) { float* ch[2] = { l.data() + i, r.data() + i }; p.process (ch, 2, 256); }
+                const size_t L = (size_t) p.latencySamples(); double hum = 0, voice = 0;
+                for (int k = 1; k <= 3; ++k) hum += 10 * std::log10 (pw (l, 100000 + L, 180000 + L, 60.0 * k) / pw (in, 100000, 180000, 60.0 * k));
+                for (int k = 1; k <= 4; ++k) voice += std::abs (10 * std::log10 (pw (l, 100000 + L, 180000 + L, 233.0 * k) / pw (in, 100000, 180000, 233.0 * k)));
+                check (hum / 3 < -25 && voice / 4 < 1.0, "Clean Room: 60 Hz hum down " + juce::String (-hum / 3, 1) + " dB, the voice's harmonics move " + juce::String (voice / 4, 2) + " dB");
+            }
+            call ("delete_track", R"({"track":"E3"})");
+            Edition::owned() = Edition::Owned {}; Edition::owned().core = true; Edition::owned().vocal = true;
+            check (Edition::isTypeAllowed ("sqmVoxMoth") && Edition::isTypeAllowed ("sqmTalkWing") && Edition::isTypeAllowed ("sqmCleanRoom"), "editions: Vox Moth, Talk Wing and Clean Room are in the Vocal Suite");
+            Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+            auto rep = session->sessionsDir.getChildFile ("preset-audit-e3.md");
+            auto& es = session->edit->state; juce::NamedValueSet savedKey;
+            for (auto id : { "sqmKeyRoot", "sqmKeyScale", "sqmKeyMap" }) if (es.hasProperty (id)) { savedKey.set (id, es[id]); es.removeProperty (id, nullptr); }
+            auto sum = PresetAudit::run (*session->edit, { "Vox Moth", "Talk Wing", "Clean Room" }, { "sqmVoxMoth", "sqmTalkWing", "sqmCleanRoom" }, 3.0, rep);
+            for (auto& kv : savedKey) es.setProperty (kv.name, kv.value, nullptr);
+            juce::String firstFail; for (auto& row : sum.rows) if (! row.pass && firstFail.isEmpty()) firstFail = row.plugin + " / " + row.preset + ": " + row.why;
+            double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
+            check (sum.presets >= 220 && sum.failed == 0, "Phase E3: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
+            auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-e3.md");
             if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
         }
         // ---------------------------------------------------------------- Phase C: Moth Tune 2, Moth Key, Siren Comp, Siren EQ, Hush De-Ess 2

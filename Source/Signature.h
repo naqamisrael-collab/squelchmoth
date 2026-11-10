@@ -26,7 +26,7 @@
 #include "SqFoilPlate.h"
 #include "SqRadiantMaw.h"
 #include "SqVoice111.h"
-#include "SqVoice111f.h"
+#include "SqVoice111g.h"
 
 namespace te = tracktion;
 
@@ -90,6 +90,9 @@ namespace Signature
             { "Hive Choir",       "sqmHiveChoir",    "Pitch & Vocal", "Harmony and choir: four voices by interval, scale step, MIDI chord or MIDI omni, each with Throat, level, pan, vibrato and its own choir of 1-32 singers with pitch, time and timbre variation - true stereo", 0xffffc857, "hivechoir" },
             { "Double Wing 2",    "sqmDoubleWing2",  "Pitch & Vocal", "Auto-doubler: 1-4 doubles with pitch, timing and timbre variation, spread, and vibrato that can be added only where the singer holds a straight note", 0xff8ad8ff, "doublewing2" },
             { "Mutant",           "sqmMutant",       "Pitch & Vocal", "Extreme voice designer: pitch and Throat +-24 st, a ring modulator that follows the singer, tempo-synced Alienization and grain stutter, Analog drive", 0xff9dff4a, "mutant" },
+            { "Vox Moth",         "sqmVoxMoth",      "Pitch & Vocal", "Vocoder: 20 voicings, 4-64 bands, four filter shapes, Stretch and Slide, band shift and level curve, Smear, sibilance and noise, an 8-voice two-oscillator carrier played by MIDI or by the voice through a built-in tuner, or a key input; ring, drive, chorus, X/Y pad", 0xffb6ff3c, "voxmoth" },
+            { "Talk Wing",        "sqmTalkWing",     "Pitch & Vocal", "Talk box: a voice on the key input shapes this track's instrument (or the other way round) - formants and level transferred, formant shift, precision, articulation, sibilance, gate, tube colour; with no key the voice drives a built-in buzz", 0xffff9a3c, "talkwing" },
+            { "Clean Room",       "sqmCleanRoom",    "Pitch & Vocal", "Vocal cleaner under one knob: hum (50 / 60 Hz found automatically) and buzz, hiss, noise (tracked or learned), room and clicks, artefact guard, residual listen, Studio and Live engines", 0xff7ee8ff, "cleanroom" },
             { "Moth Tune FX",     "sqmTuneFx",       "Pitch & Vocal", "Creative tuning: editable Motion patterns plus a six-slot X/Y effects rack - Mutate, Duet, Vocode, Talkbox, Octaver, Stutter and more", 0xffff2fd6, "mothtunefx" },
             // ---------------- EQ & filters
             { "Vellum EQ",        "sqmVellum",       "EQ & Filter", "Seventies broadcast-console EQ: shelf or very-low-bell low, six-step mid whose Q narrows as it rises, a second sweepable mid, gentle low-pass or very-high-bell high, Stepped detents, Mid/Side and L/R, oversampled Drive", 0xffe8c87a, "vellum" },

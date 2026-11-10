@@ -72,6 +72,7 @@ namespace Edition
             { "sqmMothKey", Pack::vocal }, { "sqmSirenComp", Pack::vocal }, { "sqmSirenEq", Pack::vocal }, { "sqmHushDeEss2", Pack::vocal },
             { "sqmSirenVerb", Pack::vocal }, { "sqmMicCloset", Pack::vocal }, { "sqmLarynx", Pack::vocal }, { "sqmExhale", Pack::vocal },
             { "sqmHiveChoir", Pack::vocal }, { "sqmDoubleWing2", Pack::vocal }, { "sqmMutant", Pack::vocal },
+            { "sqmVoxMoth", Pack::vocal }, { "sqmTalkWing", Pack::vocal }, { "sqmCleanRoom", Pack::vocal },
             { "sqmApexDyn", Pack::mastering }, { "sqmApexLim", Pack::mastering }, { "sqmApexMB", Pack::mastering }, { "sqmApexSub", Pack::mastering },
             { "sqmApexTriad", Pack::mastering }, { "sqmPulse", Pack::mastering }, { "sqmOpto", Pack::mastering },
             { "sqmHexwing", Pack::instruments }, { "sqmToxin", Pack::instruments }, { "sqmLantern", Pack::instruments }, { "sqmLanternExo", Pack::instruments },

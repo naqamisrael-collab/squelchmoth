@@ -7,6 +7,9 @@ static juce::String voiceTypeFor (const juce::String& k)
     if (s.contains ("choir") || s.contains ("harmon")) return SqHiveChoirPlugin::xmlTypeName;
     if (s.contains ("doublewing") || s.contains ("double2") || s.contains ("doubler") || s == "double") return SqDoubleWing2Plugin::xmlTypeName;
     if (s.contains ("mutant") || s.contains ("mutator")) return SqMutantPlugin::xmlTypeName;
+    if (s.contains ("voxmoth") || s.contains ("vocod")) return SqVoxMothPlugin::xmlTypeName;
+    if (s.contains ("talkwing") || s.contains ("talkbox") || s.contains ("articulat")) return SqTalkWingPlugin::xmlTypeName;
+    if (s.contains ("cleanroom") || s.contains ("denois") || s.contains ("vocalprep") || s.contains ("clean")) return SqCleanRoomPlugin::xmlTypeName;
     if (s.contains ("verb") || s.contains ("vocalreverb")) return SqSirenVerbPlugin::xmlTypeName;
     if (s.contains ("miccloset") || s.contains ("micmod") || s == "mic" || s.contains ("closet")) return SqMicClosetPlugin::xmlTypeName;
     if (s.contains ("larynx") || s.contains ("throat") || s.contains ("tract")) return SqLarynxPlugin::xmlTypeName;
@@ -27,7 +30,7 @@ static const juce::StringArray& voiceSettings()
                               "hpSlope", "lpSlope", "linkOn", "soloOn", "listenOn", "autoApplyOn", "tempoOn",
                               "algo", "reverseOn", "autoEqOn", "delayMode", "delaySync", "shimmerPitch", "mixLockOn", "source", "target", "pattern", "sourceProxOn", "levelMatchOn",
                               "mode1", "mode2", "mode3", "mode4", "engine", "voiceType", "autoKeyOn", "keyRoot", "scale", "seed", "doubles", "voiceRange", "vibStraightOn",
-                              "alienDiv", "stutterDiv", "repeats", "driveVoicing" };
+                              "alienDiv", "stutterDiv", "repeats", "driveVoicing", "carrier", "shape", "wave1", "wave2", "octave2", "voicing", "buzzOctave", "humMode", "residualOn" };
         for (int b = 1; b <= 6; ++b) for (auto x : { "On", "Type", "Mode", "Harm", "Expand", "Solo", "Mute" }) k.add ("b" + juce::String (b) + x);
         return k;
     }();
@@ -117,7 +120,18 @@ void registerVoice111Tools()
          " deess2 (Hush De-Ess 2, Hard / Soft de-esser, 60 presets) | mothkey (Moth Key, key / scale / tempo detection) |\n"
          " sirenverb (Siren Verb, vocal reverb, 140 presets) | miccloset (Mic Closet, microphone modelling, 80 presets) | larynx (Larynx, vocal-tract modeller, 60 presets) |\n"
          " exhale (Exhale, breathiness control, 30 presets) | hivechoir (Hive Choir, harmony + choir, 120 presets) | doublewing2 (Double Wing 2, auto-doubler, 60 presets) |\n"
-         " mutant (Mutant, extreme voice designer, 60 presets).\n"
+         " mutant (Mutant, extreme voice designer, 60 presets) | voxmoth (Vox Moth, vocoder, 140 presets) | talkwing (Talk Wing, talk box, 40 presets) |\n"
+         " cleanroom (Clean Room, vocal cleaner: hum, buzz, hiss, noise, room, clicks, 40 presets).\n"
+         " Vox Moth: Bands (4-64), Low Band, High Band, Resonance, Stretch, Slide (st), Band Shift, Attack, Release, Smear, Tilt, Level 1-16 (the band level curve, dB),\n"
+         "   Sibilance, Noise Carrier, Pulse Width, Osc 2 Level / Interval, Detune, Glide, Voices (1-8), Tune Amount, Retune Speed, Ring Mod, Ring Freq, Drive, Chorus, Width,\n"
+         "   X (slide), Y (resonance), Mix, Output; settings voicing (one of 20 by name or index - loads its bands, filter and speed), carrier (MIDI, else Voice | Voice Track |\n"
+         "   MIDI Only | Key Input - set the key with action key), shape (Classic 2-Pole, Steep 4-Pole, Resonant, Wide Flat), wave1 / wave2 (Saw, Pulse), octave2 (-2..2),\n"
+         "   driveVoicing, autoKeyOn or keyRoot + scale (the built-in tuner for the voice-tracked carrier), voiceType. Action dice.\n"
+         " Talk Wing: Mouth, Formant (st), Precision, Articulation, Follow (level transfer), Sibilance, Gate (dB), Tube, Brightness, Buzz Tone, Buzz Glide, Mix, Output;\n"
+         "   settings source (Voice on Key Input - put it on the instrument track and key the vocal | Voice on This Track - on the vocal, key the instrument | Built-in Buzz),\n"
+         "   engine (Live 512 / Studio 1024), buzzOctave (-2..1), voiceType. With nothing on the key input the voice drives the buzz.\n"
+         " Clean Room: Clean (the one knob), Hum, Buzz, Hiss, Noise, Room, Clicks (each class's share), Room Decay (s), Artefact Guard, Mix, Output; settings engine (Live, Studio),\n"
+         "   humMode (Auto, 50 Hz, 60 Hz), residualOn (hear what is taken out). Actions learn_start / learn_stop (learn the noise from a part with no singing), dice is not used.\n"
          " Hive Choir: Voice 1-4 Interval (st, or scale steps in Scale Step mode) / Level / Pan / Throat / Singers (1-32) / Pitch Variation / Time Variation / Timbre Variation /\n"
          "   Spread / Vibrato Rate / Vibrato Depth, Lead Level, Humanize Pitch, Humanize Time, Consonants, Width, Mix, Output; settings mode1-mode4 (Off, Interval, Scale Step,\n"
          "   MIDI Chord, MIDI Omni - MIDI from the track's notes or input), engine (Live, Studio), voiceType, autoKeyOn (follow the session key) or keyRoot + scale, seed (who sings where).\n"
@@ -151,7 +165,7 @@ void registerVoice111Tools()
          [this] (const juce::var& a)
          {
              const auto type = voiceTypeFor (str (a, "which"));
-             if (type.isEmpty()) return ToolResult::error ("which must be sirencomp, sireneq, deess2, mothkey, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2 or mutant");
+             if (type.isEmpty()) return ToolResult::error ("which must be sirencomp, sireneq, deess2, mothkey, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing or cleanroom");
              const auto action = str (a, "action").toLowerCase();
              juce::String err; te::AudioTrack* t = nullptr;
              auto list = pluginListArg (a, err, t);
@@ -231,6 +245,27 @@ void registerVoice111Tools()
                  }
                  if (auto dw = dynamic_cast<SqDoubleWing2Plugin*> (&pl)) { set (o, "doubles", dw->doubles.get()); set (o, "straight_note", dw->proc.straightness()); set (o, "added_vibrato", dw->proc.vibratoAmount()); }
                  if (auto mu = dynamic_cast<SqMutantPlugin*> (&pl)) { set (o, "singer_pitch_hz", mu->liveHz.load()); set (o, "alien_pitch_st", mu->proc.alienPitchNow()); set (o, "stuttering", mu->proc.stuttering()); set (o, "latency_ms", mu->getLatencySeconds() * 1000.0); }
+                 if (auto vm = dynamic_cast<SqVoxMothPlugin*> (&pl))
+                 {
+                     const auto kp = vm->knobParams(); const auto& vc = VoxMoth::voicings()[(size_t) juce::jlimit (0, 19, vm->voicing.get())];
+                     set (o, "voicing", juce::String (vc.name) + " - " + vc.about); set (o, "carrier", VoxMoth::carrierName (kp.carrier) + juce::String (vm->proc.usingKey() ? " (playing the key input)" : ""));
+                     set (o, "filter", VoxMoth::shapeName (kp.shape)); set (o, "singer_pitch_hz", vm->liveHz.load());
+                     juce::StringArray ns; for (int v = 0; v < VoxMoth::maxVoices; ++v) { const float n = vm->proc.carrierNote (v); if (n > 0) ns.add (SqSessionKey::rootNames()[juce::roundToInt (n) % 12] + juce::String (juce::roundToInt (n) / 12 - 1)); }
+                     set (o, "carrier_notes", ns.joinIntoString (" ")); set (o, "key", SqSessionKey::rootNames()[kp.keyRoot] + (vm->autoKey.get() && vm->sessionKey.known.load() ? " (session key)" : ""));
+                 }
+                 if (auto tw = dynamic_cast<SqTalkWingPlugin*> (&pl))
+                 {
+                     static const char* m[] = { "the voice on the key input shapes this track", "this voice shapes the instrument on the key input", "the voice drives the built-in buzz" };
+                     set (o, "routing_now", m[juce::jlimit (0, 2, tw->proc.mode())]); set (o, "key_input", tw->getSidechainSourceName()); set (o, "talking", tw->proc.talking());
+                     set (o, "sibilance_now", tw->proc.sibilanceNow()); set (o, "latency_ms", tw->getLatencySeconds() * 1000.0);
+                 }
+                 if (auto cr = dynamic_cast<SqCleanRoomPlugin*> (&pl))
+                 {
+                     set (o, "mains_hz", cr->proc.mainsHz()); set (o, "clicks_repaired", cr->proc.clicksRepaired()); set (o, "noise_profile", cr->proc.hasProfile() ? "learned" : "tracked automatically");
+                     set (o, "learning", cr->isLearning()); set (o, "latency_ms", cr->getLatencySeconds() * 1000.0);
+                     auto avg = [&] (float lo, float hi) { double s = 0; int c = 0; for (int k = 0; k < CleanRoom::profileBands; ++k) { const float hz = CleanRoom::Processor::bandHz (k); if (hz >= lo && hz < hi) { s += cr->proc.reductionDb (k); ++c; } } return c > 0 ? s / c : 0.0; };
+                     set (o, "reduction_db_low_mid_high", juce::String (avg (40, 400), 1) + " / " + juce::String (avg (400, 4000), 1) + " / " + juce::String (avg (4000, 20000), 1));
+                 }
                  if (auto lx = dynamic_cast<SqLarynxPlugin*> (&pl)) { set (o, "latency_ms", lx->getLatencySeconds() * 1000.0); set (o, "level_match", lx->levelMatchOn.get()); }
                  if (auto ex = dynamic_cast<SqExhalePlugin*> (&pl))
                  { set (o, "voiced", ex->proc.voiced()); set (o, "harmonic_to_noise_db", ex->proc.hnrDb()); set (o, "breath_gain_db", ex->proc.breathGainDb()); set (o, "latency_ms", ex->getLatencySeconds() * 1000.0); }
@@ -264,7 +299,15 @@ void registerVoice111Tools()
                      if (exact != nullptr) { exact->setParameter (exact->getValueRange().clipValue ((float) (double) v), juce::sendNotification); continue; }
                      juce::String id; for (auto& k : voiceSettings()) if (k.equalsIgnoreCase (key)) id = k;
                      if (id.isEmpty()) { if (auto ap = Signature::findParam (*p, key)) { ap->setParameter (ap->getValueRange().clipValue ((float) (double) v), juce::sendNotification); continue; } problems.add ("unknown setting '" + key + "'"); continue; }
-                     if (id.startsWith ("mode") && id.length() == 5) v = pickName (SqHiveChoirPlugin::modeNames(), v);
+                     if (id == "voicing") { if (auto vm = dynamic_cast<SqVoxMothPlugin*> (p)) { const int vi = pickName (SqVoxMothPlugin::voicingNames(), v); if (vi < 0) problems.add ("no voicing '" + v.toString() + "'"); else vm->loadVoicing (vi, um); } continue; }
+                     if (id == "source" && dynamic_cast<SqTalkWingPlugin*> (p) != nullptr) v = pickName (SqTalkWingPlugin::sourceNames(), v);
+                     else if (id == "carrier") v = pickName (SqVoxMothPlugin::carrierNames(), v);
+                     else if (id == "shape") v = pickName (SqVoxMothPlugin::shapeNames(), v);
+                     else if (id == "wave1" || id == "wave2") v = pickName (SqVoxMothPlugin::waveNames(), v);
+                     else if (id == "octave2") v = v.isString() ? juce::var (pickName (SqVoxMothPlugin::octaveNames(), v)) : juce::var (juce::jlimit (-2, 2, (int) v) + 2);
+                     else if (id == "buzzOctave") v = v.isString() ? juce::var (pickName (SqTalkWingPlugin::octaveNames(), v)) : juce::var (juce::jlimit (-2, 1, (int) v) + 2);
+                     else if (id == "humMode") v = v.isString() ? juce::var (pickName (SqCleanRoomPlugin::humNames(), v)) : juce::var ((int) v == 50 ? 1 : (int) v == 60 ? 2 : juce::jlimit (0, 2, (int) v));
+                     else if (id.startsWith ("mode") && id.length() == 5) v = pickName (SqHiveChoirPlugin::modeNames(), v);
                      else if (id == "engine") v = pickName (SqHiveChoirPlugin::engineNames(), v);
                      else if (id == "voiceType" || id == "voiceRange") v = pickName (SqHiveChoirPlugin::voiceNames(), v);
                      else if (id == "keyRoot") v = pickName (SqSessionKey::rootNames(), v);
@@ -321,6 +364,13 @@ void registerVoice111Tools()
                      auto o = describe (*sv); set (o, "assist", SqSirenVerbPlugin::vibeNames()[vi] + " (undo to go back, or A/B in the window)"); return ToolResult::ok (o);
                  }
                  if (action == "dice") { um->beginNewTransaction ("Siren Verb: Dice"); sv->dice (um); return ToolResult::ok (describe (*sv)); }
+             }
+             if (auto vm = dynamic_cast<SqVoxMothPlugin*> (p))
+                 if (action == "dice") { um->beginNewTransaction ("Vox Moth: Dice"); vm->dice (um); return ToolResult::ok (describe (*vm)); }
+             if (auto cr = dynamic_cast<SqCleanRoomPlugin*> (p))
+             {
+                 if (action == "learn_start") { cr->startLearning(); return ToolResult::ok ("Clean Room is learning the noise - play a part with no singing (2-5 s), then learn_stop"); }
+                 if (action == "learn_stop") { cr->stopLearning(); auto o = describe (*cr); set (o, "learned", "the noise profile is used once the next frame has run (it is kept with the song)"); return ToolResult::ok (o); }
              }
              if (auto k = dynamic_cast<SqMothKeyPlugin*> (p))
              {
