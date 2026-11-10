@@ -82,6 +82,7 @@ juce_add_binary_data (${TARGET_NAME}BinaryData SOURCES
     Resources/plugart/pa_midishaper.jpg
     Resources/plugart/pa_mothtune.jpg
     Resources/plugart/pa_mothtunefx.jpg
+    Resources/plugart/pa_mothtunefx2.jpg
     Resources/plugart/pa_apexdyn.jpg
     Resources/plugart/pa_apexlim.jpg
     Resources/plugart/pa_apexmb.jpg

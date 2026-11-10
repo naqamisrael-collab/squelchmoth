@@ -148,7 +148,7 @@ void registerVocalTools()
          " add - insert Moth Tune on the track (optionally with preset).\n"
          " set - settings: {name: value}. Names: any parameter (Moth Tune 2: Vibrato Threshold ct, Vibrato Detect Delay s, Vibrato Attack s, Vibrato Irregularity %, Pitch Depth %, Amplitude Depth %, Timbre Depth %; Retune Speed 0-400 ms, Humanize %, Flex Tune %, Vibrato Keep %, Natural Vibrato %, Correction %, Transpose st, Formant st, Throat %, Detune ct, Tracking, Mix %, Output dB, Vibrato Rate/Depth/Delay/Onset/Variation, Voice N Level/Pan/Interval/Formant, Harmony Detune, Harmony Timing) or engine (live/studio), character (modern/classic), voice_type (soprano, alto/tenor, low male, instrument, bass instrument, auto), key, scale, custom_scale ['C','E','G'...], remove [...], bypass [...], auto_key, formant_preserve, conform, vibrato_shape, midi (off/this/named), midi_track, lead_follows_midi, all_octaves, graph,\n"
          "   dynamic_vibrato (off / preserve - keeps the singer's vibrato exactly, even with Retune 0 / cut / boost), vibrato_fx_straight_notes_only (created vibrato only on straight notes),\n"
-         "   formant_link (Formant follows Transpose), auto_range (detect the voice range and pick the voice type), harmony_trigger (always / midi note / midi cc), harmony_cc (0-127), harmony_latch.\n"
+         "   formant_link (Formant follows Transpose), auto_range (detect the voice range and pick the voice type), harmony_trigger (always / midi note / midi cc), harmony_cc (0-127), harmony_latch, motion_style (hard - steps jump, soft - steps glide and rests fade, legato - long glides, rests hold the note, the pattern runs on across phrases).\n"
          " key - set key (root) and scale; session true also makes it the session key (Auto-Key follows it).\n"
          " detect_key - find the key from the session's MIDI and this track's singing; apply true sets it.\n"
          " harmony - voice 1-4: mode (off, interval, scale, midi), interval (semitones, or scale steps in scale mode), level dB, pan -100..100, formant st.\n"
@@ -313,6 +313,7 @@ juce::var describeTuneFx (SqTuneFxPlugin& fx)
     { auto toks = juce::StringArray::fromTokens (fx.motionSteps.get(), " ", ""); toks.removeRange (fx.motionLen.get(), 99); set (mo, "steps", toks.joinIntoString (" ")); }
     set (mo, "scale_steps", fx.motionDiatonic.get());
     set (mo, "latch", fx.motionLatch.get());
+    set (mo, "style", SqTuneFxPlugin::motionStyleNames()[juce::jlimit (0, 2, fx.motionStyle.get())].toLowerCase());
     set (o, "motion", mo);
     juce::Array<juce::var> slots;
     for (int i = 0; i < SqTuneFxPlugin::numSlots; ++i)
@@ -324,6 +325,7 @@ juce::var describeTuneFx (SqTuneFxPlugin& fx)
         set (so, juce::String (ax.first).toLowerCase() + " (x)", fx.bank[(size_t) (SqTuneFxPlugin::s1x + i * 3)]);
         set (so, juce::String (ax.second).toLowerCase() + " (y)", fx.bank[(size_t) (SqTuneFxPlugin::s1y + i * 3)]);
         set (so, "mix_pct", fx.bank[(size_t) (SqTuneFxPlugin::s1mix + i * 3)]);
+        set (so, "trigger", SqTuneFxPlugin::slotTrigNames()[juce::jlimit (0, 3, fx.slotTrig[(size_t) i].get())].toLowerCase());
         slots.add (so);
     }
     set (o, "rack", slots);
@@ -336,15 +338,16 @@ juce::var describeTuneFx (SqTuneFxPlugin& fx)
 void registerVocalFxTools()
 {
     add ("moth_tune_fx",
-         "Moth Tune FX - creative tuning with an editable Motion pattern and a six-slot X/Y effects rack. Actions:\n"
+         "Moth Tune FX 2 - creative tuning with an editable Motion pattern and a six-slot X/Y effects rack (21 modules, each slot with its own trigger), 140 presets. Actions:\n"
          " get; add (optional preset); preset (name, or 'list'); open.\n"
          " set - settings {name: value}: parameters (Retune Speed, Humanize, Transpose, Formant, Throat, Motion Rate, Motion Glide, Mix, Output), engine, key, scale, auto_key, formant_preserve,\n"
          "   motion_mode (off/auto/momentary/toggle/always), motion_sync (free,1/4,1/8,1/8T,1/16,1/16T,1/32), motion_steps ('0 2 4 x 7' - scale steps, x = rest), motion_length 1-16, pattern (factory name), scale_steps (true = diatonic steps, false = semitones), latch.\n"
-         " slot - slot 1-6: module (empty, mutate, duet, vocode, tube, breath, reverb, echo, chorus, compress, low-pass, high-pass, tilt eq, octaver, bit-crush, talkbox, stutter), x 0-1, y 0-1, mix 0-100, on.\n"
+         " slot - slot 1-6: module (empty, mutate, duet, vocode, tube, breath, reverb, echo, chorus, compress, low-pass, high-pass, tilt eq, octaver, bit-crush, talkbox, stutter, eq, phaser, flanger, auto-pan, fuzz), x 0-1, y 0-1, mix 0-100, on,\n"
+         "   trigger (always | auto - while singing | momentary - while a MIDI note or HOLD is down | toggle - each MIDI note switches it).\n"
          " swap - move a slot: from, to (1-6).",
          R"json({"type":"object","properties":{"track":{"type":["string","integer"]},"action":{"type":"string","enum":["get","add","set","slot","swap","preset","open"]},
             "settings":{"type":"object"},"slot":{"type":"integer"},"module":{"type":"string"},"x":{"type":"number"},"y":{"type":"number"},"mix":{"type":"number"},"on":{"type":"boolean"},
-            "from":{"type":"integer"},"to":{"type":"integer"},"preset":{"type":"string"}},"required":["track","action"]})json",
+            "from":{"type":"integer"},"to":{"type":"integer"},"preset":{"type":"string"},"trigger":{"type":"string"}},"required":["track","action"]})json",
          [this] (const juce::var& a)
          {
              juce::String err;
@@ -355,7 +358,7 @@ void registerVocalFxTools()
              auto* um = &session.edit->getUndoManager();
              auto loadPreset = [&] (const juce::String& want) -> juce::String
              {
-                 auto e = Signature::findByName ("Moth Tune FX");
+                 auto e = Signature::findByName ("Moth Tune FX 2");
                  juce::StringArray names; for (auto& pr : e->presets) names.add (pr.name);
                  for (auto& pr : e->presets) if (want.isNotEmpty() && juce::String (pr.name).containsIgnoreCase (want))
                  {
@@ -369,7 +372,7 @@ void registerVocalFxTools()
              {
                  if (fx == nullptr)
                  {
-                     auto p = session.createPluginByName ("Moth Tune FX", err);
+                     auto p = session.createPluginByName ("Moth Tune FX 2", err);
                      if (p == nullptr) return ToolResult::error (err);
                      t->pluginList.insertPlugin (p, Session::insertEndIndex (t->pluginList, t), nullptr);
                      fx = dynamic_cast<SqTuneFxPlugin*> (p.get());
@@ -393,11 +396,17 @@ void registerVocalFxTools()
                  if (! juce::isPositiveAndBelow (i, SqTuneFxPlugin::numSlots)) return ToolResult::error ("slot must be 1-6");
                  if (has (a, "module"))
                  {
-                     const int m = SqVocalFx::moduleNames().indexOf (str (a, "module").toUpperCase().replace ("LOWPASS", "LOW-PASS").replace ("HIGHPASS", "HIGH-PASS").replace ("BITCRUSH", "BIT-CRUSH").replace ("TILT", "TILT EQ").replace ("TILT EQ EQ", "TILT EQ"));
+                     const int m = SqVocalFx::moduleNames().indexOf (str (a, "module").toUpperCase().replace ("LOWPASS", "LOW-PASS").replace ("HIGHPASS", "HIGH-PASS").replace ("BITCRUSH", "BIT-CRUSH").replace ("TILT", "TILT EQ").replace ("TILT EQ EQ", "TILT EQ").replace ("AUTOPAN", "AUTO-PAN").replace ("AUTO PAN", "AUTO-PAN"));
                      if (m < 0) return ToolResult::error ("unknown module - choose " + SqVocalFx::moduleNames().joinIntoString (", ").toLowerCase());
                      fx->slotType[(size_t) i].setValue (m, um); fx->slotOn[(size_t) i].setValue (true, um);
                  }
                  if (has (a, "on")) fx->slotOn[(size_t) i].setValue (flag (a, "on"), um);
+                 if (has (a, "trigger"))
+                 {
+                     const int tr = SqTuneFxPlugin::slotTrigNames().indexOf (str (a, "trigger").toUpperCase());
+                     if (tr < 0) return ToolResult::error ("trigger must be always, auto, momentary or toggle");
+                     fx->slotTrig[(size_t) i].setValue (tr, um);
+                 }
                  if (has (a, "x")) fx->bank.params[(size_t) (SqTuneFxPlugin::s1x + i * 3)]->setParameter ((float) juce::jlimit (0.0, 1.0, num (a, "x")), juce::sendNotification);
                  if (has (a, "y")) fx->bank.params[(size_t) (SqTuneFxPlugin::s1y + i * 3)]->setParameter ((float) juce::jlimit (0.0, 1.0, num (a, "y")), juce::sendNotification);
                  if (has (a, "mix")) fx->bank.params[(size_t) (SqTuneFxPlugin::s1mix + i * 3)]->setParameter ((float) juce::jlimit (0.0, 100.0, num (a, "mix")), juce::sendNotification);
@@ -426,6 +435,7 @@ void registerVocalFxTools()
                      else if (k == "motion_length") fx->motionLen.setValue (juce::jlimit (1, 16, (int) v), um);
                      else if (k == "scale_steps") fx->motionDiatonic.setValue (asBool(), um);
                      else if (k == "latch") fx->motionLatch.setValue (asBool(), um);
+                     else if (k == "motion_style") ok = pick (SqTuneFxPlugin::motionStyleNames(), fx->motionStyle);
                      else if (k == "motion_steps")
                      {
                          juce::StringArray toks;

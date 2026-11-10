@@ -1758,10 +1758,10 @@ namespace Skins
                                                          G ("HARMONY FEEL", { "Harmony Detune", "Harmony Timing", "Harmony Trigger", "Harmony CC", "Harmony Latch" }, false, 2),
                                                          G ("MIDI & GRAPH", { "MIDI Targets", "MIDI Track", "Lead Follows MIDI", "All Octaves", "Graph Notes", "Graph Mode" }, false, 2),
                                                          G ("OUTPUT", { "Mix", "Output" }, true, 1) }; }
-        else if (name == "Moth Tune FX")  { s.family = Family::tunefx; s.knob = KnobStyle::ring; s.width = 1240; s.height = 870; s.vizH = 480;
+        else if (name == "Moth Tune FX 2") { s.family = Family::tunefx; s.knob = KnobStyle::ring; s.width = 1240; s.height = 870; s.vizH = 480;
                                             s.groups = { G ("TUNE", { "Retune Speed", "Humanize", "Transpose", "Formant", "Throat", "Formant Preserve" }, false, 3),
                                                          G ("KEY & ENGINE", { "Key", "Scale", "Auto-Key", "Engine", "Voice Type" }, false, 2),
-                                                         G ("MOTION", { "Motion Mode", "Pattern", "Sync", "Steps", "Motion Rate", "Motion Glide", "Scale Steps", "Latch", "Hold" }, false, 3),
+                                                         G ("MOTION", { "Motion Mode", "Motion Style", "Pattern", "Sync", "Steps", "Motion Rate", "Motion Glide", "Scale Steps", "Latch", "Hold" }, false, 3),
                                                          G ("OUTPUT", { "Mix", "Output" }, true, 1) };
                                             s.hiddenPrefixes = { "Slot " }; }
         else if (name == "Apex Dynamics") { s.family = Family::apexdyn; s.knob = KnobStyle::flat; s.width = 1100; s.height = 660; s.vizH = 240;
@@ -2308,6 +2308,7 @@ namespace Skins
                 ci ("Scale", SqTunePlugin::scaleNames(), fx->scaleIndex);
                 ci ("Motion Mode", SqTuneFxPlugin::motionModeNames(), fx->motionMode);
                 ci ("Sync", SqTuneFxPlugin::motionSyncNames(), fx->motionSync);
+                ci ("Motion Style", SqTuneFxPlugin::motionStyleNames(), fx->motionStyle);
                 juce::StringArray lens; for (int i = 1; i <= SqTuneFxPlugin::maxSteps; ++i) lens.add (juce::String (i));
                 add (choice ("Steps", lens, [fx] { return juce::jlimit (1, SqTuneFxPlugin::maxSteps, fx->motionLen.get()) - 1; }, [fx, um] (int i) { fx->motionLen.setValue (i + 1, um); }));
                 juce::StringArray pats { "(custom)" }; for (auto& pt : SqTuneFxPlugin::factoryPatterns()) pats.add (pt.name);

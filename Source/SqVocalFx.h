@@ -6,9 +6,14 @@
 //    glide, Auto / Momentary / Toggle / Always triggers, latch) that moves the tuned note - not a fixed list.
 //  * A six-slot rack you can re-order, each slot one of 16 modules driven by an X/Y pad plus its own mix:
 //    Mutate (pitch-tracked ring mod), Duet (doubler), Vocode (16-band vocoder on a pitch-tracked carrier), Tube,
-//    Breath, Reverb, Echo, Chorus, Compress, Low-pass, High-pass, Tilt EQ, Octaver, Bit-crush, Talkbox, Stutter.
+//    Breath, Reverb, Echo, Chorus, Compress, Low-pass, High-pass, Tilt EQ, Octaver, Bit-crush, Talkbox, Stutter,
+//    and (version 2) EQ, Phaser, Flanger, Auto-Pan and Fuzz - 21 modules.
+//  * Version 2: every slot has its own trigger (Always, Auto while singing, Momentary while a MIDI note / HOLD is down,
+//    Toggle on each MIDI note) with a click-free fade, and Motion has a style: Hard, Soft (glided steps, rests fade)
+//    or Legato (long glides, rests hold the note, the pattern runs on across phrases).
 
 #include "SqVocal.h"
+#include "SqEngine111Dsp.h"
 
 namespace SqVocalFx
 {
@@ -17,7 +22,8 @@ namespace SqVocalFx
     inline const juce::StringArray& moduleNames()
     {
         static const juce::StringArray n { "EMPTY", "MUTATE", "DUET", "VOCODE", "TUBE", "BREATH", "REVERB", "ECHO", "CHORUS", "COMPRESS",
-                                           "LOW-PASS", "HIGH-PASS", "TILT EQ", "OCTAVER", "BIT-CRUSH", "TALKBOX", "STUTTER" };
+                                           "LOW-PASS", "HIGH-PASS", "TILT EQ", "OCTAVER", "BIT-CRUSH", "TALKBOX", "STUTTER",
+                                           "EQ", "PHASER", "FLANGER", "AUTO-PAN", "FUZZ" };
         return n;
     }
     /** What the X and Y axes do for each module (shown on the pads). */
@@ -40,6 +46,11 @@ namespace SqVocalFx
             case 14: return { "BITS", "RATE" };
             case 15: return { "VOWEL", "RESONANCE" };
             case 16: return { "DIVISION", "DEPTH" };
+            case 17: return { "FREQUENCY", "GAIN" };
+            case 18: return { "RATE", "DEPTH" };
+            case 19: return { "RATE", "FEEDBACK" };
+            case 20: return { "RATE", "DEPTH" };
+            case 21: return { "DRIVE", "TONE" };
             default: return { "X", "Y" };
         }
     }
@@ -52,10 +63,12 @@ namespace SqVocalFx
         Svf f[2][3];
         SqVocal::Ring dl[2]; juce::int64 dw = 0;
         juce::Reverb verb;
+        float apz[2][6] {};
         float env = 0, gr = 1, ph = 0, ph2 = 0, lfo = 0, holdL = 0, holdR = 0, noiseLp = 0, subPh = 0, subSign = 1, lastX = 0, rnd = 0;
         int holdCount = 0;
         static constexpr int bands = 16;
         Svf an[bands], sy[2][bands]; float bandEnv[bands] {};
+        Eng::Biquad eqB[2], eqH[2];
         juce::Random random;
 
         void prepare (double sampleRate)
@@ -72,6 +85,7 @@ namespace SqVocalFx
             for (auto& b : an) b.reset();
             for (auto& c : sy) for (auto& b : c) b.reset();
             for (auto& e : bandEnv) e = 0;
+            for (auto& c : apz) for (auto& z : c) z = 0;
             env = 0; gr = 1; ph = ph2 = lfo = 0; holdL = holdR = 0; holdCount = 0; noiseLp = 0; subPh = 0;
             for (auto& d : dl) d.clear();
             verb.reset();
@@ -265,6 +279,70 @@ namespace SqVocalFx
                         oL = inL * env; oR = inR * env;
                         break;
                     }
+                    case 17:   // EQ: a sweepable bell (100 Hz - 10 kHz, +-15 dB) over a gentle 80 Hz low cut
+                    {
+                        if (i == 0)
+                        {
+                            const double fq = 100.0 * std::pow (100.0, (double) x), gdb = (y - 0.5) * 30.0;
+                            for (int c = 0; c < 2; ++c) { eqB[c].set (Eng::Biquad::peak, sr, fq, 1.1, gdb); eqH[c].set (Eng::Biquad::highpass, sr, 80.0, 0.6); }
+                        }
+                        oL = eqB[0].process (eqH[0].process (inL)); oR = eqB[1].process (eqH[1].process (inR));
+                        break;
+                    }
+                    case 18:   // PHASER: six all-pass stages swept by an LFO, with feedback
+                    {
+                        lfo += (0.05f + x * x * 6.0f) / (float) sr; lfo -= std::floor (lfo);
+                        float outs[2]; const float in[2] = { inL, inR };
+                        for (int c = 0; c < 2; ++c)
+                        {
+                            const float l = 0.5f + 0.5f * std::sin (tw * (lfo + 0.25f * (float) c));
+                            const float fc = 200.0f * std::pow (20.0f, l * (0.3f + 0.7f * y));
+                            const float t = std::tan (juce::MathConstants<float>::pi * juce::jmin (fc, (float) sr * 0.45f) / (float) sr), a = (t - 1.0f) / (t + 1.0f);
+                            float v = in[c] + apz[c][5] * 0.55f * y;
+                            for (int k = 0; k < 5; ++k) { const float yk = a * v + apz[c][k]; apz[c][k] = v - a * yk; v = yk; }
+                            apz[c][5] = v;
+                            outs[c] = 0.5f * (in[c] + v);
+                        }
+                        oL = outs[0] * 1.3f; oR = outs[1] * 1.3f;
+                        break;
+                    }
+                    case 19:   // FLANGER: a short modulated delay with feedback
+                    {
+                        lfo += (0.05f + x * x * 3.0f) / (float) sr; lfo -= std::floor (lfo);
+                        const float fb = -0.2f + y * 0.95f;
+                        const float dA = (0.0008f + 0.0042f * (0.5f + 0.5f * std::sin (tw * lfo))) * (float) sr;
+                        const float dB = (0.0008f + 0.0042f * (0.5f + 0.5f * std::sin (tw * (lfo + 0.25f)))) * (float) sr;
+                        const float a = dl[0].cubic ((double) dw - dA), b = dl[1].cubic ((double) dw - dB);
+                        dl[0].at (dw) = inL + a * fb; dl[1].at (dw) = inR + b * fb;
+                        ++dw;
+                        oL = 0.7f * (inL + a); oR = 0.7f * (inR + b);
+                        break;
+                    }
+                    case 20:   // AUTO-PAN: tempo-synced (or free) panning, equal power
+                    {
+                        static const float divs[] = { 4.0f, 2.0f, 1.0f, 0.5f, 0.25f, 0.125f };
+                        const float beats = divs[juce::jlimit (0, 5, (int) (x * 5.99f))];
+                        ph += (float) (bpm / 60.0 / sr / beats); ph -= std::floor (ph);
+                        const float pan = y * std::sin (tw * ph);
+                        const float m = 0.5f * (inL + inR), sd = 0.5f * (inL - inR);
+                        const float gl = std::cos ((pan + 1.0f) * 0.785398f) * 1.41421f, grr = std::sin ((pan + 1.0f) * 0.785398f) * 1.41421f;
+                        oL = (m + sd) * gl; oR = (m - sd) * grr;
+                        break;
+                    }
+                    case 21:   // FUZZ: hard, rectified clipping with a tone control; its level follows the input
+                    {
+                        const float g = 2.0f + x * x * 60.0f;
+                        auto fz = [g] (float v) { const float a = g * v; const float c = juce::jlimit (-1.0f, 1.0f, a + 0.2f * std::abs (a)); return c * 0.6f; };
+                        const float cut = 1200.0f * std::pow (8.0f, y);
+                        f[0][0].set (sr, cut); f[1][0].set (sr, cut);
+                        const float l = f[0][0].lp (fz (inL)), r = f[1][0].lp (fz (inR));
+                        env += ((inL * inL + inR * inR) - env) * 0.0008f;
+                        noiseLp += ((l * l + r * r) - noiseLp) * 0.0008f;
+                        const float ag = noiseLp > 1e-10f ? juce::jlimit (0.05f, 2.0f, std::sqrt (env / noiseLp)) : 1.0f;
+                        gr += (ag - gr) * 0.002f;
+                        oL = l * gr; oR = r * gr;
+                        break;
+                    }
                     default: break;
                 }
                 L[i] = inL + (oL - inL) * mix;
@@ -343,8 +421,10 @@ public:
         motionSteps.referTo (state, "motionSteps", um, "0 2 4 2 0 2 4 7 0 0 0 0 0 0 0 0");
         motionDiatonic.referTo (state, "motionDiatonic", um, true);
         motionLatch.referTo (state, "motionLatch", um, false);
+        motionStyle.referTo (state, "motionStyle", um, 0);
         for (int i = 0; i < numSlots; ++i)
         {
+            slotTrig[(size_t) i].referTo (state, juce::Identifier ("slotTrig" + juce::String (i + 1)), um, 0);
             slotType[(size_t) i].referTo (state, juce::Identifier ("slotType" + juce::String (i + 1)), um, 0);
             slotOn[(size_t) i].referTo (state, juce::Identifier ("slotOn" + juce::String (i + 1)), um, true);
         }
@@ -352,12 +432,12 @@ public:
     }
     ~SqTuneFxPlugin() override { stopTimer(); cancelPendingUpdate(); notifyListenersOfDeletion(); bank.detach(); }
 
-    static const char* getPluginName()                  { return NEEDS_TRANS("Moth Tune FX"); }
+    static const char* getPluginName()                  { return NEEDS_TRANS("Moth Tune FX 2"); }
     static constexpr const char* xmlTypeName = "sqmTuneFx";
-    juce::String getName() const override               { return "Moth Tune FX"; }
+    juce::String getName() const override               { return "Moth Tune FX 2"; }
     juce::String getPluginType() override               { return xmlTypeName; }
     juce::String getShortName (int) override            { return "TuneFX"; }
-    juce::String getSelectableDescription() override    { return "Moth Tune FX creative vocal effects"; }
+    juce::String getSelectableDescription() override    { return "Moth Tune FX 2 creative vocal effects"; }
     bool takesMidiInput() override                      { return true; }
     bool takesAudioInput() override                     { return true; }
     bool needsConstantBufferSize() override             { return false; }
@@ -369,6 +449,8 @@ public:
 
     static juce::StringArray motionModeNames()  { return { "OFF", "AUTO", "MOMENTARY", "TOGGLE", "ALWAYS" }; }
     static juce::StringArray motionSyncNames()  { return { "FREE", "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" }; }
+    static juce::StringArray motionStyleNames() { return { "HARD", "SOFT", "LEGATO" }; }
+    static juce::StringArray slotTrigNames()    { return { "ALWAYS", "AUTO", "MOMENTARY", "TOGGLE" }; }
     static double syncBeats (int i)              { const double b[] = { 0, 1.0, 0.5, 1.0 / 3.0, 0.25, 1.0 / 6.0, 0.125 }; return b[juce::jlimit (0, 6, i)]; }
 
     struct MotionPattern { const char* name; const char* steps; int len; int sync; bool diatonic; };
@@ -386,7 +468,19 @@ public:
             { "Yodel",          "0 5 0 5 3 5 3 0",              8, 4, true },
             { "Chromatic Rise", "0 1 2 3 4 5 6 7",              8, 4, false },
             { "Robot Steps",    "0 x 0 x 7 x 5 x",              8, 4, true },
-            { "Phone Ring",     "0 4 0 4 0 4 x x",              8, 6, true } };
+            { "Phone Ring",     "0 4 0 4 0 4 x x",              8, 6, true },
+            { "Pentatonic Run", "0 1 2 3 4 3 2 1",              8, 4, true },
+            { "Minor Drop",     "0 -1 -2 -3",                   4, 2, true },
+            { "Fifth Pulse",    "0 4",                          2, 2, true },
+            { "Siren",          "0 2 4 7 9 7 4 2",              8, 6, true },
+            { "Gate Steps",     "0 x 0 x 0 x 0 0",              8, 6, true },
+            { "Sparkle",        "7 0 9 0 11 0 9 0",             8, 6, true },
+            { "Half-Step Wobble", "0 1 0 -1",                   4, 5, false },
+            { "Wide Leap",      "0 7 -7 0",                     4, 2, true },
+            { "Bounce Ball",    "7 x 4 x 2 1 0 x",              8, 4, true },
+            { "Glitch Run",     "0 0 0 4 x 7 7 x 0 x 4 x 2 x 0 x", 16, 6, true },
+            { "Slow Climb",     "0 1 2 3",                      4, 1, true },
+            { "Call Response",  "0 2 4 x -3 -1 0 x",            8, 4, true } };
         return p;
     }
 
@@ -394,7 +488,8 @@ public:
     juce::CachedValue<int> engine, voiceType, keyRoot, scaleIndex, motionMode, motionSync, motionLen;
     juce::CachedValue<juce::String> motionSteps;
     juce::CachedValue<bool> autoKey, preserve, motionDiatonic, motionLatch;
-    std::array<juce::CachedValue<int>, numSlots> slotType;
+    juce::CachedValue<int> motionStyle;
+    std::array<juce::CachedValue<int>, numSlots> slotType, slotTrig;
     std::array<juce::CachedValue<bool>, numSlots> slotOn;
     std::atomic<bool> momentaryHeld { false };       // the editor's HOLD button / MIDI notes
     std::atomic<int> currentStep { -1 };
@@ -407,7 +502,8 @@ public:
         engine.setValue (0, um); motionMode.setValue (0, um); motionSync.setValue (4, um); motionLen.setValue (8, um);
         motionSteps.setValue ("0 2 4 2 0 2 4 7 0 0 0 0 0 0 0 0", um); motionDiatonic.setValue (true, um); motionLatch.setValue (false, um);
         preserve.setValue (true, um);
-        for (int i = 0; i < numSlots; ++i) { slotType[(size_t) i].setValue (0, um); slotOn[(size_t) i].setValue (true, um); }
+        motionStyle.setValue (0, um);
+        for (int i = 0; i < numSlots; ++i) { slotType[(size_t) i].setValue (0, um); slotOn[(size_t) i].setValue (true, um); slotTrig[(size_t) i].setValue (0, um); }
     }
 
     /** Steps as numbers; rests are NaN. */
@@ -431,7 +527,8 @@ public:
     void swapSlots (int a, int b, juce::UndoManager* um)
     {
         if (a == b || ! juce::isPositiveAndBelow (a, numSlots) || ! juce::isPositiveAndBelow (b, numSlots)) return;
-        const int ta = slotType[(size_t) a].get(); const bool oa = slotOn[(size_t) a].get();
+        const int ta = slotType[(size_t) a].get(); const bool oa = slotOn[(size_t) a].get(); const int tra = slotTrig[(size_t) a].get();
+        slotTrig[(size_t) a].setValue (slotTrig[(size_t) b].get(), um); slotTrig[(size_t) b].setValue (tra, um);
         slotType[(size_t) a].setValue (slotType[(size_t) b].get(), um); slotOn[(size_t) a].setValue (slotOn[(size_t) b].get(), um);
         slotType[(size_t) b].setValue (ta, um); slotOn[(size_t) b].setValue (oa, um);
         for (int k = 0; k < 3; ++k)
@@ -453,7 +550,8 @@ public:
         proc.prepare (sr, engine.get(), voiceType.get());
         proc.onFrame = [this] (const SqVocal::FrameResult& r, const std::array<bool, 128>&) { liveNote = r.voiced ? r.outNote : -1.0f; lastVoiced = r.voiced; };
         for (auto& s : slots) s.prepare (sr);
-        heldIn.fill (false); stepClock = 0; toggled = false; wasVoiced = false;
+        heldIn.fill (false); stepClock = 0; toggled = false; wasVoiced = false; restGain = 1; lastStepValue = 0; slotToggled.fill (false);
+        for (int i = 0; i < numSlots; ++i) slotGate[(size_t) i] = slotTrig[(size_t) i].get() == 0 ? 1.0f : 0.0f;
     }
     void deinitialise() override {}
     void restorePluginStateFromValueTree (const juce::ValueTree& v) override
@@ -474,7 +572,7 @@ public:
         if (fc.bufferForMidiMessages != nullptr)
             for (auto& m : *fc.bufferForMidiMessages)
             {
-                if (m.isNoteOn()) { heldIn[(size_t) m.getNoteNumber()] = true; if (motionMode.get() == 3) toggled = ! toggled; stepClock = 0; }
+                if (m.isNoteOn()) { heldIn[(size_t) m.getNoteNumber()] = true; if (motionMode.get() == 3) toggled = ! toggled; stepClock = 0; for (auto& t : slotToggled) t = ! t; }
                 else if (m.isNoteOff()) heldIn[(size_t) m.getNoteNumber()] = false;
                 else if (m.isAllNotesOff()) heldIn.fill (false);
             }
@@ -485,6 +583,9 @@ public:
         s.formantSt = bank[formant]; s.throat = bank[throat] / 100.0f; s.transpose = std::round (bank[transpose]); s.preserve = preserve.get();
         s.allowedMask = allowedMask(); s.keyRoot = keyRoot.get();
         s.motionDiatonic = motionDiatonic.get(); s.motionGlideMs = bank[motionGlide];
+        const int style = juce::jlimit (0, 2, motionStyle.get());
+        if (style == 1) s.motionGlideMs = juce::jmax (s.motionGlideMs, 40.0f);
+        if (style == 2) s.motionGlideMs = juce::jmax (s.motionGlideMs, 110.0f);
         SqVocal::TuneProcessor::Context ctx;
         ctx.playing = fc.isPlaying; ctx.editStart = fc.editTime.getStart().inSeconds();
         ctx.mix = 1.0f; ctx.outGain = 1.0f;
@@ -507,7 +608,7 @@ public:
         }
         if (mode == 1)
         {
-            if (lastVoiced && ! wasVoiced) stepClock = 0;   // each new phrase starts the pattern again
+            if (lastVoiced && ! wasVoiced && style != 2) stepClock = 0;   // each new phrase starts the pattern again (Legato runs on)
             if (lastVoiced) latchedRun = true;
             wasVoiced = lastVoiced;
         }
@@ -526,15 +627,23 @@ public:
                 chunk = juce::jlimit (1, num - done, (int) std::ceil (stepSamples - posInStep));
                 stepIdx = (int) std::floor (stepClock / stepSamples) % len;
                 const float v = steps[(size_t) stepIdx];
-                s.motionSteps = std::isnan (v) ? 0.0f : v;
-                restNow = std::isnan (v);
+                if (std::isnan (v) && style == 2) s.motionSteps = lastStepValue;      // Legato: a rest holds the note
+                else { s.motionSteps = std::isnan (v) ? 0.0f : v; lastStepValue = s.motionSteps; }
+                restNow = std::isnan (v) && style != 2;
                 stepClock += chunk;
             }
             else { s.motionSteps = 0; restNow = false; }
             currentStep = stepIdx;
             float* sub[2] = { io[0] + done, io[1] + done };
             proc.process (sub, nch, chunk, s, ctx);
-            if (restNow) for (int c = 0; c < nch; ++c) juce::FloatVectorOperations::multiply (sub[c], 0.0f, chunk);
+            // rests: Hard cuts, Soft fades (about 12 ms), Legato never rests
+            const float restTarget = restNow ? 0.0f : 1.0f;
+            const float rk = style == 0 ? 1.0f : (float) (1.0 - std::exp (-1.0 / (0.012 * sr)));
+            for (int i = 0; i < chunk; ++i)
+            {
+                restGain += rk * (restTarget - restGain);
+                for (int c = 0; c < nch; ++c) sub[c][i] *= restGain;
+            }
             done += chunk;
             ctx.editStart += chunk / sr;
         }
@@ -547,7 +656,20 @@ public:
             auto& sl = slots[(size_t) i];
             const int t = slotOn[(size_t) i].get() ? slotType[(size_t) i].get() : 0;
             if (t != sl.type) { sl.type = t; sl.reset(); }
-            sl.process (io[0], io[1], num, bank[(size_t) (s1x + i * 3)], bank[(size_t) (s1y + i * 3)], bank[(size_t) (s1mix + i * 3)] / 100.0f, f0, bpmNow);
+            // the slot's trigger: Always, Auto (while singing), Momentary (a MIDI note or HOLD down), Toggle (each MIDI note)
+            bool open = true;
+            switch (juce::jlimit (0, 3, slotTrig[(size_t) i].get()))
+            {
+                case 1: open = lastVoiced; break;
+                case 2: open = held; break;
+                case 3: open = slotToggled[(size_t) i] != momentaryHeld.load(); break;
+                default: break;
+            }
+            const float want = open ? 1.0f : 0.0f, gk = (float) (1.0 - std::exp (-(double) num / (0.008 * sr)));
+            slotGate[(size_t) i] += gk * (want - slotGate[(size_t) i]);
+            const float sm = bank[(size_t) (s1mix + i * 3)] / 100.0f * slotGate[(size_t) i];
+            if (sm <= 0.0001f && t != 0 && ! open) { slotActivity[(size_t) i] = 0.0f; continue; }
+            sl.process (io[0], io[1], num, bank[(size_t) (s1x + i * 3)], bank[(size_t) (s1y + i * 3)], sm, f0, bpmNow);
             slotActivity[(size_t) i] = t != 0 ? juce::FloatVectorOperations::findMaximum (io[0], num) : 0.0f;
         }
         const float mixW = bank[mix] / 100.0f, outG = juce::Decibels::decibelsToGain (bank[output]);
@@ -568,6 +690,9 @@ private:
     std::vector<float> tmpR, dryL, dryR;
     double stepClock = 0;
     bool toggled = false, wasVoiced = false, lastVoiced = false, latchedRun = false, restNow = false;
+    float lastStepValue = 0, restGain = 1;
+    std::array<float, numSlots> slotGate { 1, 1, 1, 1, 1, 1 };
+    std::array<bool, numSlots> slotToggled {};
     std::atomic<double> bpm { 120.0 };
 
     void timerCallback() override

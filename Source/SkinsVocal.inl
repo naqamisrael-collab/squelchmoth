@@ -235,7 +235,7 @@
         }
     };
 
-    /** Moth Tune FX: the editable Motion pattern (drag bars, right-click = rest) and the six-slot rack (click the
+    /** Moth Tune FX 2: the editable Motion pattern (drag bars, right-click = rest) and the six-slot rack (click the
         name to choose a module, drag the X/Y pad, drag the mix bar, arrows re-order, lamp = on/off). */
     struct TuneFxViz : public Viz
     {
@@ -355,7 +355,8 @@
                 g.setColour (juce::Colours::black.withAlpha (0.5f)); g.fillRoundedRectangle (mb, 4.0f);
                 g.setColour (col.withAlpha (type != 0 ? 0.85f : 0.3f)); g.fillRoundedRectangle (mb.withWidth (mb.getWidth() * mv), 4.0f);
                 g.setColour (juce::Colours::white); g.setFont (Theme::font (9.0f, true));
-                g.drawText ("MIX " + juce::String (juce::roundToInt (mv * 100)) + "%", mb, juce::Justification::centred);
+                const int tr = juce::jlimit (0, 3, fx->slotTrig[(size_t) i].get());
+                g.drawText ("MIX " + juce::String (juce::roundToInt (mv * 100)) + "%" + (tr != 0 ? "   " + SqTuneFxPlugin::slotTrigNames()[tr] : juce::String()), mb, juce::Justification::centred);
             }
         }
 
@@ -374,7 +375,7 @@
         {
             if (fx == nullptr) return;
             auto* um = &fx->edit.getUndoManager();
-            um->beginNewTransaction ("Moth Tune FX");
+            um->beginNewTransaction ("Moth Tune FX 2");
             for (int k = 0; k < SqTuneFxPlugin::maxSteps; ++k)
                 if (stepR (k).contains (e.position))
                 {
@@ -391,11 +392,16 @@
                     if (e.position.x < t.getX() + 14.0f) { fx->swapSlots (i, i - 1, um); changed(); return; }
                     if (e.position.x > t.getRight() - 14.0f) { fx->swapSlots (i, i + 1, um); changed(); return; }
                     if (e.position.x > t.getRight() - 30.0f) { fx->slotOn[(size_t) i].setValue (! fx->slotOn[(size_t) i].get(), um); changed(); return; }
-                    juce::PopupMenu menu;
+                    juce::PopupMenu menu, trig;
                     for (int m = 0; m < SqVocalFx::moduleNames().size(); ++m) menu.addItem (m + 1, SqVocalFx::moduleNames()[m], true, m == fx->slotType[(size_t) i].get());
+                    for (int k = 0; k < SqTuneFxPlugin::slotTrigNames().size(); ++k) trig.addItem (1001 + k, SqTuneFxPlugin::slotTrigNames()[k], true, k == fx->slotTrig[(size_t) i].get());
+                    menu.addSeparator(); menu.addSubMenu ("TRIGGER", trig);
                     menu.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea (localAreaToGlobal (t.toNearestInt())), [this, i] (int r)
                     {
-                        if (r > 0 && fx != nullptr) { fx->edit.getUndoManager().beginNewTransaction ("Moth Tune FX module"); fx->slotType[(size_t) i].setValue (r - 1, &fx->edit.getUndoManager()); fx->slotOn[(size_t) i].setValue (true, &fx->edit.getUndoManager()); changed(); }
+                        if (fx == nullptr) return;
+                        auto* um2 = &fx->edit.getUndoManager();
+                        if (r > 1000) { um2->beginNewTransaction ("Moth Tune FX 2 trigger"); fx->slotTrig[(size_t) i].setValue (r - 1001, um2); changed(); }
+                        else if (r > 0) { um2->beginNewTransaction ("Moth Tune FX 2 module"); fx->slotType[(size_t) i].setValue (r - 1, um2); fx->slotOn[(size_t) i].setValue (true, um2); changed(); }
                     });
                     return;
                 }

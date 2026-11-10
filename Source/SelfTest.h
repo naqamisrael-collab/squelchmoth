@@ -2720,6 +2720,83 @@ inline int runSelfTest()
             auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-e3.md");
             if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
         }
+        // ---------------------------------------------------------------- Phase E4: Moth Tune FX 2
+        {
+            const double SR = 48000.0, twoPi = juce::MathConstants<double>::twoPi;
+            call ("add_track", R"({"kind":"audio","name":"E4"})");
+            call ("moth_tune_fx", R"({"track":"E4","action":"add"})");
+            call ("moth_tune_fx", R"({"track":"E4","action":"slot","slot":1,"module":"phaser","x":0.3,"y":0.6,"trigger":"momentary"})");
+            call ("moth_tune_fx", R"({"track":"E4","action":"slot","slot":2,"module":"auto-pan","trigger":"auto"})");
+            call ("moth_tune_fx", R"({"track":"E4","action":"set","settings":{"motion_style":"legato","pattern":"Siren"}})");
+            auto g4 = juce::JSON::parse (call ("moth_tune_fx", R"({"track":"E4","action":"get"})"));
+            check (g4["motion"]["style"].toString() == "legato" && g4["rack"][0]["module"].toString() == "phaser" && g4["rack"][0]["trigger"].toString() == "momentary"
+                   && g4["rack"][1]["module"].toString() == "auto-pan" && g4["rack"][1]["trigger"].toString() == "auto",
+                   "Moth Tune FX 2: modules, per-slot triggers and motion style set by name through moth_tune_fx");
+            check (SqVocalFx::moduleNames().size() == 22 && SqTuneFxPlugin::factoryPatterns().size() == 24, "Moth Tune FX 2: 21 modules and 24 factory motion patterns");
+            call ("delete_track", R"({"track":"E4"})");
+            // the plug-in itself, rendered: a held note opens a Momentary slot; a Legato rest holds the note where Hard cuts it
+            auto tone = [&] (size_t n) { std::vector<float> v (n); double ph = 0; for (size_t i = 0; i < n; ++i) { ph += 220.0 / SR; double y = 0; for (int h = 1; h <= 10; ++h) y += std::sin (twoPi * h * ph) / h; v[i] = 0.1f * (float) y; } return v; };
+            auto render = [&] (std::function<void (SqTuneFxPlugin&)> setup, bool holdNote)
+            {
+                std::vector<float> out;
+                auto pp = engine->getPluginManager().createNewPlugin (*session->edit, SqTuneFxPlugin::xmlTypeName, {});
+                auto* fx = dynamic_cast<SqTuneFxPlugin*> (pp.get());
+                if (fx == nullptr) return out;
+                setup (*fx);
+                const int block = 256; pp->baseClassInitialise ({ te::TimePosition(), SR, block });
+                auto in = tone ((size_t) (SR * 2.0)); juce::AudioBuffer<float> buf (2, block); te::MidiMessageArray midi;
+                for (size_t p = 0; p + (size_t) block <= in.size(); p += (size_t) block)
+                {
+                    buf.copyFrom (0, 0, in.data() + p, block); buf.copyFrom (1, 0, in.data() + p, block);
+                    midi.clear(); if (holdNote && p == 0) midi.addMidiMessage (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0.0, 0);
+                    const double t0 = (double) p / SR;
+                    te::PluginRenderContext fc (&buf, 0, block, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (t0), te::TimePosition::fromSeconds (t0 + block / SR)), true, false, true, false);
+                    pp->applyToBuffer (fc);
+                    for (int i = 0; i < block; ++i) out.push_back (buf.getSample (0, i));
+                }
+                pp->baseClassDeinitialise();
+                return out;
+            };
+            auto withRing = [] (SqTuneFxPlugin& f) { f.slotType[0].setValue (1, nullptr); f.slotTrig[0].setValue (2, nullptr); f.bank.params[(size_t) SqTuneFxPlugin::s1mix]->setParameter (100.0f, juce::sendNotification); };
+            const auto closed = render (withRing, false), opened = render (withRing, true);
+            double d = 0, e = 0; for (size_t i = 24000; i < closed.size() && i < opened.size(); ++i) { d += (double) (opened[i] - closed[i]) * (opened[i] - closed[i]); e += (double) closed[i] * closed[i]; }
+            check (opened.size() > 48000 && 10 * std::log10 (d / (e + 1e-20)) > -6, "Moth Tune FX 2: a Momentary slot opens while a MIDI note is held (" + juce::String (10 * std::log10 (d / (e + 1e-20)), 1) + " dB of change)");
+            auto rests = [&] (int style)
+            {
+                auto o = render ([style] (SqTuneFxPlugin& f) { f.motionMode.setValue (4, nullptr); f.motionSync.setValue (2, nullptr); f.motionLen.setValue (4, nullptr); f.motionSteps.setValue ("0 x 0 x 0 0 0 0 0 0 0 0 0 0 0 0", nullptr); f.motionStyle.setValue (style, nullptr); }, false);
+                double en = 0; for (size_t i = 24000; i < o.size(); ++i) en += (double) o[i] * o[i]; return en;
+            };
+            const double hard = rests (0), legato = rests (2);
+            check (hard > 0 && 10 * std::log10 (hard / legato) < -2.0, "Moth Tune FX 2: Hard rests cut the note, Legato holds it (" + juce::String (10 * std::log10 (hard / legato), 1) + " dB)");
+            {
+                // the new modules on their own: EQ boosts where it is set, Fuzz keeps the level, Auto-Pan moves the image
+                SqVocalFx::Slot sl; sl.prepare (SR); sl.type = 17;
+                std::vector<float> l (48000), r; for (size_t i = 0; i < l.size(); ++i) l[i] = 0.1f * (float) std::sin (twoPi * 1000.0 * (double) i / SR); r = l;
+                const float x1k = (float) (std::log10 (1000.0 / 100.0) / 2.0);
+                sl.process (l.data(), r.data(), (int) l.size(), x1k, 1.0f, 1.0f, 0.0f, 120.0);
+                double eo = 0; for (size_t i = 24000; i < l.size(); ++i) eo += (double) l[i] * l[i];
+                const double boost = 10 * std::log10 (eo / 24000.0 / (0.01 * 0.5));
+                SqVocalFx::Slot fz; fz.prepare (SR); fz.type = 21; auto fl = tone (96000), fr = fl; auto fin = fl;
+                fz.process (fl.data(), fr.data(), (int) fl.size(), 0.8f, 0.5f, 1.0f, 0.0f, 120.0);
+                double ei = 0, ef = 0; for (size_t i = 48000; i < fl.size(); ++i) { ei += (double) fin[i] * fin[i]; ef += (double) fl[i] * fl[i]; }
+                SqVocalFx::Slot ap; ap.prepare (SR); ap.type = 20; auto pl = tone (96000), pr = pl;
+                ap.process (pl.data(), pr.data(), (int) pl.size(), 0.5f, 1.0f, 1.0f, 0.0f, 120.0);
+                float lo = 9, hi = -9; for (size_t w = 0; w + 4800 <= pl.size(); w += 4800) { double a = 0, b = 0; for (size_t i = w; i < w + 4800; ++i) { a += (double) pl[i] * pl[i]; b += (double) pr[i] * pr[i]; } const float bal = (float) (10 * std::log10 ((a + 1e-12) / (b + 1e-12))); lo = std::min (lo, bal); hi = std::max (hi, bal); }
+                check (std::abs (boost - 15.0) < 1.5 && std::abs (10 * std::log10 (ef / ei)) < 3.0 && hi - lo > 12.0f,
+                       "Moth Tune FX 2: EQ boosts 1 kHz by " + juce::String (boost, 1) + " dB, Fuzz keeps the level within " + juce::String (std::abs (10 * std::log10 (ef / ei)), 1) + " dB, Auto-Pan swings " + juce::String (hi - lo, 1) + " dB");
+            }
+            Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+            auto rep = session->sessionsDir.getChildFile ("preset-audit-e4.md");
+            auto& es = session->edit->state; juce::NamedValueSet savedKey;
+            for (auto id : { "sqmKeyRoot", "sqmKeyScale", "sqmKeyMap" }) if (es.hasProperty (id)) { savedKey.set (id, es[id]); es.removeProperty (id, nullptr); }
+            auto sum = PresetAudit::run (*session->edit, { "Moth Tune FX 2" }, { "sqmTuneFx" }, 3.0, rep);
+            for (auto& kv : savedKey) es.setProperty (kv.name, kv.value, nullptr);
+            juce::String firstFail; for (auto& row : sum.rows) if (! row.pass && firstFail.isEmpty()) firstFail = row.plugin + " / " + row.preset + ": " + row.why;
+            double maxCpu = 0; for (auto& row : sum.rows) maxCpu = juce::jmax (maxCpu, (double) row.cpuPercent);
+            check (sum.presets >= 140 && sum.failed == 0, "Phase E4: preset audit " + juce::String (sum.passed) + "/" + juce::String (sum.presets) + " pass (max CPU " + juce::String (maxCpu, 2) + " %)" + (firstFail.isNotEmpty() ? " first failure " + firstFail : juce::String()));
+            auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal/preset-audit-1.11-e4.md");
+            if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
+        }
         // ---------------------------------------------------------------- Phase C: Moth Tune 2, Moth Key, Siren Comp, Siren EQ, Hush De-Ess 2
         {
             std::cout << "  -- 1.11 Voice, first wave --\n";

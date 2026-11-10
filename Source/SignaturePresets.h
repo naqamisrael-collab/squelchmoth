@@ -51,6 +51,7 @@ namespace SignaturePresets
 #include "SignaturePresets111g.inl"
 #include "SignaturePresets111h.inl"
 #include "SignaturePresets111i.inl"
+#include "SignaturePresets111j.inl"
 
     inline const std::map<juce::String, std::vector<Preset>>& bank()
     {
@@ -729,31 +730,7 @@ namespace SignaturePresets
             A ("Vibrato Lift",         { N ("Retune Speed", 10), N ("Vibrato Keep", 0), N ("Vibrato Depth", 35), N ("Vibrato Rate", 5.6f), N ("Vibrato Delay", 0.25f), N ("Vibrato Onset", 0.35f), N ("Vibrato Variation", 25) }),
             A ("Talkbox Glide",        { N ("Retune Speed", 45), N ("Humanize", 0), N ("Vibrato Keep", 0), N ("Formant", 1.5f) }, { { "character", 0 } }) } },
 
-        // Moth Tune FX props: slotTypeN (0 empty, 1 Mutate, 2 Duet, 3 Vocode, 4 Tube, 5 Breath, 6 Reverb, 7 Echo, 8 Chorus, 9 Compress,
-        // 10 Low-pass, 11 High-pass, 12 Tilt EQ, 13 Octaver, 14 Bit-crush, 15 Talkbox, 16 Stutter), motionMode (0 off 1 auto 2 momentary 3 toggle 4 always),
-        // motionPattern (1-based factory pattern), engine (0 Live, 1 Studio).
-        { "Moth Tune FX", {
-            B ("Clean Hard Tune",      { N ("Retune Speed", 0), N ("Humanize", 0) }),
-            B ("Robot Voice",          { N ("Retune Speed", 0), N ("Slot 1 X", 0.5f), N ("Slot 1 Y", 0.15f), N ("Slot 1 Mix", 55), N ("Slot 2 X", 0.35f), N ("Slot 2 Y", 0.6f), N ("Slot 2 Mix", 100) },
-                                       { { "slotType1", 1 }, { "slotType2", 4 } }),
-            B ("Telephone Talk",       { N ("Retune Speed", 10), N ("Slot 1 X", 0.47f), N ("Slot 1 Y", 0.2f), N ("Slot 2 X", 0.66f), N ("Slot 2 Y", 0.25f), N ("Slot 3 X", 0.45f), N ("Slot 3 Y", 0.12f), N ("Slot 3 Mix", 70) },
-                                       { { "slotType1", 11 }, { "slotType2", 10 }, { "slotType3", 14 } }),
-            B ("Doubled Lead",         { N ("Retune Speed", 15), N ("Slot 1 X", 0.45f), N ("Slot 1 Y", 0.35f), N ("Slot 2 X", 0.45f), N ("Slot 2 Y", 0.5f), N ("Slot 2 Mix", 22) },
-                                       { { "slotType1", 2 }, { "slotType2", 6 } }),
-            B ("Vocoder Choir",        { N ("Retune Speed", 0), N ("Slot 1 X", 0.5f), N ("Slot 1 Y", 0.85f), N ("Slot 2 X", 0.35f), N ("Slot 2 Y", 0.6f), N ("Slot 2 Mix", 60), N ("Slot 3 X", 0.7f), N ("Slot 3 Y", 0.4f), N ("Slot 3 Mix", 30) },
-                                       { { "slotType1", 3 }, { "slotType2", 8 }, { "slotType3", 6 } }),
-            B ("Up Arp Motion",        { N ("Retune Speed", 0), N ("Motion Glide", 15), N ("Slot 1 X", 0.4f), N ("Slot 1 Y", 0.3f), N ("Slot 1 Mix", 30) }, { { "slotType1", 7 }, { "motionPattern", 1 }, { "motionMode", 1 } }),
-            A ("Trap Flip Motion",     { N ("Retune Speed", 0), N ("Motion Glide", 8) }, { { "motionPattern", 8 }, { "motionMode", 1 } }),
-            A ("Yodel Steps",          { N ("Retune Speed", 0), N ("Motion Glide", 30) }, { { "motionPattern", 9 }, { "motionMode", 1 } }),
-            A ("Talkbox Funk",         { N ("Retune Speed", 0), N ("Slot 1 X", 0.3f), N ("Slot 1 Y", 0.6f), N ("Slot 2 X", 0.3f), N ("Slot 2 Y", 0.5f), N ("Slot 3 X", 0.4f), N ("Slot 3 Y", 0.3f), N ("Slot 3 Mix", 30) },
-                                       { { "slotType1", 15 }, { "slotType2", 4 }, { "slotType3", 7 } }),
-            A ("Octave Monster",       { N ("Retune Speed", 0), N ("Slot 1 X", 0.85f), N ("Slot 1 Y", 0.3f), N ("Slot 2 X", 0.5f), N ("Slot 2 Y", 0.45f) }, { { "slotType1", 13 }, { "slotType2", 4 } }),
-            A ("Stutter Gate",         { N ("Retune Speed", 0), N ("Slot 1 X", 0.7f), N ("Slot 1 Y", 1.0f), N ("Slot 2 X", 0.3f), N ("Slot 2 Y", 0.35f), N ("Slot 2 Mix", 35) }, { { "slotType1", 16 }, { "slotType2", 7 } }),
-            A ("Alien Mutation",       { N ("Retune Speed", 0), N ("Formant", 5), N ("Slot 1 X", 0.8f), N ("Slot 1 Y", 0.8f), N ("Slot 1 Mix", 70), N ("Slot 2 X", 0.7f), N ("Slot 2 Y", 0.8f), N ("Slot 3 X", 0.8f), N ("Slot 3 Y", 0.2f), N ("Slot 3 Mix", 40) },
-                                       { { "slotType1", 1 }, { "slotType2", 8 }, { "slotType3", 6 } }),
-            A ("Breathy Air",          { N ("Retune Speed", 20), N ("Humanize", 30), N ("Slot 1 X", 0.5f), N ("Slot 1 Y", 0.6f), N ("Slot 2 X", 0.62f), N ("Slot 2 Y", 0.6f) }, { { "slotType1", 5 }, { "slotType2", 12 } }),
-            A ("Lo-Fi Radio",          { N ("Retune Speed", 10), N ("Slot 1 X", 0.55f), N ("Slot 1 Y", 0.25f), N ("Slot 2 X", 0.42f), N ("Slot 2 Y", 0.3f), N ("Slot 3 X", 0.62f), N ("Slot 3 Y", 0.3f), N ("Slot 4 X", 0.4f), N ("Slot 4 Y", 0.6f) },
-                                       { { "slotType1", 14 }, { "slotType2", 11 }, { "slotType3", 10 }, { "slotType4", 9 } }) } },
+        // Moth Tune FX 2: its 140 presets are generated (scripts/gen_presets_111j.py -> SignaturePresets111j.inl).
 
         //==================================================================== Apex Series
         // Apex Dynamics props: mode (0 compress 1 expand 2 gate 3 duck 4 upward), detection (0 smart 1 rms 2 average 3 peak 4 fast),
@@ -964,6 +941,7 @@ namespace SignaturePresets
             add111g (base);   // 1.11 Voice, second wave (part 1)
             add111h (base);   // 1.11 Voice, second wave (part 2)
             add111i (base);   // 1.11 Voice, second wave (part 3)
+            add111j (base);   // 1.11 Voice, second wave (part 4): Moth Tune FX 2
             return base; }();
         return b;
     }
