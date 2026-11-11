@@ -69,6 +69,16 @@ namespace PresetAudit
         return s;
     }
 
+    /** Milliseconds of CPU this thread has used (POSIX), so time the OS spends on other work doesn't count against a
+        plug-in. Windows keeps the wall clock (its thread timer only ticks every ~16 ms). */
+    inline double threadCpuMs()
+    {
+       #if JUCE_MAC || JUCE_LINUX
+        timespec ts {}; if (clock_gettime (CLOCK_THREAD_CPUTIME_ID, &ts) == 0) return ts.tv_sec * 1000.0 + ts.tv_nsec / 1.0e6;
+       #endif
+        return juce::Time::getMillisecondCounterHiRes();
+    }
+
     /** Renders one preset through a private copy of the plug-in. */
     inline Row auditPreset (te::Edit& edit, const Signature::Entry& e, const Signature::Preset& pr, double sr, double seconds, bool strictLevel)
     {
@@ -100,9 +110,9 @@ namespace PresetAudit
                 midi.clear();
                 const double t0 = (double) p / sr, t1 = t0 + block / sr;
                 te::PluginRenderContext fc (&buf, 0, block, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (t0), te::TimePosition::fromSeconds (t1)), true, false, true, false);
-                const double c0 = juce::Time::getMillisecondCounterHiRes();
+                const double c0 = threadCpuMs();
                 pp->applyToBuffer (fc);
-                busy += juce::Time::getMillisecondCounterHiRes() - c0; total += block / sr * 1000.0;
+                busy += threadCpuMs() - c0; total += block / sr * 1000.0;
                 for (int ch = 0; ch < 2; ++ch)
                     for (int i = 0; i < block; ++i)
                     {
@@ -128,9 +138,9 @@ namespace PresetAudit
                 midi.clear();
                 const double t0 = (double) p / sr, t1 = t0 + block / sr;
                 te::PluginRenderContext fc (&buf, 0, block, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (t0), te::TimePosition::fromSeconds (t1)), true, false, true, false);
-                const double c0 = juce::Time::getMillisecondCounterHiRes();
+                const double c0 = threadCpuMs();
                 pp->applyToBuffer (fc);
-                b2 += juce::Time::getMillisecondCounterHiRes() - c0; t2 += block / sr * 1000.0;
+                b2 += threadCpuMs() - c0; t2 += block / sr * 1000.0;
             }
             row.cpuPercent = juce::jmin (row.cpuPercent, (float) (100.0 * b2 / juce::jmax (1.0, t2)));
         }
