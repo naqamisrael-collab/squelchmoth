@@ -208,7 +208,7 @@ namespace HiveChains
             { "Sound Design | Resonant Cluster", "Sound Design", 0, { { "Larva Filter 2", "Sound Design | Resonant Cluster" }, { "Foil Plate", "Infinite / Pads | Endless Gold" } }, 0.0f, 250.0f },
             { "Sound Design | Freeze Beat", "Sound Design", 0, { { "Time Weaver", "FX | Freeze Beat 1" }, { "Murmuration", "Freeze Pads | Sustain Cloud" } }, 0.0f, 250.0f },
             { "Sound Design | Destroyed", "Sound Design", 0, { { "Grit Bits", "Destroyed" }, { "Maw Lite", "Drums | Max Crush" } }, 0.0f, 250.0f },
-            { "Sound Design | Crunch Choir", "Sound Design", 0, { { "Masquerade", "Sound Design | Crunch Choir" }, { "Murmuration", "Swells | Choir Swell" } }, 0.0f, 250.0f },
+            { "Sound Design | Crunch Choir", "Sound Design", 0, { { "Hive Choir", "Choir | Small Ensemble" }, { "Cinder", "Vocal | Gritty Rap Edge" }, { "Murmuration", "Swells | Choir Swell" } }, 0.0f, 250.0f },
             { "Sound Design | Recycled Glitch", "Sound Design", 0, { { "Shard", "Glitch | Glitch Arp" }, { "Larva Filter 2", "Sweeps | Sample Hold Steps" } }, 45.0f, 250.0f },
         };
         return c;

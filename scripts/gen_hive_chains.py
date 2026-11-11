@@ -234,7 +234,7 @@ C(X, 'Sci-Fi Tail', [('Starfield', 'Sci-Fi Tail'), ('Halo Ring', 'Square Warble'
 C(X, 'Resonant Cluster', [('Larva Filter 2', 'Resonant Cluster'), ('Foil Plate', 'Endless Gold')])
 C(X, 'Freeze Beat', [('Time Weaver', 'Freeze Beat'), ('Murmuration', 'Sustain Cloud')])
 C(X, 'Destroyed', [('Grit Bits', 'Destroyed'), ('Maw Lite', 'Max Crush')])
-C(X, 'Crunch Choir', [('Masquerade', 'Crunch Choir'), ('Murmuration', 'Choir Swell')])
+C(X, 'Crunch Choir', [('Hive Choir', 'Small Ensemble'), ('Cinder', 'Gritty Rap Edge'), ('Murmuration', 'Choir Swell')])
 C(X, 'Recycled Glitch', [('Shard', 'Glitch Arp'), ('Larva Filter 2', 'Sample Hold Steps')])
 
 RECYCLE = {'Spaces | Echo Recycle Wash': (35, 375), 'Sound Design | Recycled Glitch': (45, 250)}
