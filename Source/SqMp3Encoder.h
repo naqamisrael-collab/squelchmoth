@@ -251,7 +251,7 @@ namespace SqMp3
             const int sideBytes = nch == 2 ? 32 : 17;
             const double quality = settings.vbr ? 4.0 - (double) settings.vbrQuality * 2.0 : 0.0;   // V0 keeps noise 4 dB under the mask, V4 lets it 4 dB over
             Granule g[2][2];
-            const int reservoir = (int) juce::jlimit<int64_t> (0, 511, slotsTotal - mainEnd);
+            const int reservoir = (int) std::clamp<int64_t> (slotsTotal - mainEnd, 0, 511);
             int frameBr = brIndex;
             if (! settings.vbr)
             {
@@ -352,7 +352,7 @@ namespace SqMp3
                     out.writeByte ((char) b);
                 }
                 audioBytes += (int64_t) f.headerAndSide.size() + f.slotBytes;
-                const int64_t drop = juce::jmin<int64_t> ((int64_t) mainStream.size(), need - mainStreamBase - 600);
+                const int64_t drop = std::min<int64_t> ((int64_t) mainStream.size(), need - mainStreamBase - 600);
                 if (drop > 4096) { mainStream.erase (mainStream.begin(), mainStream.begin() + (ptrdiff_t) drop); mainStreamBase += drop; }
                 ++framesWritten;
                 pending.pop_front();
@@ -774,7 +774,7 @@ namespace SqMp3
         juce::WindowedSincInterpolator interp[2];
         for (juce::int64 pos = 0; pos < rd->lengthInSamples + (ratio != 1.0 ? block : 0); pos += block)
         {
-            const int n = (int) juce::jlimit<juce::int64> (0, block, rd->lengthInSamples - pos);
+            const int n = (int) std::clamp<juce::int64> (rd->lengthInSamples - pos, 0, block);
             if (n > 0) rd->read (&in, 0, n, pos, true, nch > 1); else in.clear();
             const int got = n > 0 ? n : block;   // one extra block of silence flushes the resampler
             if (ratio == 1.0)

@@ -3135,7 +3135,7 @@ inline int runSelfTest()
                 const size_t a2 = id3 + (size_t) frameLen;
                 if (a2 + 3 < n && d[a2] == 0xFF) kbps = brs[d[a2 + 2] >> 4];
             }
-            auto findBytes = [&] (const char* what, size_t len) { for (size_t i = 0; i + len <= juce::jmin<size_t> (n, 4096); ++i) if (memcmp (d + i, what, len) == 0) return true; return false; };
+            auto findBytes = [&] (const char* what, size_t len) { for (size_t i = 0; i + len <= std::min<size_t> (n, 4096); ++i) if (memcmp (d + i, what, len) == 0) return true; return false; };
             const bool hasTitle = id3 > 0 && findBytes ("TIT2", 4) && findBytes ("TPE1", 4) && findBytes ("S\0e\0l\0f\0t\0e\0s\0t\0", 16);
             check (dec.getNumSamples() > (int) (5.5 * rate) && corr > 0.99 && std::abs (lvl) < 0.5 && kbps == 320 && info && hasTitle,
                    "MP3 export (own encoder): 320 kb/s CBR decodes with correlation " + juce::String (corr, 4) + ", level " + juce::String (lvl, 2) + " dB, header " + juce::String (kbps)
