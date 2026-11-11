@@ -218,8 +218,66 @@ void registerMasteringTools()
              return ToolResult::ok (res);
          });
 
-    add ("mastering_publish", "Export the album. kind: 'digital' (one tagged file per track; format wav|aiff|flac|ogg, bit_depth 16|24|32, sample_rate, loudness_target = a service name like 'spotify', 'apple', 'youtube', 'amazon', 'tidal', 'deezer', 'cd' or 'custom' with target_lufs / max_true_peak, album_mode), 'image' (one WAV + CUE), 'ddp' (DDP 2.00 fileset for the pressing plant). folder optional.",
-         R"json({"type":"object","properties":{"kind":{"type":"string","enum":["digital","image","ddp"]},"format":{"type":"string"},"bit_depth":{"type":"integer"},"sample_rate":{"type":"number"},"loudness_target":{"type":"string"},"target_lufs":{"type":"number"},"max_true_peak":{"type":"number"},"album_mode":{"type":"boolean"},"folder":{"type":"string"}},"required":["kind"]})json",
+    add ("mastering_macro", "Track macros (1.12, Studio One's Track Editor macros): 'save' a track's whole device rack + fader + fades under a name, 'apply' a macro to tracks (a list, or 'all' for every enabled track; fades:false keeps their fades), 'list' or 'delete'.",
+         R"json({"type":"object","properties":{"action":{"type":"string","enum":["save","apply","list","delete"]},"name":{"type":"string"},"track":{"type":["string","integer"]},"tracks":{"type":["array","string"],"items":{"type":["string","integer"]}},"fades":{"type":"boolean"}},"required":["action"]})json",
+         [this, needOpen, trackArgM] (const juce::var& a)
+         {
+             const auto act = str (a, "action");
+             if (act == "list") { juce::Array<juce::var> arr; for (auto& n : MasteringMacros::names()) arr.add (n); auto o = obj(); set (o, "macros", arr); set (o, "folder", MasteringMacros::folder().getFullPathName()); return ToolResult::ok (o); }
+             if (act == "delete") return MasteringMacros::remove (str (a, "name")) ? ToolResult::ok ("Deleted macro " + str (a, "name")) : ToolResult::error ("No macro called '" + str (a, "name") + "'");
+             juce::String err; auto p = needOpen (err); if (! p) return ToolResult::error (err);
+             if (act == "save")
+             {
+                 auto t = trackArgM (*p, a, err); if (! t) return ToolResult::error (err);
+                 const int n = MasteringMacros::save (*p, *t, str (a, "name"), err);
+                 if (n < 0) return ToolResult::error (err);
+                 return ToolResult::ok ("Saved macro '" + str (a, "name") + "' from " + t->getName() + ": " + juce::String (n) + " rack plug-in(s), fader and fades");
+             }
+             if (act == "apply")
+             {
+                 juce::Array<te::AudioTrack*> targets;
+                 if (a["tracks"].toString().equalsIgnoreCase ("all")) { for (auto t : p->tracks()) if (MasteringProject::enabledOf (*t)) targets.add (t); }
+                 else if (auto arr = a["tracks"].getArray()) { for (auto& v : *arr) { auto ta = obj(); set (ta, "track", v); if (auto t = trackArgM (*p, ta, err)) targets.add (t); else return ToolResult::error (err); } }
+                 else if (has (a, "track")) { if (auto t = trackArgM (*p, a, err)) targets.add (t); else return ToolResult::error (err); }
+                 if (targets.isEmpty()) return ToolResult::error ("Give tracks (a list or 'all') or track");
+                 juce::StringArray done; juce::String warn;
+                 for (auto t : targets)
+                 {
+                     const int n = MasteringMacros::apply (*p, *t, str (a, "name"), err, ! has (a, "fades") || flag (a, "fades"));
+                     if (n < 0) return ToolResult::error (err);
+                     if (err.isNotEmpty()) warn = err;
+                     done.add (t->getName());
+                 }
+                 return ToolResult::ok ("Applied '" + str (a, "name") + "' to " + done.joinIntoString (", ") + (warn.isNotEmpty() ? ". " + warn : juce::String()));
+             }
+             return ToolResult::error ("action: save, apply, list or delete");
+         });
+
+    add ("mastering_spectrum", "The Mastering window's spectrum as numbers (1.12): fractional-octave band levels (resolution 'octave', 'third' or 'twelfth') in dBFS, each band centred on 1 kHz x 2^(k/n), plus the loudest band. Optional min_hz / max_hz to narrow the list.",
+         R"json({"type":"object","properties":{"resolution":{"type":"string","enum":["octave","third","twelfth"]},"min_hz":{"type":"number"},"max_hz":{"type":"number"}},"required":[]})json",
+         [this, needOpen] (const juce::var& a)
+         {
+             juce::String err; auto p = needOpen (err); if (! p) return ToolResult::error (err);
+             p->hub.update();
+             const auto res = str (a, "resolution", "third");
+             const int per = res == "octave" ? 1 : res == "twelfth" ? 12 : 3;
+             auto bands = SpectrumBands::compute (p->hub.spectrum, p->hub.sr, per);
+             const double lo = num (a, "min_hz", 0.0), hi = num (a, "max_hz", 1.0e9);
+             juce::Array<juce::var> arr; const SpectrumBands::Band* loudest = nullptr;
+             for (auto& b : bands)
+             {
+                 if (loudest == nullptr || b.db > loudest->db) loudest = &b;
+                 if (b.centre < lo || b.centre > hi) continue;
+                 auto o = obj(); set (o, "hz", juce::roundToInt (b.centre * 10.0f) / 10.0); set (o, "db", juce::roundToInt (b.db * 10.0f) / 10.0); arr.add (o);
+             }
+             auto out = obj(); set (out, "resolution", res); set (out, "bands", arr);
+             if (loudest != nullptr) { set (out, "loudest_hz", loudest->centre); set (out, "loudest_db", loudest->db); }
+             set (out, "playing", p->isPlaying());
+             return ToolResult::ok (out);
+         });
+
+    add ("mastering_publish", "Export the album. kind: 'digital' (one tagged file per track; format wav|aiff|flac|ogg|mp3 (mp3_bitrate 128-320 or mp3_vbr_quality 0-4; ID3-tagged with title, artist, album, track, year, genre, ISRC), bit_depth 16|24|32, sample_rate, loudness_target = a service name like 'spotify', 'apple', 'youtube', 'amazon', 'tidal', 'deezer', 'cd' or 'custom' with target_lufs / max_true_peak, album_mode), 'image' (one WAV + CUE), 'ddp' (DDP 2.00 fileset for the pressing plant). folder optional.",
+         R"json({"type":"object","properties":{"kind":{"type":"string","enum":["digital","image","ddp"]},"format":{"type":"string"},"mp3_bitrate":{"type":"integer"},"mp3_vbr_quality":{"type":"integer"},"bit_depth":{"type":"integer"},"sample_rate":{"type":"number"},"loudness_target":{"type":"string"},"target_lufs":{"type":"number"},"max_true_peak":{"type":"number"},"album_mode":{"type":"boolean"},"folder":{"type":"string"}},"required":["kind"]})json",
          [needOpen] (const juce::var& a)
          {
              juce::String err; auto p = needOpen (err); if (! p) return ToolResult::error (err);
@@ -231,6 +289,7 @@ void registerMasteringTools()
              if (kind == "ddp") { auto f = folder != juce::File() ? folder : p->defaultReleaseFolder().getChildFile (p->projectName() + " DDP"); if (! p->publishDDP (f, report)) return ToolResult::error (report); auto res = obj(); set (res, "folder", f.getFullPathName()); set (res, "report", report); return ToolResult::ok (res); }
              MasteringProject::PublishOptions o;
              o.format = str (a, "format", "wav").toLowerCase(); o.bitDepth = (int) num (a, "bit_depth", 24); o.sampleRate = num (a, "sample_rate", 44100.0); o.albumMode = flag (a, "album_mode"); o.folder = folder;
+             o.mp3Bitrate = (int) num (a, "mp3_bitrate", 320); o.mp3VbrQuality = has (a, "mp3_vbr_quality") ? (int) num (a, "mp3_vbr_quality") : -1;
              auto lt = str (a, "loudness_target").toLowerCase();
              auto& targets = loudnessTargets();
              if (lt.isNotEmpty() && lt != "off")

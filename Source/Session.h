@@ -8,6 +8,7 @@
 #include "Edition.h"
 #include "Prefs.h"
 #include "StereoPan.h"
+#include "ExternalFx.h"
 #include "Analyzer.h"
 #include "CrashGuard.h"
 #include "PluginCatalog.h"
@@ -650,7 +651,7 @@ public:
             if (t != nullptr && (p == t->getVolumePlugin() || p == t->getLevelMeterPlugin()))
                 continue;
             if (dynamic_cast<te::AuxSendPlugin*> (p) != nullptr || dynamic_cast<te::LevelMeterPlugin*> (p) != nullptr || dynamic_cast<te::VCAPlugin*> (p) != nullptr
-                || dynamic_cast<SqStereoPanPlugin*> (p) != nullptr || dynamic_cast<SqMonoSumPlugin*> (p) != nullptr || dynamic_cast<te::AuxReturnPlugin*> (p) != nullptr || dynamic_cast<SqAnalyzerPlugin*> (p) != nullptr)
+                || dynamic_cast<SqStereoPanPlugin*> (p) != nullptr || dynamic_cast<SqMonoSumPlugin*> (p) != nullptr || dynamic_cast<SqMuteAutoPlugin*> (p) != nullptr || dynamic_cast<te::AuxReturnPlugin*> (p) != nullptr || dynamic_cast<SqAnalyzerPlugin*> (p) != nullptr)
                 continue;
             if (dynamic_cast<te::VolumeAndPanPlugin*> (p) != nullptr && t == nullptr)
                 continue;
@@ -670,7 +671,7 @@ public:
         for (int i = 0; i < plugins.size(); ++i)
         {
             auto p = plugins[i].get();
-            if (dynamic_cast<SqStereoPanPlugin*> (p) != nullptr || dynamic_cast<te::AuxSendPlugin*> (p) != nullptr || dynamic_cast<SqStripTapPlugin*> (p) != nullptr || (vol != nullptr && p == vol) || (meter != nullptr && p == meter)
+            if (dynamic_cast<SqStereoPanPlugin*> (p) != nullptr || dynamic_cast<SqMuteAutoPlugin*> (p) != nullptr || dynamic_cast<te::AuxSendPlugin*> (p) != nullptr || dynamic_cast<SqStripTapPlugin*> (p) != nullptr || (vol != nullptr && p == vol) || (meter != nullptr && p == meter)
                 || p->state.getProperty ("sqmDynRole").toString() == "limit" || (bool) p->state.getProperty ("sqmMonitorOnly", false))   // 1.10: the console's LIMIT slot stays last before the fader
                 return i;
         }
@@ -730,6 +731,29 @@ public:
             return sp;
         }
         return nullptr;
+    }
+
+    //==============================================================================
+    // 1.12: the Mute automation lane (a hidden gain stage just before the fader)
+    static SqMuteAutoPlugin* getMuteAuto (te::Track& t)
+    {
+        for (auto p : t.pluginList.getPlugins())
+            if (auto m = dynamic_cast<SqMuteAutoPlugin*> (p)) return m;
+        return nullptr;
+    }
+
+    SqMuteAutoPlugin* ensureMuteAuto (te::Track& t)
+    {
+        if (auto m = getMuteAuto (t)) return m;
+        if (edit == nullptr || t.isMasterTrack()) return nullptr;
+        te::Plugin* vol = nullptr;
+        if (auto a = dynamic_cast<te::AudioTrack*> (&t)) vol = a->getVolumePlugin();
+        else if (auto f = dynamic_cast<te::FolderTrack*> (&t)) vol = f->getVolumePlugin();
+        if (vol == nullptr) return nullptr;
+        auto p = edit->getPluginCache().createNewPlugin (SqMuteAutoPlugin::xmlTypeName, {});
+        if (p == nullptr) return nullptr;
+        t.pluginList.insertPlugin (p, t.pluginList.indexOf (vol), nullptr);
+        return dynamic_cast<SqMuteAutoPlugin*> (p.get());
     }
 
     int getPanLaw() const        { return edit != nullptr ? (int) edit->state.getProperty ("sqmPanLaw", Prefs::getInt ("mx_panLaw", (int) te::PanLaw3dBCenter)) : Prefs::getInt ("mx_panLaw", (int) te::PanLaw3dBCenter); }

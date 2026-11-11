@@ -682,6 +682,8 @@ public:
             m.addItem (400, "Mute / Unmute  (" SQ_CMD "+M)", clipSel); m.addItem (401, "Lock / Unlock position", clipSel);
             m.addItem (402, "Rename...", clipSel);
             m.addItem (403, "Spot...", clipSel);
+            m.addItem (404, "Identify Sync Point at the playhead  (" SQ_CMD "+Shift+,)", clipSel);
+            m.addItem (405, "Remove Sync Point", clipSel);
             m.addSeparator();
             juce::PopupMenu gain;
             gain.addItem (410, "+1 dB", audioSel); gain.addItem (411, "-1 dB", audioSel); gain.addItem (412, "+3 dB", audioSel); gain.addItem (413, "-3 dB", audioSel); gain.addItem (414, "Reset", audioSel); gain.addItem (415, "Normalise to -1 dBFS (clip gain)", audioSel);
@@ -2057,6 +2059,8 @@ private:
         else if (id == 401) for (auto& c : st.selectedClips) c->state.setProperty ("sqmLocked", ! (bool) c->state.getProperty ("sqmLocked", false), nullptr);
         else if (id == 402) { if (st.selectedClip) timeline.getCanvas().renameClip (st.selectedClip); }
         else if (id == 403) { if (st.selectedClip) timeline.getCanvas().spotDialog (st.selectedClip); }
+        else if (id == 404) timeline.keyPressed (juce::KeyPress (',', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0));
+        else if (id == 405) for (auto& c : st.selectedClips) EditOps::clearSyncPoint (*c);
         else if (id == 410) forAudio ([] (auto& a) { a.setGainDB (a.getGainDB() + 1); });
         else if (id == 411) forAudio ([] (auto& a) { a.setGainDB (a.getGainDB() - 1); });
         else if (id == 412) forAudio ([] (auto& a) { a.setGainDB (a.getGainDB() + 3); });

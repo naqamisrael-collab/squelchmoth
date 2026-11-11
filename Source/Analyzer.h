@@ -216,7 +216,7 @@ public:
                 std::fill (fftData.begin() + size, fftData.end(), 0.0f);
                 window.multiplyWithWindowingTable (fftData.data(), (size_t) size);
                 fft.performFrequencyOnlyForwardTransform (fftData.data());
-                const float norm = 2.0f / (float) size * 2.0f;    // Hann window gain compensation
+                const float norm = 2.0f / (float) size;           // JUCE normalises the Hann window, so a sine reads its own peak level (1.12: was 6 dB high)
                 for (int b = 0; b < size / 2; ++b)
                 {
                     auto db = juce::Decibels::gainToDecibels (fftData[(size_t) b] * norm, -100.0f);
@@ -224,6 +224,7 @@ public:
                     if (db > peaks[b]) peaks[b] = db; else peaks[b] -= peakDecayDb;
                 }
                 ready = true;
+                ++frames;
             }
         }
     }
@@ -232,6 +233,7 @@ public:
     float magnitudes[size / 2], peaks[size / 2];
     float decayDb = 1.5f, peakDecayDb = 0.05f;
     bool ready = false;
+    int frames = 0;   // 1.12: counts finished FFT frames (the waterfall / sonogram add a row per frame)
 
 private:
     juce::dsp::FFT fft;
@@ -239,6 +241,86 @@ private:
     std::array<float, (size_t) size> fifo {};
     std::array<float, (size_t) size * 2> fftData {};
     int fifoIndex = 0;
+};
+
+//==============================================================================
+/** 1.12: fractional-octave bands as a real analyser measures them (Studio One's Octave / 1/3 / 1/12 views): bands
+    centred on 1 kHz * 2^(k/n), edges half a band either side, level = the power of every FFT bin inside the band,
+    corrected for the Hann window's noise bandwidth, so a sine reads its own level in its band. Bands narrower than an
+    FFT bin read the spectrum interpolated at the band centre. */
+namespace SpectrumBands
+{
+    struct Band { float lo, hi, centre, db; };
+
+    inline std::vector<Band> compute (const float* magsDb, int nBins, int fftSize, double sr, int perOctave)
+    {
+        std::vector<Band> out;
+        const double binHz = sr / fftSize;
+        const int kLo = (int) std::ceil (perOctave * std::log2 (19.5 / 1000.0)), kHi = (int) std::floor (perOctave * std::log2 (20500.0 / 1000.0));   // ISO: 20 Hz - 20 kHz nominal
+        for (int k = kLo; k <= kHi; ++k)
+        {
+            const double fc = 1000.0 * std::pow (2.0, (double) k / perOctave);
+            const double lo = fc * std::pow (2.0, -0.5 / perOctave), hi = fc * std::pow (2.0, 0.5 / perOctave);
+            double pw = 0; int n = 0;
+            for (int b = juce::jmax (1, (int) std::ceil (lo / binHz)); b < nBins && b * binHz < hi; ++b) { pw += std::pow (10.0, magsDb[b] / 10.0); ++n; }
+            float db;
+            if (n > 0) db = (float) (10.0 * std::log10 (juce::jmax (1.0e-12, pw / 1.5)));   // Hann: 1.5 bins of noise bandwidth
+            else
+            {
+                const double x = fc / binHz; const int b0 = juce::jlimit (1, nBins - 2, (int) x); const double fr = juce::jlimit (0.0, 1.0, x - b0);
+                db = (float) (magsDb[b0] * (1.0 - fr) + magsDb[b0 + 1] * fr);
+            }
+            out.push_back ({ (float) lo, (float) hi, (float) fc, juce::jmax (-100.0f, db) });
+        }
+        return out;
+    }
+
+    inline std::vector<Band> compute (const SpectrumAnalyser& sp, double sr, int perOctave)
+    {
+        return compute (sp.magnitudes, SpectrumAnalyser::size / 2, SpectrumAnalyser::size, sr, perOctave);
+    }
+}
+
+/** 1.12: the last N spectra for the Waterfall and Sonogram views, resampled to 1/24-octave columns (20 Hz - 20 kHz). */
+struct SpectrumHistory
+{
+    static constexpr int columns = 240;   // 10 octaves x 24
+    std::vector<std::array<float, columns>> rows;   // newest last
+    int lastFrame = -1, maxRows = 240;
+
+    static float columnHz (int c)        { return 20.0f * std::pow (2.0f, (float) c / 24.0f); }
+
+    /** Adds a row when the analyser has finished a new frame. Returns true if one was added. */
+    bool update (const SpectrumAnalyser& sp, double sr)
+    {
+        if (! sp.ready || sp.frames == lastFrame) return false;
+        lastFrame = sp.frames;
+        std::array<float, columns> row {};
+        const double binHz = sr / SpectrumAnalyser::size;
+        for (int c = 0; c < columns; ++c)
+        {
+            const double f0 = columnHz (c), f1 = columnHz (c + 1);
+            float m = -100.0f; bool any = false;
+            for (int b = juce::jmax (1, (int) std::ceil (f0 / binHz)); b < SpectrumAnalyser::size / 2 && b * binHz < f1; ++b) { m = juce::jmax (m, sp.magnitudes[b]); any = true; }
+            if (! any) { const double x = 0.5 * (f0 + f1) / binHz; const int b0 = juce::jlimit (1, SpectrumAnalyser::size / 2 - 2, (int) x); const float fr = (float) (x - b0); m = sp.magnitudes[b0] * (1.0f - fr) + sp.magnitudes[b0 + 1] * fr; }
+            row[(size_t) c] = m;
+        }
+        rows.push_back (row);
+        while ((int) rows.size() > maxRows) rows.erase (rows.begin());
+        return true;
+    }
+
+    /** Sonogram colour map: black - violet - magenta - orange - yellow - white over -90..0 dBFS. */
+    static juce::Colour colourFor (float db)
+    {
+        const float t = juce::jlimit (0.0f, 1.0f, (db + 90.0f) / 90.0f);
+        static const juce::Colour stops[] = { juce::Colour (0xff07040c), juce::Colour (0xff3a0f6e), juce::Colour (0xffb0207a), juce::Colour (0xfff26b1d), juce::Colour (0xfff9d84a), juce::Colour (0xffffffff) };
+        const float x = t * 5.0f; const int i = juce::jmin (4, (int) x);
+        return stops[i].interpolatedWith (stops[i + 1], x - (float) i);
+    }
+
+    /** Rows to keep for a history length in seconds at this rate (one row per 4096-sample frame). */
+    static int rowsFor (double seconds, double sr)   { return juce::jlimit (8, 2000, (int) std::ceil (seconds * sr / SpectrumAnalyser::size)); }
 };
 
 //==============================================================================

@@ -1364,7 +1364,7 @@ private:
              });
 
         add ("write_automation",
-             "Write automation points. target: 'volume' (dB), 'pan' (-1..1), or a plugin parameter via slot + param (value 0..1 normalised). Points: [{bar or seconds, value}]. clear_first removes existing points in that range.",
+             "Write automation points. target: 'volume' (dB), 'pan' (-1..1), 'mute' (value true = muted / false = playing from that point on; Pro Tools' mute lane, click-free), or a plugin parameter via slot + param (value 0..1 normalised). Points: [{bar or seconds, value}]. clear_first removes existing points in that range.",
              R"({"type":"object","properties":{"track":{"type":["string","integer"]},"target":{"type":"string"},"slot":{"type":["string","integer"]},"param":{"type":["string","integer"]},"clear_first":{"type":"boolean"},"points":{"type":"array","items":{"type":"object","properties":{"bar":{"type":"number"},"seconds":{"type":"number"},"value":{"type":"number"},"curve":{"type":"number"}},"required":["value"]}}},"required":["track","points"]})",
              [this] (const juce::var& a)
              {
@@ -1382,6 +1382,36 @@ private:
                      vp = t->getVolumePlugin();
                  }
 
+                 if (target == "mute")
+                 {
+                     // 1.12: the Mute lane - each point switches the track muted (true / 1) or playing (false / 0) from its time on
+                     auto t = trackArg (a, err);
+                     if (t == nullptr) return ToolResult::error (err);
+                     auto m = session.ensureMuteAuto (*t);
+                     if (m == nullptr) return ToolResult::error ("This track has no Mute lane");
+                     auto& curve = m->mute->getCurve();
+                     juce::Array<std::pair<te::TimePosition, bool>> sw;
+                     if (auto arr = a["points"].getArray())
+                         for (auto& pv : *arr)
+                         {
+                             te::TimePosition time = pv.hasProperty ("bar") ? session.barToTime ((double) pv["bar"]) : te::TimePosition::fromSeconds ((double) pv["seconds"]);
+                             const auto& vv = pv["value"];
+                             const bool on = vv.isBool() ? (bool) vv : vv.isString() ? (vv.toString().equalsIgnoreCase ("muted") || vv.toString().equalsIgnoreCase ("on") || vv.toString() == "1") : (double) vv >= 0.5;
+                             sw.add ({ time, on });
+                         }
+                     if (sw.isEmpty()) return ToolResult::error ("No points");
+                     std::sort (sw.begin(), sw.end(), [] (auto& x, auto& y) { return x.first < y.first; });
+                     const auto eps = te::TimeDuration::fromSeconds (0.001);
+                     if (flag (a, "clear_first")) curve.removePointsInRegion ({ sw.getFirst().first - eps, sw.getLast().first + eps }, um());
+                     for (auto& [time, on] : sw)
+                     {
+                         const bool before = MuteLane::valueAt (curve, time - eps, 0.0f);
+                         if (before != on && time.inSeconds() >= 0.001) curve.addPoint (time - eps, before ? 1.0f : 0.0f, 0.0f, um());
+                         curve.addPoint (time, on ? 1.0f : 0.0f, 0.0f, um());
+                     }
+                     m->mute->updateStream();
+                     return ToolResult::ok ("Wrote " + juce::String (sw.size()) + " mute switches on " + t->getName() + ". Mute lane now has " + juce::String (curve.getNumPoints()) + " points.");
+                 }
                  if (target == "volume")      { param = vp->volParam.get(); isVolume = true; }
                  else if (target == "pan")    param = vp->panParam.get();
                  else
@@ -1416,14 +1446,21 @@ private:
                                         + ". Curve now has " + juce::String (curve.getNumPoints()) + " points.");
              });
 
-        add ("clear_automation", "Remove all automation from a track's volume/pan or a plugin parameter.",
+        add ("clear_automation", "Remove all automation from a track's volume/pan/mute or a plugin parameter.",
              R"({"type":"object","properties":{"track":{"type":["string","integer"]},"target":{"type":"string"},"slot":{"type":["string","integer"]},"param":{"type":["string","integer"]}},"required":["track"]})",
              [this] (const juce::var& a)
              {
                  juce::String err;
                  auto target = str (a, "target", has (a, "param") ? "plugin" : "volume");
                  te::AutomatableParameter* param = nullptr;
-                 if (target == "volume" || target == "pan")
+                 if (target == "mute")
+                 {
+                     auto t = trackArg (a, err);
+                     if (t == nullptr) return ToolResult::error (err);
+                     if (auto m = Session::getMuteAuto (*t)) param = m->mute.get();
+                     else return ToolResult::ok ("No mute automation on " + t->getName());
+                 }
+                 else if (target == "volume" || target == "pan")
                  {
                      auto t = trackArg (a, err);
                      if (t == nullptr) return ToolResult::error (err);
@@ -1438,7 +1475,7 @@ private:
 
         add ("bounce",
              "Bounce (export) the mix to an audio file - like Pro Tools Bounce Mix, offline. Defaults: whole session, WAV 24-bit with dither at the SESSION sample rate, master inserts included, into the Bounces folder. Optional: start/end in bars or seconds (or use_selection), tail_seconds for reverb tails, tracks (array) to bounce only some tracks, format wav|aiff|flac, bit_depth 16|24|32 (32 = float), sample_rate, dither, master_inserts, normalize_lufs (e.g. -14 for streaming; true peak held under -1 dBTP).",
-             R"({"type":"object","properties":{"name":{"type":"string"},"path":{"type":"string"},"start_bar":{"type":"number"},"end_bar":{"type":"number"},"start_seconds":{"type":"number"},"end_seconds":{"type":"number"},"use_selection":{"type":"boolean"},"tail_seconds":{"type":"number"},"format":{"type":"string","enum":["wav","aiff","flac"]},"bit_depth":{"type":"integer","enum":[16,24,32]},"sample_rate":{"type":"number"},"dither":{"type":"boolean"},"master_inserts":{"type":"boolean"},"normalize_lufs":{"type":"number"},"tracks":{"type":"array","items":{"type":["string","integer"]}}}})",
+             R"({"type":"object","properties":{"name":{"type":"string"},"path":{"type":"string"},"start_bar":{"type":"number"},"end_bar":{"type":"number"},"start_seconds":{"type":"number"},"end_seconds":{"type":"number"},"use_selection":{"type":"boolean"},"tail_seconds":{"type":"number"},"format":{"type":"string","enum":["wav","aiff","flac","mp3"]},"mp3_bitrate":{"type":"integer","enum":[128,160,192,224,256,320]},"mp3_vbr_quality":{"type":"integer","minimum":0,"maximum":4,"description":"MP3 VBR V0 (best) - V4 instead of a fixed bitrate"},"title":{"type":"string"},"artist":{"type":"string"},"album":{"type":"string"},"bit_depth":{"type":"integer","enum":[16,24,32]},"sample_rate":{"type":"number"},"dither":{"type":"boolean"},"master_inserts":{"type":"boolean"},"normalize_lufs":{"type":"number"},"tracks":{"type":"array","items":{"type":["string","integer"]}}}})",
              [this] (const juce::var& a)
              {
                  auto& e = edit();
@@ -1446,6 +1483,11 @@ private:
                  o.format = str (a, "format", "wav").toLowerCase();
                  o.bitDepth = (int) num (a, "bit_depth", 24);
                  o.sampleRate = num (a, "sample_rate", 0.0);
+                 o.mp3Bitrate = (int) num (a, "mp3_bitrate", 320);
+                 o.mp3VbrQuality = has (a, "mp3_vbr_quality") ? (int) num (a, "mp3_vbr_quality") : -1;
+                 o.tags.title = str (a, "title", str (a, "name", session.getFile().getFileNameWithoutExtension()));
+                 o.tags.artist = str (a, "artist"); o.tags.album = str (a, "album");
+                 o.tags.year = juce::String (juce::Time::getCurrentTime().getYear());
                  o.dither = flag (a, "dither", true);
                  o.masterInserts = flag (a, "master_inserts", true);
                  o.tailSeconds = num (a, "tail_seconds", 0.0);
@@ -1469,13 +1511,17 @@ private:
                      if (ts.isEmpty()) return ToolResult::error ("None of those tracks exist.");
                      auto p = BounceExport::params (session, o, dest);
                      p.tracksToDo = te::toBitSet (ts);
-                     MonitorChain::PrintGuard guard (session); f = te::Renderer::renderToFile ("Bounce", p);
+                     MonitorChain::PrintGuard guard (session); f = BounceExport::render ("Bounce", p, o, err);
                      if (! f.existsAsFile()) err = "Bounce failed - is there any audio on those tracks in that range?";
                  }
                  else f = BounceExport::bounceMix (session, o, dest, err);
                  if (! f.existsAsFile()) return ToolResult::error (err.isNotEmpty() ? err : "Bounce failed.");
                  if (err.isNotEmpty()) return ToolResult::error (err);
                  const double sr = o.sampleRate > 0 ? o.sampleRate : TimeFmt::sampleRate (e);
+                 if (o.format == "mp3")
+                     return ToolResult::ok ("Bounced to " + f.getFullPathName() + " (" + juce::String (f.getSize() / 1024) + " KB, MP3 "
+                                            + (o.mp3VbrQuality >= 0 ? "VBR V" + juce::String (o.mp3VbrQuality) : juce::String (o.mp3Bitrate) + " kb/s") + ", "
+                                            + juce::String (BounceExport::mp3RateFor (sr) / 1000.0, 1) + " kHz, ID3 tagged)");
                  return ToolResult::ok ("Bounced to " + f.getFullPathName() + " (" + juce::String (f.getSize() / 1024) + " KB, "
                                         + juce::String (sr / 1000.0, 1) + " kHz " + (o.bitDepth == 32 ? juce::String ("32-bit float") : juce::String (o.bitDepth) + "-bit")
                                         + (o.dither && o.bitDepth < 32 ? " dithered" : "") + ")");

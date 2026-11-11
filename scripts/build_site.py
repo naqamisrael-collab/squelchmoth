@@ -155,7 +155,7 @@ def index():
         ('beatmaker', 'Produce', 'Beat Lab: pads, patterns, piano roll.', 'A channel rack and step sequencer, 64-pad sampler, slicers, a piano roll that plays as you draw, chord tools and scale snapping. Describe the groove to Claude and it lands on the grid.'),
         ('voice', 'Vocals', 'A complete vocal studio, built in.', 'Tune live under 1 ms or note by note in the graph. Stack a four-voice choir of up to 32 singers per voice, double with vibrato only where the singer holds a straight note, vocode on 64 bands with a built-in tuner, talk through a guitar, and clean hum, noise, room and clicks with one knob. Every vocal plug-in hears the same pitch tracker, and Claude can run all of it.'),
         ('color', 'Colour &amp; space', 'Character you can hear, measured.', 'Ten-model saturation oversampled to 16x with a live harmonic readout, a 35-style echo, steel and gold plates, a crushing limiter, a broadcast-console EQ, granular pitch-delay, tap-cloud reverb and an eight-slot effects rack with 200 ready chains. Over 3,300 new presets, each leaving your sound at the level it came in.'),
-        ('mastering', 'Master &amp; deliver', 'Finish the album in the same app.', 'Sequence songs, process each one and the whole record, meter with EBU R128 loudness, true peak and phase, then publish streaming-ready files, a WAV + CUE image or a DDP fileset for the plant.'),
+        ('mastering', 'Master &amp; deliver', 'Finish the album in the same app.', 'Sequence songs, process each one and the whole record, meter with EBU R128 loudness, true peak and phase, then publish streaming-ready WAV, FLAC or MP3 files, a WAV + CUE image or a DDP fileset for the plant.'),
     ]
     rows = ''
     for i, (s, k, h, p) in enumerate(feat):
@@ -280,10 +280,12 @@ def compare():
         ('Sounds', [
             r('Sound kits', '5', '17', '27'), r('Genre loops', False, False, '51'), r('Factory presets for every plug-in you own', True, True, True)]),
         ('Mix, master &amp; deliver', [
-            r('Save sessions, bounce a stereo mix (WAV, AIFF, FLAC, LUFS-normalised)', True, True, True),
+            r('Save sessions, bounce a stereo mix (WAV, AIFF, FLAC, MP3 with ID3 tags, LUFS-normalised)', True, True, True),
             r('Stem export', False, True, True),
             r('Mastering window: album sequencing, R128 loudness, true peak', False, True, True),
-            r('Digital release, WAV + CUE image, DDP 2.00', False, True, True)]),
+            r('Digital release (WAV, AIFF, FLAC, OGG, MP3), WAV + CUE image, DDP 2.00', False, True, True),
+            r('Track macros, 1/12-octave spectrum, waterfall and sonogram', False, True, True),
+            r('Hardware inserts with ping and delay compensation', True, True, True)]),
         ('Claude', [r('Claude control over the whole session', True, True, True, 'Locked features stay locked for Claude too')]),
         ('Licence', [r('Price', '$0', f'{P["CORE"]["price"]} <s>{P["CORE"]["list"]}</s>', f'{P["COMPLETE"]["price"]} <s>{P["COMPLETE"]["list"]}</s>'),
                      r('Perpetual licence · 2 computers (Mac or Windows) · free updates within the major version', '—', True, True)]),
@@ -296,7 +298,7 @@ def compare():
     <article class="plan"><div class="eyebrow">Free forever</div><h2>Demo</h2><div class="price big">$0</div><p>The basics for learning and sketching.</p><a class="btn" data-buy="DEMO" href="download.html">Download free</a>
       <ul><li>{DEMO_TRACKS} tracks</li><li>{N_DEMO_SIG} basic instruments and effects + {N_DEMO_AW} AirWindows</li><li>Kits 1–5</li><li>Save and bounce your mix</li><li>Claude control</li></ul></article>
     <article class="plan featured"><div class="eyebrow">Most popular</div><h2>Squelchmoth</h2>{price('CORE')}<p>The full program, perpetual licence.</p>{buy('CORE')}
-      <ul><li>Unlimited tracks</li><li>{N_DEMO_SIG + N_CORE_SIG} Signature plug-ins + all {AW_COUNT} AirWindows</li><li>17 kits</li><li>Mastering window, Cut Lab, Molt</li><li>Stems, digital release, DDP</li><li>Add packs whenever you like</li></ul></article>
+      <ul><li>Unlimited tracks</li><li>{N_DEMO_SIG + N_CORE_SIG} Signature plug-ins + all {AW_COUNT} AirWindows</li><li>17 kits</li><li>Mastering window, Cut Lab, Molt</li><li>Stems and MP3, digital release, DDP</li><li>Add packs whenever you like</li></ul></article>
     <article class="plan" id="complete"><div class="eyebrow">Best value · save ${SAVE:.0f}</div><h2>Complete</h2>{price('COMPLETE')}<p>Squelchmoth and all six packs.</p>{buy('COMPLETE')}
       <ul><li>Everything in Squelchmoth</li><li>All {N_SIG} Signature plug-ins</li><li>Vocal, Color &amp; Space, Mastering, Instrument, Beat Lab and Creative packs</li><li>All 27 kits and 51 loops</li></ul></article>
   </div>
@@ -357,7 +359,7 @@ def download():
   <header class="sh"><h2>What the free Demo includes</h2></header>
   <div class="grid3">
     <div class="card"><div class="k">Included</div><ul class="ticks"><li>{DEMO_TRACKS} tracks of audio, MIDI and instruments</li><li>{N_DEMO_SIG} Signature instruments and effects</li><li>{N_DEMO_AW} AirWindows effects</li><li>Sound kits 1–5, Beat Lab, piano roll</li><li>Save sessions, bounce your mix</li><li>Your VST3 plug-ins (and Audio Units on Mac)</li><li>Claude control</li></ul></div>
-    <div class="card"><div class="k">With Squelchmoth</div><ul class="ticks"><li>Unlimited tracks</li><li>{N_CORE_SIG} more Signature plug-ins and the full AirWindows collection</li><li>Kits 6–17</li><li>Mastering window, Cut Lab, Molt</li><li>Stems, digital release, DDP</li></ul>{buy('CORE')}</div>
+    <div class="card"><div class="k">With Squelchmoth</div><ul class="ticks"><li>Unlimited tracks</li><li>{N_CORE_SIG} more Signature plug-ins and the full AirWindows collection</li><li>Kits 6–17</li><li>Mastering window, Cut Lab, Molt</li><li>Stems, MP3 release files, DDP</li></ul>{buy('CORE')}</div>
     <div class="card"><div class="k">With add-on packs</div><ul class="ticks">{''.join(f'<li>{E(P[c]["name"])} — {P[c]["price"]}</li>' for c in PACK_CODE.values())}</ul><a class="btn" href="addons.html">Browse add-ons</a></div>
   </div>
 </div></section>'''

@@ -6,7 +6,7 @@ set (TARGET_NAME Squelchmoth)
 # Runs on macOS Big Sur (11.0) and newer, Intel and Apple Silicon.
 set (CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 
-project (${TARGET_NAME} VERSION 1.11.0 LANGUAGES C CXX)
+project (${TARGET_NAME} VERSION 1.12.0 LANGUAGES C CXX)
 
 set (CMAKE_CXX_STANDARD 20)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,7 +21,7 @@ juce_add_gui_app (${TARGET_NAME}
     COMPANY_NAME "Jamar Stewart"
     COMPANY_COPYRIGHT "Copyright (c) 2026 Jamar Stewart. All rights reserved."
     BUNDLE_ID "com.jamarstewart.squelchmoth"
-    VERSION 1.11.0
+    VERSION 1.12.0
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Resources/icon_1024.png"
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "Squelchmoth needs the microphone/audio input to record."
@@ -177,6 +177,7 @@ target_compile_definitions (${TARGET_NAME} PRIVATE
     JUCE_DISPLAY_SPLASH_SCREEN=0
     TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=0   # LGPL - removed in 1.7 (Signalsmith Stretch, MIT, does every elastic mode)
     TRACKTION_ENABLE_TIMESTRETCH_SIGNALSMITH=1
+    JUCE_USE_MP3AUDIOFORMAT=1                    # 1.12: MP3 import (the format's patents have expired); export is Squelchmoth's own encoder
     TRACKTION_AIR_WINDOWS=1)
 
 target_link_libraries (${TARGET_NAME} PRIVATE

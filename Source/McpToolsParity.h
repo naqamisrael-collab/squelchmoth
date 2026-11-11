@@ -189,14 +189,81 @@ void registerParityTools()
          });
 
     //==========================================================================
-    add ("spot_clip", "Spot (move) a clip so its start or end lands exactly on a bar or time.",
-         R"json({"type":"object","properties":{"track":{"type":["string","integer"]},"clip":{"type":["string","integer"]},"to_bar":{"type":"number"},"to_seconds":{"type":"number"},"anchor":{"type":"string","enum":["start","end"]}},"required":["track"]})json",
+    add ("external_fx", "External Effect (Pro Tools hardware insert): send a track out of an audio-interface output pair to outboard gear and back in on an input pair. action 'add' inserts one (out_pair / in_pair as the first channel, 1-based: 3 = outputs 3-4), 'set' changes send_db / return_db / mix (0-100) / out_pair / in_pair / latency_samples, 'ping' sends a click and measures the round trip (then 'get' shows it; the plug-in compensates it), 'get' reports everything. Offline bounces pass the dry signal: record the return to print it.",
+         R"json({"type":"object","properties":{"track":{"type":["string","integer"]},"action":{"type":"string","enum":["add","set","ping","get","remove"]},"out_pair":{"type":"integer"},"in_pair":{"type":"integer"},"send_db":{"type":"number"},"return_db":{"type":"number"},"mix":{"type":"number"},"latency_samples":{"type":"integer"}},"required":["track"]})json",
+         [this, refresh] (const juce::var& a)
+         {
+             juce::String err; auto t = trackArg (a, err); if (! t) return ToolResult::error (err);
+             auto find = [&]() -> SqExternalFxPlugin* { for (auto p : t->pluginList.getPlugins()) if (auto x = dynamic_cast<SqExternalFxPlugin*> (p)) return x; return nullptr; };
+             const auto act = str (a, "action", "get");
+             auto* fx = find();
+             if (act == "add" && fx == nullptr)
+             {
+                 auto p = session.edit->getPluginCache().createNewPlugin (SqExternalFxPlugin::xmlTypeName, {});
+                 if (p == nullptr) return ToolResult::error ("Couldn't create the External Effect");
+                 t->pluginList.insertPlugin (p, Session::insertEndIndex (t->pluginList, t), nullptr);
+                 fx = dynamic_cast<SqExternalFxPlugin*> (p.get());
+             }
+             if (fx == nullptr) return ToolResult::error (t->getName() + " has no External Effect. Use action 'add'.");
+             if (act == "remove") { fx->deleteFromParent(); refresh(); return ToolResult::ok ("Removed the External Effect from " + t->getName()); }
+             if (has (a, "out_pair") || has (a, "in_pair"))
+                 fx->setPairs (has (a, "out_pair") ? (int) num (a, "out_pair") - 1 : fx->outPair.get(), has (a, "in_pair") ? (int) num (a, "in_pair") - 1 : fx->inPair.get());
+             if (has (a, "send_db"))   fx->sendDb = (float) juce::jlimit (-60.0, 24.0, num (a, "send_db"));
+             if (has (a, "return_db")) fx->returnDb = (float) juce::jlimit (-60.0, 24.0, num (a, "return_db"));
+             if (has (a, "mix"))       fx->mixPct = (float) juce::jlimit (0.0, 100.0, num (a, "mix"));
+             if (has (a, "latency_samples")) fx->applyPing ((int) num (a, "latency_samples"));
+             if (act == "ping") fx->startPing();
+             refresh();
+             auto o = obj();
+             set (o, "track", t->getName());
+             set (o, "outputs", juce::String (fx->outPair.get() + 1) + "-" + juce::String (fx->outPair.get() + 2));
+             set (o, "inputs", juce::String (fx->inPair.get() + 1) + "-" + juce::String (fx->inPair.get() + 2));
+             set (o, "send_db", fx->sendDb.get()); set (o, "return_db", fx->returnDb.get()); set (o, "mix", fx->mixPct.get());
+             set (o, "latency_samples", fx->latencySamples.get());
+             set (o, "ping", fx->isPinging() ? juce::String ("listening for the click") : fx->lastPing() == -1 ? juce::String ("no click came back - check the cables and the input pair") : fx->lastPing() == -2 ? juce::String ("not run") : juce::String (fx->lastPing()) + " samples");
+             set (o, "device_running", session.edit->engine.getDeviceManager().deviceManager.getCurrentAudioDevice() != nullptr);
+             return ToolResult::ok (o);
+         });
+
+    add ("sync_point", "Pro Tools Identify Sync Point: set (at_seconds_in_clip, at_bar or at_seconds on the timeline), get or clear a clip's sync point - a spot inside the clip (a downbeat, a hit, a word) that Spot can line up instead of the clip start. It stays on the same sound when the clip is trimmed.",
+         R"json({"type":"object","properties":{"track":{"type":["string","integer"]},"clip":{"type":["string","integer"]},"action":{"type":"string","enum":["set","get","clear"]},"at_seconds_in_clip":{"type":"number"},"at_bar":{"type":"number"},"at_seconds":{"type":"number"}},"required":["track"]})json",
+         [this, refresh] (const juce::var& a)
+         {
+             juce::String err; auto t = trackArg (a, err); if (! t) return ToolResult::error (err);
+             auto c = clipArg (*t, a, err); if (! c) return ToolResult::error (err);
+             const auto act = str (a, "action", has (a, "at_seconds_in_clip") || has (a, "at_bar") || has (a, "at_seconds") ? "set" : "get");
+             if (act == "clear") { EditOps::clearSyncPoint (*c); refresh(); return ToolResult::ok ("Cleared the sync point of '" + c->getName() + "'"); }
+             if (act == "set")
+             {
+                 std::optional<te::TimePosition> at;
+                 if (has (a, "at_seconds_in_clip")) at = c->getPosition().getStart() + te::TimeDuration::fromSeconds (num (a, "at_seconds_in_clip"));
+                 else at = timeArg (a, "at");
+                 if (! at) return ToolResult::error ("Give at_seconds_in_clip, at_bar or at_seconds");
+                 if (! EditOps::setSyncPoint (*c, *at)) return ToolResult::error ("That time is outside '" + c->getName() + "'");
+                 refresh();
+             }
+             juce::DynamicObject::Ptr o = new juce::DynamicObject();
+             o->setProperty ("clip", c->getName());
+             if (auto sp = EditOps::syncPointTime (*c))
+             {
+                 o->setProperty ("sync_point_seconds", sp->inSeconds());
+                 o->setProperty ("sync_point_in_clip_seconds", (*sp - c->getPosition().getStart()).inSeconds());
+                 o->setProperty ("sync_point", session.describeTime (*sp));
+             }
+             else o->setProperty ("sync_point", EditOps::hasSyncPoint (*c) ? "trimmed out of the clip" : "none");
+             return ToolResult::ok (juce::JSON::toString (juce::var (o.get())));
+         });
+
+    add ("spot_clip", "Spot (move) a clip so its start, end or sync point lands exactly on a bar or time. anchor 'sync' uses the clip's sync point (set it with sync_point).",
+         R"json({"type":"object","properties":{"track":{"type":["string","integer"]},"clip":{"type":["string","integer"]},"to_bar":{"type":"number"},"to_seconds":{"type":"number"},"anchor":{"type":"string","enum":["start","end","sync"]}},"required":["track"]})json",
          [this, refresh] (const juce::var& a)
          {
              juce::String err; auto t = trackArg (a, err); if (! t) return ToolResult::error (err);
              auto c = clipArg (*t, a, err); if (! c) return ToolResult::error (err);
              auto to = timeArg (a, "to"); if (! to) return ToolResult::error ("Give to_bar or to_seconds");
-             EditOps::spot (*c, *to, str (a, "anchor", "start") == "end" ? 1 : 0);
+             const auto anc = str (a, "anchor", "start");
+             if (anc == "sync" && ! EditOps::syncPointTime (*c)) return ToolResult::error ("'" + c->getName() + "' has no sync point inside it. Set one with sync_point.");
+             EditOps::spot (*c, *to, anc == "end" ? 1 : anc == "sync" ? 2 : 0);
              refresh();
              return ToolResult::ok ("Spotted '" + c->getName() + "' " + str (a, "anchor", "start") + " to " + session.describeTime (*to));
          });

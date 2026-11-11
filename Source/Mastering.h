@@ -20,6 +20,7 @@
 #include "Analyzer.h"
 #include "PluginMenu.h"
 #include "Behaviours.h"
+#include "SqMp3Encoder.h"
 
 //==============================================================================
 struct LoudnessTarget { const char* name; float lufs; float truePeak; };
@@ -301,8 +302,9 @@ public:
     //==========================================================================
     struct PublishOptions
     {
-        juce::String format = "wav";      // wav | aiff | flac | ogg
+        juce::String format = "wav";      // wav | aiff | flac | ogg | mp3
         int bitDepth = 24;
+        int mp3Bitrate = 320, mp3VbrQuality = -1;   // 1.12 MP3: CBR kb/s, or VBR V0-V4 when >= 0
         double sampleRate = 44100.0;
         int loudnessTarget = 0;           // index into loudnessTargets(); 0 = off
         float customLufs = -14.0f, customTruePeak = -1.0f;
@@ -360,9 +362,10 @@ public:
             if (o.trackNumbers) base << juce::String (n).paddedLeft ('0', 2) << " ";
             if (o.artistInNames) base << meta (*t, "mArtist", album ("mAlbumArtist")) << " - ";
             base << t->getName();
-            auto f = folder.getChildFile (juce::File::createLegalFileName (base) + "." + o.format);
+            const bool mp3 = o.format == "mp3";   // MP3: render a float WAV, level it, then encode with the tags
+            auto f = folder.getChildFile (juce::File::createLegalFileName (base) + (mp3 ? " (mp3 source).wav" : "." + o.format));
             // render with a small tail so reverbs finish, then the loudness pass
-            if (! renderRange (f, startOf (*t), endOf (*t) + (endOf (*t) < totalLength() ? 0.0 : 0.5), o.bitDepth, o.sampleRate, t, o.format)) { report << "Failed: " << f.getFileName() << "\n"; continue; }
+            if (! renderRange (f, startOf (*t), endOf (*t) + (endOf (*t) < totalLength() ? 0.0 : 0.5), mp3 ? 32 : o.bitDepth, o.sampleRate, t, mp3 ? "wav" : o.format)) { report << "Failed: " << f.getFileName() << "\n"; continue; }
             rendered.push_back ({ t, f, measureFile (f), n });
         }
         // loudness adjustment
@@ -395,6 +398,18 @@ public:
                 report << r.f.getFileName() << ":  " << juce::String (r.l.integrated, 1) << " LUFS, TP " << juce::String (r.l.truePeak, 1) << " dBTP\n";
             }
         }
+        if (o.format == "mp3")
+            for (auto& r : rendered)
+            {
+                SqMp3::Tags tg;
+                tg.title = r.t->getName(); tg.artist = meta (*r.t, "mArtist", album ("mAlbumArtist")); tg.album = album ("mAlbum");
+                tg.track = juce::String (r.number) + "/" + juce::String ((int) rendered.size()); tg.year = album ("mYear"); tg.genre = album ("mGenre");
+                tg.isrc = meta (*r.t, "mIsrc"); tg.comment = album ("mComment");
+                auto dst = r.f.getSiblingFile (r.f.getFileName().upToLastOccurrenceOf (" (mp3 source)", false, false) + ".mp3");
+                juce::String err;
+                if (SqMp3::encodeMp3 (r.f, dst, o.mp3Bitrate, o.mp3VbrQuality, tg, err)) { r.f.deleteFile(); r.f = dst; }
+                else report << "MP3 failed: " << dst.getFileName() << " " << err << "\n";
+            }
         for (auto& r : rendered) out.add (r.f);
         writeAlbumSheet (folder, rendered.size());
         session.log.add ("Mastering", "Digital release: " + juce::String (out.size()) + " files in " + folder.getFullPathName());
@@ -721,6 +736,77 @@ private:
 };
 
 //==============================================================================
+// 1.12 - Mastering track macros (Studio One's Track Editor macros): a saved recipe of a track's whole device rack,
+// fader and fades, applied to any tracks in one step. Files: Documents/Squelchmoth/Mastering Macros/<name>.sqmmacro
+namespace MasteringMacros
+{
+    inline juce::File folder()
+    {
+        auto d = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("Squelchmoth").getChildFile ("Mastering Macros");
+        d.createDirectory();
+        return d;
+    }
+    inline juce::File fileFor (const juce::String& name)   { return folder().getChildFile (juce::File::createLegalFileName (name.trim()) + ".sqmmacro"); }
+    inline juce::StringArray names()
+    {
+        juce::StringArray out;
+        for (auto& f : folder().findChildFiles (juce::File::findFiles, false, "*.sqmmacro")) out.add (f.getFileNameWithoutExtension());
+        out.sort (true);
+        return out;
+    }
+
+    /** Saves the track's rack, fader and fades. Returns the number of rack plug-ins saved, or -1. */
+    inline int save (MasteringProject& p, te::AudioTrack& t, const juce::String& name, juce::String& err)
+    {
+        if (name.trim().isEmpty()) { err = "Give the macro a name."; return -1; }
+        juce::ValueTree m ("SQM_MMACRO");
+        m.setProperty ("name", name.trim(), nullptr);
+        m.setProperty ("version", JUCE_APPLICATION_VERSION_STRING, nullptr);
+        if (auto vp = t.getVolumePlugin()) m.setProperty ("faderDb", vp->getVolumeDb(), nullptr);
+        if (auto c = MasteringProject::clipOf (t)) { m.setProperty ("fadeIn", c->getFadeIn().inSeconds(), nullptr); m.setProperty ("fadeOut", c->getFadeOut().inSeconds(), nullptr); }
+        for (auto pl : Session::getInserts (t.pluginList, &t))
+        {
+            p.edit->flushPluginStateIfNeeded (*pl);
+            auto copy = pl->state.createCopy();
+            copy.removeProperty (te::IDs::id, nullptr);
+            m.appendChild (copy, nullptr);
+        }
+        auto f = fileFor (name);
+        auto xml = m.createXml();
+        if (xml == nullptr || ! xml->writeTo (f)) { err = "Couldn't write " + f.getFullPathName(); return -1; }
+        return m.getNumChildren();
+    }
+
+    /** Applies a macro to one track: replaces its rack, sets the fader and the fades. Returns plug-ins added, or -1. */
+    inline int apply (MasteringProject& p, te::AudioTrack& t, const juce::String& name, juce::String& err, bool fades = true)
+    {
+        auto f = fileFor (name);
+        auto xml = juce::XmlDocument::parse (f);
+        if (xml == nullptr || ! xml->hasTagName ("SQM_MMACRO")) { err = "No mastering macro called '" + name + "'"; return -1; }
+        auto m = juce::ValueTree::fromXml (*xml);
+        for (auto pl : Session::getInserts (t.pluginList, &t)) pl->deleteFromParent();
+        int added = 0, missing = 0;
+        for (auto child : m)
+        {
+            auto v = child.createCopy();
+            te::EditItemID::remapIDs (v, nullptr, *p.edit);
+            auto pl = p.edit->getPluginCache().createNewPlugin (v);
+            if (pl == nullptr) { ++missing; continue; }
+            t.pluginList.insertPlugin (pl, Session::insertEndIndex (t.pluginList, &t), nullptr);
+            ++added;
+        }
+        if (m.hasProperty ("faderDb")) if (auto vp = t.getVolumePlugin()) vp->setVolumeDb ((float) (double) m["faderDb"]);
+        if (fades && m.hasProperty ("fadeIn")) p.setFades (t, (double) m["fadeIn"], (double) m["fadeOut"]);
+        if (missing > 0) err = juce::String (missing) + " plug-in(s) in the macro aren't installed on this computer and were skipped.";
+        p.sendChangeMessage();
+        return added;
+    }
+
+    inline bool remove (const juce::String& name)   { return fileFor (name).deleteFile(); }
+}
+
+
+//==============================================================================
 // UI pieces
 //==============================================================================
 class RackStrip : public juce::Component   // a device rack: insert slots + fader
@@ -880,7 +966,11 @@ class MeterPanel : public juce::Component   // spectrum + level/loudness + phase
 public:
     explicit MeterPanel (MasteringProject& p) : project (p)
     {
-        spectrumMode.addItemList ({ "Octave", "1/3 Octave", "FFT", "FFT Curve" }, 1); spectrumMode.setSelectedId (2, juce::dontSendNotification);
+        spectrumMode.addItemList ({ "Octave", "1/3 Octave", "1/12 Octave", "FFT", "FFT Curve", "Waterfall", "Sonogram" }, 1); spectrumMode.setSelectedId (2, juce::dontSendNotification);
+        historyLen.addItemList ({ "5 s", "20 s" }, 1); historyLen.setSelectedId (1, juce::dontSendNotification);
+        historyLen.setTooltip ("How much history the Waterfall and Sonogram show");
+        segmentsBtn.setClickingTogglesState (true); segmentsBtn.setTooltip ("Segments: draw the band views as LED segments with a dB ruler");
+        addAndMakeVisible (historyLen); addAndMakeVisible (segmentsBtn);
         levelMode.addItemList ({ "Peak / RMS", "EBU R128", "K-20", "K-14", "K-12" }, 1); levelMode.setSelectedId (2, juce::dontSendNotification);
         lufsUnit.addItemList ({ "LUFS", "LU (rel. -23)" }, 1); lufsUnit.setSelectedId (1, juce::dontSendNotification);
         resetBtn.onClick = [this] { project.hub.reset(); };
@@ -894,6 +984,7 @@ public:
         auto left = r.removeFromLeft (r.getWidth() * 45 / 100);
         auto ctl = left.removeFromTop (20);
         spectrumMode.setBounds (ctl.removeFromLeft (110)); ctl.removeFromLeft (6); freezeBtn.setBounds (ctl.removeFromLeft (60));
+        ctl.removeFromLeft (6); segmentsBtn.setBounds (ctl.removeFromLeft (72)); ctl.removeFromLeft (6); historyLen.setBounds (ctl.removeFromLeft (64));
         spectrumArea = left.reduced (0, 2);
         r.removeFromLeft (8);
         auto mid = r.removeFromLeft (r.getWidth() * 62 / 100);
@@ -926,27 +1017,44 @@ public:
         g.setFont (Theme::font (8.0f)); g.setColour (Theme::dim());
         for (float hz : { 100.0f, 1000.0f, 10000.0f }) g.drawText (hz >= 1000 ? juce::String (juce::roundToInt (hz / 1000)) + "k" : juce::String ((int) hz), (int) xFor (hz) + 2, (int) plot.getBottom(), 30, 12, juce::Justification::left);
         auto& sp = hub.spectrum;
+        if (! freezeBtn.getToggleState()) { history.maxRows = SpectrumHistory::rowsFor (historyLen.getSelectedId() == 2 ? 20.0 : 5.0, hub.sr); history.update (sp, hub.sr); }
         if (! sp.ready) return;
-        auto mode = spectrumMode.getSelectedId();
-        if (mode <= 2)
+        const int mode = spectrumMode.getSelectedId();   // 1 oct, 2 third, 3 twelfth, 4 FFT, 5 FFT curve, 6 waterfall, 7 sonogram
+        if (mode <= 3)
         {
-            // banded bars: octave (10 bands) or third-octave (30 bands)
-            const float perOct = mode == 1 ? 1.0f : 3.0f;
-            float f0 = 20.0f;
-            while (f0 < 20000.0f)
+            const int perOct = mode == 1 ? 1 : mode == 2 ? 3 : 12;
+            auto bands = SpectrumBands::compute (sp, hub.sr, perOct);
+            auto peakBands = SpectrumBands::compute (sp.peaks, SpectrumAnalyser::size / 2, SpectrumAnalyser::size, hub.sr, perOct);
+            const bool seg = segmentsBtn.getToggleState();
+            for (size_t i = 0; i < bands.size(); ++i)
             {
-                float f1 = f0 * std::pow (2.0f, 1.0f / perOct);
-                int b0 = (int) (f0 / (float) hub.sr * SpectrumAnalyser::size), b1 = juce::jmax (b0 + 1, (int) (f1 / (float) hub.sr * SpectrumAnalyser::size));
-                float m = -100.0f, pk = -100.0f;
-                for (int b = b0; b < juce::jmin (b1, SpectrumAnalyser::size / 2); ++b) { m = juce::jmax (m, sp.magnitudes[b]); pk = juce::jmax (pk, sp.peaks[b]); }
-                auto bar = juce::Rectangle<float> (xFor (f0) + 1.0f, yFor (m), juce::jmax (2.0f, xFor (f1) - xFor (f0) - 2.0f), plot.getBottom() - yFor (m));
-                g.setGradientFill (juce::ColourGradient (Theme::mint(), 0, plot.getBottom(), Theme::acid(), 0, plot.getY(), false));
-                g.fillRect (bar);
-                g.setColour (Theme::text().withAlpha (0.8f)); g.fillRect (bar.getX(), yFor (pk), bar.getWidth(), 1.5f);
-                f0 = f1;
+                auto& bd = bands[i];
+                const float x0 = xFor (bd.lo), x1 = xFor (bd.hi), w = juce::jmax (1.5f, x1 - x0 - (perOct == 12 ? 0.5f : 2.0f));
+                auto bar = juce::Rectangle<float> (x0 + (perOct == 12 ? 0.25f : 1.0f), yFor (bd.db), w, plot.getBottom() - yFor (bd.db));
+                if (seg)
+                {
+                    // LED segments every 3 dB, coloured by height (green - yellow - red near 0 dBFS)
+                    for (float db = -90.0f; db < bd.db; db += 3.0f)
+                    {
+                        auto segR = juce::Rectangle<float> (bar.getX(), yFor (db + 3.0f) + 1.0f, bar.getWidth(), juce::jmax (1.0f, yFor (db) - yFor (db + 3.0f) - 1.5f));
+                        g.setColour (db >= -6.0f ? Theme::red() : db >= -18.0f ? Theme::amber() : Theme::mint());
+                        g.fillRect (segR);
+                    }
+                }
+                else
+                {
+                    g.setGradientFill (juce::ColourGradient (Theme::mint(), 0, plot.getBottom(), Theme::acid(), 0, plot.getY(), false));
+                    g.fillRect (bar);
+                }
+                g.setColour (Theme::text().withAlpha (0.8f)); g.fillRect (bar.getX(), yFor (peakBands[i].db), bar.getWidth(), 1.5f);
+            }
+            if (seg)
+            {
+                g.setFont (Theme::font (8.0f)); g.setColour (Theme::dim());
+                for (float db : { -72.0f, -54.0f, -36.0f, -18.0f, -6.0f, 0.0f }) g.drawText (juce::String ((int) db), (int) plot.getRight() - 22, (int) yFor (db) - 6, 20, 12, juce::Justification::centredRight);
             }
         }
-        else
+        else if (mode <= 5)
         {
             juce::Path p, pk;
             bool first = true;
@@ -957,11 +1065,73 @@ public:
                 auto x = xFor (hz), y = yFor (sp.magnitudes[b]), y2 = yFor (sp.peaks[b]);
                 if (first) { p.startNewSubPath (x, y); pk.startNewSubPath (x, y2); first = false; } else { p.lineTo (x, y); pk.lineTo (x, y2); }
             }
-            if (mode == 3) { juce::Path f (p); f.lineTo (plot.getRight(), plot.getBottom()); f.lineTo (plot.getX(), plot.getBottom()); f.closeSubPath(); g.setColour (Theme::mint().withAlpha (0.25f)); g.fillPath (f); }
-            g.setColour (mode == 3 ? Theme::mint() : Theme::text()); g.strokePath (p, juce::PathStrokeType (1.2f));
+            if (mode == 5) { juce::Path f (p); f.lineTo (plot.getRight(), plot.getBottom()); f.lineTo (plot.getX(), plot.getBottom()); f.closeSubPath(); g.setColour (Theme::mint().withAlpha (0.25f)); g.fillPath (f); }
+            g.setColour (mode == 5 ? Theme::mint() : Theme::text()); g.strokePath (p, juce::PathStrokeType (1.2f));
             g.setColour (Theme::acid().withAlpha (0.6f)); g.strokePath (pk, juce::PathStrokeType (1.0f));
             // -3 dB/oct reference slope for the FFT view
             g.setColour (Theme::dim().withAlpha (0.4f)); g.drawLine (xFor (20.0f), yFor (-18.0f), xFor (20000.0f), yFor (-48.0f), 1.0f);
+        }
+        else if (mode == 6) drawWaterfall (g, plot, xFor);
+        else drawSonogram (g, plot, xFor);
+    }
+
+    /** 1.12: Waterfall - the newest spectrum at the front, older ones stacked behind, rising and fading. */
+    template <typename XF> void drawWaterfall (juce::Graphics& g, juce::Rectangle<float> plot, XF xFor)
+    {
+        const int n = (int) history.rows.size();
+        if (n == 0) return;
+        const int shown = juce::jmin (n, 48), step = juce::jmax (1, n / shown);
+        const float depth = plot.getHeight() * 0.45f, slant = plot.getWidth() * 0.12f;
+        auto front = plot.withTrimmedTop (depth).withTrimmedRight (slant);
+        for (int k = shown - 1; k >= 0; --k)
+        {
+            const int idx = n - 1 - k * step;
+            if (idx < 0) continue;
+            auto& row = history.rows[(size_t) idx];
+            const float age = (float) k / (float) juce::jmax (1, shown - 1);
+            const float dx = age * slant, dy = -age * depth;
+            juce::Path p; bool first = true;
+            for (int c = 0; c < SpectrumHistory::columns; ++c)
+            {
+                const float x = front.getX() + (xFor (SpectrumHistory::columnHz (c)) - plot.getX()) * (front.getWidth() / plot.getWidth()) + dx;
+                const float y = front.getBottom() - juce::jlimit (0.0f, 1.0f, (row[(size_t) c] + 90.0f) / 90.0f) * front.getHeight() + dy;
+                if (first) { p.startNewSubPath (x, y); first = false; } else p.lineTo (x, y);
+            }
+            juce::Path fill (p); fill.lineTo (front.getRight() + dx, front.getBottom() + dy); fill.lineTo (front.getX() + dx, front.getBottom() + dy); fill.closeSubPath();
+            g.setColour (Theme::bg().withAlpha (0.92f)); g.fillPath (fill);   // hides the rows behind, like a 3-D surface
+            g.setColour (Theme::mint().interpolatedWith (Theme::acid(), 1.0f - age).withAlpha (0.35f + 0.65f * (1.0f - age)));
+            g.strokePath (p, juce::PathStrokeType (k == 0 ? 1.4f : 0.9f));
+        }
+    }
+
+    /** 1.12: Sonogram - time runs right to left (newest at the right edge), frequency up, level as colour. */
+    template <typename XF> void drawSonogram (juce::Graphics& g, juce::Rectangle<float> plot, XF)
+    {
+        const int n = (int) history.rows.size();
+        if (n == 0) return;
+        const int w = juce::jmax (1, (int) plot.getWidth()), h = juce::jmax (1, (int) plot.getHeight());
+        if (sonoImage.getWidth() != w || sonoImage.getHeight() != h) sonoImage = juce::Image (juce::Image::RGB, w, h, true);
+        juce::Image::BitmapData bd (sonoImage, juce::Image::BitmapData::writeOnly);
+        for (int x = 0; x < w; ++x)
+        {
+            const int idx = juce::jlimit (0, n - 1, (int) ((float) x / (float) w * (float) history.maxRows) - (history.maxRows - n));   // the history length fills the width, newest at the right
+            for (int y = 0; y < h; ++y)
+            {
+                juce::Colour col = Theme::bg();
+                if ((int) ((float) x / (float) w * (float) history.maxRows) >= history.maxRows - n)
+                {
+                    const int c = juce::jlimit (0, SpectrumHistory::columns - 1, (int) ((1.0f - (float) y / (float) h) * SpectrumHistory::columns));
+                    col = SpectrumHistory::colourFor (history.rows[(size_t) idx][(size_t) c]);
+                }
+                bd.setPixelColour (x, y, col);
+            }
+        }
+        g.drawImage (sonoImage, plot);
+        g.setFont (Theme::font (8.0f)); g.setColour (Theme::text().withAlpha (0.7f));
+        for (float hz : { 100.0f, 1000.0f, 10000.0f })
+        {
+            const float y = plot.getBottom() - plot.getHeight() * (std::log2 (hz / 20.0f) * 24.0f / SpectrumHistory::columns);
+            g.drawText (hz >= 1000 ? juce::String (juce::roundToInt (hz / 1000)) + "k" : juce::String ((int) hz), (int) plot.getX() + 2, (int) y - 6, 30, 12, juce::Justification::left);
         }
     }
 
@@ -1059,8 +1229,10 @@ public:
     }
 
     MasteringProject& project;
-    juce::ComboBox spectrumMode, levelMode, lufsUnit;
-    juce::TextButton resetBtn { "Reset" }, freezeBtn { "Freeze" };
+    juce::ComboBox spectrumMode, levelMode, lufsUnit, historyLen;
+    juce::TextButton resetBtn { "Reset" }, freezeBtn { "Freeze" }, segmentsBtn { "Segments" };
+    SpectrumHistory history;
+    juce::Image sonoImage;
     juce::Rectangle<int> spectrumArea, levelArea, phaseArea;
 };
 
@@ -1300,9 +1472,36 @@ public:
         m.addItem (5, "Update from Session", MasteringProject::meta (*t, "mSourceSession").isNotEmpty());
         m.addItem (6, "Open source session in the Edit window", MasteringProject::meta (*t, "mSourceSession").isNotEmpty());
         m.addItem (7, "Reveal audio file");
+        juce::PopupMenu macros; auto macroNames = MasteringMacros::names();
+        macros.addItem (20, "Save this track as a macro...");
+        if (! macroNames.isEmpty()) macros.addSeparator();
+        for (int i = 0; i < macroNames.size(); ++i) macros.addItem (100 + i, "Apply \"" + macroNames[i] + "\" to this track");
+        for (int i = 0; i < macroNames.size(); ++i) macros.addItem (300 + i, "Apply \"" + macroNames[i] + "\" to every enabled track");
+        m.addSeparator(); m.addSubMenu ("Track Macros", macros);
         m.addSeparator(); m.addItem (8, "Remove");
-        m.showMenuAsync ({}, [this, t, row] (int r)
+        m.showMenuAsync ({}, [this, t, row, macroNames] (int r)
         {
+            if (r == 20)
+            {
+                auto aw = std::make_shared<juce::AlertWindow> ("Save Track Macro", "Saves this track's device rack, fader and fades as a recipe you can apply to other tracks.", juce::MessageBoxIconType::NoIcon);
+                aw->addTextEditor ("name", t->getName() + " chain", "Name");
+                aw->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey)); aw->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+                aw->enterModalState (true, juce::ModalCallbackFunction::create ([this, aw, t] (int res)
+                {
+                    aw->setVisible (false);
+                    if (res != 1) return;
+                    juce::String err; if (MasteringMacros::save (project, *t, aw->getTextEditorContents ("name"), err) < 0) msg ("Track Macros", err);
+                }));
+                return;
+            }
+            if (r >= 100 && r < 100 + macroNames.size()) { juce::String err; MasteringMacros::apply (project, *t, macroNames[r - 100], err); if (err.isNotEmpty()) msg ("Track Macros", err); refreshAll(); return; }
+            if (r >= 300 && r < 300 + macroNames.size())
+            {
+                juce::String err;
+                for (auto o : project.tracks()) if (MasteringProject::enabledOf (*o)) MasteringMacros::apply (project, *o, macroNames[r - 300], err);
+                if (err.isNotEmpty()) msg ("Track Macros", err);
+                refreshAll(); return;
+            }
             if (r == 1) project.setMeta (*t, "mEnabled", ! MasteringProject::enabledOf (*t));
             else if (r == 2) { selectTrack (row); detectLoudness(); }
             else if (r == 3) { selectTrack (row); trackMetadata(); }
@@ -1432,7 +1631,7 @@ public:
     {
         if (project.numTracks() == 0) { msg ("Digital Release", "Add tracks first."); return; }
         auto w = std::make_shared<juce::AlertWindow> ("Digital Release", "One file per track, tagged with the album and track meta-information", juce::MessageBoxIconType::NoIcon);
-        w->addComboBox ("format", { "WAV", "AIFF", "FLAC", "OGG Vorbis" }, "Format");
+        w->addComboBox ("format", { "WAV", "AIFF", "FLAC", "OGG Vorbis", "MP3 320 kb/s", "MP3 VBR V0" }, "Format");
         w->addComboBox ("depth", { "16-bit", "24-bit", "32-bit float" }, "Resolution"); w->getComboBoxComponent ("depth")->setSelectedId (2, juce::dontSendNotification);
         w->addComboBox ("rate", { "44.1 kHz", "48 kHz", "88.2 kHz", "96 kHz" }, "Sample rate");
         juce::StringArray targets; for (auto& t : loudnessTargets()) targets.add (t.name);
@@ -1445,7 +1644,8 @@ public:
         {
             if (r != 1) return;
             MasteringProject::PublishOptions o;
-            const char* fmts[] = { "wav", "aiff", "flac", "ogg" }; o.format = fmts[w->getComboBoxComponent ("format")->getSelectedId() - 1];
+            const char* fmts[] = { "wav", "aiff", "flac", "ogg", "mp3", "mp3" }; o.format = fmts[w->getComboBoxComponent ("format")->getSelectedId() - 1];
+            if (w->getComboBoxComponent ("format")->getSelectedId() == 6) o.mp3VbrQuality = 0;
             const int depths[] = { 16, 24, 32 }; o.bitDepth = depths[w->getComboBoxComponent ("depth")->getSelectedId() - 1];
             const double rates[] = { 44100.0, 48000.0, 88200.0, 96000.0 }; o.sampleRate = rates[w->getComboBoxComponent ("rate")->getSelectedId() - 1];
             o.loudnessTarget = w->getComboBoxComponent ("target")->getSelectedId() - 1;

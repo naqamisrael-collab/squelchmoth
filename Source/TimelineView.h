@@ -784,6 +784,15 @@ public:
         if (cmd && code == 'T') { EditOps::trimToSelection (session, state); repaintAll(); return true; }
         if (cmd && code == 'M' && ! shift) { for (auto& c : state.selectedClips) c->setMuted (! c->isMuted()); repaintAll(); return true; }
         if (cmd && code == 'A') { EditOps::selectAll (session, state); repaintAll(); return true; }
+        if (cmd && shift && (code == ',' || k.getTextCharacter() == '<'))   // 1.12: Identify Sync Point at the playhead
+        {
+            if (session.edit != nullptr)
+            {
+                const auto at = session.edit->getTransport().getPosition();
+                for (auto& c : state.selectedClips) EditOps::setSyncPoint (*c, at);
+            }
+            repaintAll(); return true;
+        }
         if (cmd && code == 'X') { EditOps::cut (session, state); repaintAll(); return true; }
         if (cmd && code == 'C') { EditOps::copy (session, state); return true; }
         if (cmd && code == 'V') { EditOps::paste (session, state); repaintAll(); return true; }

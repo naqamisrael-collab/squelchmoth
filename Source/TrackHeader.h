@@ -526,7 +526,7 @@ private:
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (viewBtn), [this, sp = juce::Component::SafePointer<juce::Component> (this)] (int r)
         {
             if (sp == nullptr || r <= 0 || r - 1 >= viewIds.size()) return;
-            MixCtl::setView (track, viewIds[r - 1]);
+            MixCtl::setView (session, track, viewIds[r - 1]);
             refresh();
             if (onStructureChanged) onStructureChanged();
         });
@@ -566,7 +566,7 @@ private:
             if (r >= 1 && r <= 5) Session::setAutomationModeIndex (track, r - 1);
             else if (r == 101) { for (auto p : track.pluginList.getPlugins()) for (auto ap : p->getAutomatableParameters()) ap->getCurve().clear (&track.edit.getUndoManager()); }
             else if (r == 102) { if (auto p = MixCtl::viewParam (session, track)) p->getCurve().clear (&track.edit.getUndoManager()); }
-            else if (r >= 200 && r - 200 < viewIds.size()) { MixCtl::setView (track, viewIds[r - 200]); if (onStructureChanged) onStructureChanged(); }
+            else if (r >= 200 && r - 200 < viewIds.size()) { MixCtl::setView (session, track, viewIds[r - 200]); if (onStructureChanged) onStructureChanged(); }
             refresh();
         });
     }

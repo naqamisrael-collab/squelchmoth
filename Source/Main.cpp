@@ -168,6 +168,8 @@ public:
         engine->getPluginManager().createBuiltInType<te::ToneGeneratorPlugin>();     // signal generator for the mastering page
         engine->getPluginManager().createBuiltInType<SqStereoPanPlugin>();           // hidden dual panner
         engine->getPluginManager().createBuiltInType<SqMonoSumPlugin>();             // hidden: makes mono tracks mono
+        engine->getPluginManager().createBuiltInType<SqMuteAutoPlugin>();            // hidden: the Mute automation lane
+        engine->getPluginManager().createBuiltInType<SqExternalFxPlugin>();          // 1.12: hardware insert
         engine->getPluginManager().createBuiltInType<SqAnalyzerPlugin>();            // mastering meter tap
         engine->getPluginManager().createBuiltInType<SqStripTapPlugin>();            // console strip meters (RMS / LUFS)
         engine->getPluginManager().createBuiltInType<Sq808Plugin>();                 // Moth 808

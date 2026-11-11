@@ -8,12 +8,13 @@
 #include "TimeFormat.h"
 #include "Theme.h"
 #include "MonitorChain.h"
+#include "SqMp3Encoder.h"
 
 namespace BounceExport
 {
     struct Options
     {
-        juce::String format = "wav";      // wav | aiff | flac
+        juce::String format = "wav";      // wav | aiff | flac | mp3
         int bitDepth = 24;                 // 16, 24, 32 (float)
         double sampleRate = 0;             // 0 = session rate
         bool dither = true;                // TPDF dither for 16 / 24-bit
@@ -21,12 +22,35 @@ namespace BounceExport
         std::optional<float> lufs;         // normalise to integrated loudness, true peak held under -1 dBTP
         std::optional<te::TimeRange> range;// default: whole session
         double tailSeconds = 0;            // extra time after the range for reverb / delay tails
+        int mp3Bitrate = 320;              // 1.12 MP3: CBR kb/s ...
+        int mp3VbrQuality = -1;            // ... or VBR V0-V4 when >= 0
+        SqMp3::Tags tags;                  // ID3 tags for MP3 files
     };
+
+    //==========================================================================
+    // 1.12: MP3 export with Squelchmoth's own encoder. The mix renders to a 32-bit float WAV beside the target, which
+    // is then encoded (resampled first when the rate isn't an MP3 rate: 88.2 / 176.4 kHz -> 44.1, 96 / 192 -> 48).
+    using SqMp3::mp3RateFor;
+    using SqMp3::encodeMp3;
+
+    /** Renders with these parameters to 'dest', going through a temporary WAV when the format is MP3. */
+    inline juce::File render (const juce::String& desc, te::Renderer::Parameters p, const Options& o, juce::String& err)
+    {
+        if (o.format != "mp3") return te::Renderer::renderToFile (desc, p);
+        const auto finalDest = p.destFile;
+        auto tmp = finalDest.getSiblingFile (finalDest.getFileNameWithoutExtension() + " (mp3 source).wav");
+        p.destFile = tmp; p.bitDepth = 32; p.ditheringEnabled = false;
+        auto f = te::Renderer::renderToFile (desc, p);
+        if (! f.existsAsFile()) return {};
+        const bool ok = encodeMp3 (f, finalDest, o.mp3Bitrate, o.mp3VbrQuality, o.tags, err);
+        f.deleteFile();
+        return ok ? finalDest : juce::File();
+    }
 
     inline juce::AudioFormat* formatFor (Session& s, const juce::String& f)
     {
         auto& afm = s.getEngine().getAudioFileFormatManager();
-        return f == "aiff" ? afm.getAiffFormat() : f == "flac" ? afm.getFlacFormat() : afm.getWavFormat();
+        return f == "aiff" ? afm.getAiffFormat() : f == "flac" ? afm.getFlacFormat() : afm.getWavFormat();   // mp3: rendered as WAV, then encoded
     }
 
     inline te::TimeRange rangeFor (Session& s, const Options& o)
@@ -68,8 +92,8 @@ namespace BounceExport
         auto p = params (s, o, dest);
         p.tracksToDo = te::toBitSet (te::getAllTracks (*s.edit));
         MonitorChain::PrintGuard guard (s);   // the Control Room chain and (optionally) the Master fader never print
-        auto f = te::Renderer::renderToFile ("Bounce", p);
-        if (! f.existsAsFile()) { err = "The bounce produced no audio - is there anything between those points?"; return {}; }
+        auto f = render ("Bounce", p, o, err);
+        if (! f.existsAsFile()) { if (err.isEmpty()) err = "The bounce produced no audio - is there anything between those points?"; return {}; }
         return f;
     }
 
@@ -191,7 +215,8 @@ namespace BounceExport
             auto p = params (s, o, dest);
             p.tracksToDo = te::toBitSet (renderSetFor (s, *t, o.withSendEffects));
             p.checkNodesForAudio = false;   // a silent stem is still written so every file lines up
-            auto f = te::Renderer::renderToFile ("Stem " + t->getName(), p);
+            juce::String stemErr;
+            auto f = render ("Stem " + t->getName(), p, o, stemErr);
             if (! f.existsAsFile()) { ++res.failed; res.lines.add ("FAILED  " + t->getName()); continue; }
             if (o.skipSilent && peakDbOfFile (s, f) < -90.0f)
             {
@@ -222,7 +247,7 @@ namespace BounceExport
             addAndMakeVisible (nameEd);
             nameEd.setText (stems ? Prefs::getString ("bx_stemTemplate", "{n} {track}") : s.getFile().getFileNameWithoutExtension() + " mix", false);
             nameEd.setTooltip (stems ? "File names: {n} number, {track} track name, {session}, {bpm}, {date}, {sr}" : "File name");
-            addCombo (fmt, { "WAV (BWF)", "AIFF", "FLAC" }, juce::jlimit (1, 3, Prefs::getInt ("bx_format", 1)));
+            addCombo (fmt, { "WAV (BWF)", "AIFF", "FLAC", "MP3 320 kb/s", "MP3 256 kb/s", "MP3 192 kb/s", "MP3 128 kb/s", "MP3 VBR V0 (best)", "MP3 VBR V2", "MP3 VBR V4" }, juce::jlimit (1, 10, Prefs::getInt ("bx_format", 1)));
             addCombo (depth, { "16-bit", "24-bit", "32-bit float" }, juce::jlimit (1, 3, Prefs::getInt ("bx_depth", 2)));
             juce::StringArray rateNames;
             const double sr = TimeFmt::sampleRate (*s.edit);
@@ -296,11 +321,20 @@ namespace BounceExport
 
         void fill (Options& o)
         {
-            static const char* fmts[] = { "wav", "aiff", "flac" };
+            static const char* fmts[] = { "wav", "aiff", "flac", "mp3", "mp3", "mp3", "mp3", "mp3", "mp3", "mp3" };
+            static const int mp3Rates[] = { 0, 0, 0, 320, 256, 192, 128, 0, 0, 0 };
+            static const int mp3Vbr[] = { -1, -1, -1, -1, -1, -1, -1, 0, 2, 4 };
             static const int depths[] = { 16, 24, 32 };
             static const float lufsVals[] = { 0, -14, -16, -9, -23 };
             static const double tails[] = { 0, 1, 2, 4 };
             o.format = fmts[fmt.getSelectedId() - 1];
+            if (o.format == "mp3")
+            {
+                o.mp3Bitrate = mp3Rates[fmt.getSelectedId() - 1] > 0 ? mp3Rates[fmt.getSelectedId() - 1] : 320;
+                o.mp3VbrQuality = mp3Vbr[fmt.getSelectedId() - 1];
+                o.tags.title = nameEd.getText().trim().isNotEmpty() ? nameEd.getText().trim() : session.getFile().getFileNameWithoutExtension();
+                o.tags.year = juce::String (juce::Time::getCurrentTime().getYear());
+            }
             o.bitDepth = depths[depth.getSelectedId() - 1];
             o.sampleRate = rate.getSelectedId() <= 1 ? 0.0 : rates[rate.getSelectedId() - 2];
             o.dither = dither.getToggleState();

@@ -356,7 +356,7 @@ namespace TrackOps
                     auto type = child.getProperty (te::IDs::type).toString();
                     bool isSend = type == te::AuxSendPlugin::xmlTypeName;
                     bool core = type == te::VolumeAndPanPlugin::xmlTypeName || type == te::LevelMeterPlugin::xmlTypeName || type == te::AuxReturnPlugin::xmlTypeName
-                                || type == SqMonoSumPlugin::xmlTypeName || type == SqStereoPanPlugin::xmlTypeName || type == SqStripTapPlugin::xmlTypeName;
+                                || type == SqMonoSumPlugin::xmlTypeName || type == SqMuteAutoPlugin::xmlTypeName || type == SqStereoPanPlugin::xmlTypeName || type == SqStripTapPlugin::xmlTypeName;
                     if ((! o.sends && isSend) || (! o.inserts && ! isSend && ! core)) st.removeChild (c, nullptr);
                     else if (! o.automation)
                         for (int pc = child.getNumChildren(); --pc >= 0;)

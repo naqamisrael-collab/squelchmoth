@@ -72,6 +72,12 @@ namespace MixCtl
 
     inline juce::String currentView (te::Track& t)               { return t.state.getProperty ("sqmView", "waveform").toString(); }
     inline void setView (te::Track& t, const juce::String& v)    { t.state.setProperty ("sqmView", v, nullptr); }
+    /** Shows a view; the Mute view adds the track's hidden Mute lane stage the first time (1.12). */
+    inline void setView (Session& s, te::Track& t, const juce::String& v)
+    {
+        if (v == "mute") s.ensureMuteAuto (t);
+        setView (t, v);
+    }
 
     inline std::vector<ViewChoice> viewChoices (Session& s, te::Track& t)
     {
@@ -85,6 +91,11 @@ namespace MixCtl
             out.push_back ({ "panR", "pan right", sp->panR.get() });
         }
         else if (auto vp = volumePlugin (s, t)) out.push_back ({ "pan", "pan", vp->panParam.get() });
+        if (! t.isMasterTrack() && volumePlugin (s, t) != nullptr)
+        {
+            auto m = Session::getMuteAuto (t);
+            out.push_back ({ "mute", "mute", m != nullptr ? m->mute.get() : nullptr });   // 1.12: created when first shown
+        }
         if (auto a = dynamic_cast<te::AudioTrack*> (&t))
         {
             auto sends = Session::getSends (*a);

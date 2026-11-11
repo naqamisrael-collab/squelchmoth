@@ -163,7 +163,7 @@ void registerTrackTools2()
                          for (auto& c : MixCtl::viewChoices (session, *t))
                              if (c.label.containsIgnoreCase (want)) { found = c.id; break; }
                      if (found.isEmpty()) errs.add (t->getName() + ": no track view '" + want + "'");
-                     else { MixCtl::setView (*t, found); done.add (t->getName() + " shows " + MixCtl::viewLabel (session, *t)); }
+                     else { MixCtl::setView (session, *t, found); done.add (t->getName() + " shows " + MixCtl::viewLabel (session, *t)); }
                  }
                  if (has (a, "input_monitor") && at != nullptr) { TrackOps::setInputMonitor (session, *at, flag (a, "input_monitor")); done.add (t->getName() + " input monitor " + (flag (a, "input_monitor") ? "on" : "off")); }
                  if (at != nullptr)

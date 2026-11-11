@@ -23,6 +23,8 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<te::ToneGeneratorPlugin>();
     engine->getPluginManager().createBuiltInType<SqStereoPanPlugin>();
     engine->getPluginManager().createBuiltInType<SqMonoSumPlugin>();
+    engine->getPluginManager().createBuiltInType<SqMuteAutoPlugin>();
+    engine->getPluginManager().createBuiltInType<SqExternalFxPlugin>();
     engine->getPluginManager().createBuiltInType<SqAnalyzerPlugin>();
     engine->getPluginManager().createBuiltInType<SqStripTapPlugin>();
     engine->getPluginManager().createBuiltInType<Sq808Plugin>();
@@ -3054,6 +3056,278 @@ inline int runSelfTest()
             if (keep.getParentDirectory().isDirectory()) rep.copyFileTo (keep);
         }
         std::cout << "  (1.11 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)\n";
+    }
+
+    // ===================================================================== 1.12 "Finish Line"
+    {
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest 112","tempo":120})");
+        const double sr = session->edit->engine.getDeviceManager().getSampleRate() > 0 ? session->edit->engine.getDeviceManager().getSampleRate() : 48000.0;
+        auto tone = session->sessionsDir.getChildFile ("st112 tone.wav");
+        {
+            const int len = (int) (sr * 10.0);
+            juce::AudioBuffer<float> buf (2, len);
+            for (int i = 0; i < len; ++i)
+            {
+                const float v = (float) (0.4 * std::sin (juce::MathConstants<double>::twoPi * 441.0 * i / sr));
+                buf.setSample (0, i, v); buf.setSample (1, i, v);
+            }
+            tone.deleteFile();
+            juce::WavAudioFormat wav;
+            if (auto os = tone.createOutputStream())
+                if (auto w = std::unique_ptr<juce::AudioFormatWriter> (wav.createWriterFor (os.release(), sr, 2, 24, {}, 0)))
+                    w->writeFromAudioSampleBuffer (buf, 0, len);
+        }
+        const auto tonePath = tone.getFullPathName().replace ("\\", "/");
+        juce::AudioFormatManager fm112; fm112.registerBasicFormats();
+        auto readFile = [&] (const juce::File& f, double& rate)
+        {
+            juce::AudioBuffer<float> buf;
+            if (auto r = std::unique_ptr<juce::AudioFormatReader> (fm112.createReaderFor (f)))
+            {
+                rate = r->sampleRate; buf.setSize ((int) r->numChannels, (int) r->lengthInSamples);
+                r->read (&buf, 0, (int) r->lengthInSamples, 0, true, true);
+            }
+            return buf;
+        };
+        auto rmsDb = [] (const juce::AudioBuffer<float>& b, double rate, double t0, double t1)
+        {
+            const int a = juce::jlimit (0, b.getNumSamples(), (int) (t0 * rate)), z = juce::jlimit (0, b.getNumSamples(), (int) (t1 * rate));
+            double e = 0; int n = 0;
+            for (int i = a; i < z; ++i) { e += (double) b.getSample (0, i) * b.getSample (0, i); ++n; }
+            return juce::Decibels::gainToDecibels ((float) std::sqrt (e / juce::jmax (1, n)), -200.0f);
+        };
+
+        // --- A. MP3 export with Squelchmoth's own encoder
+        {
+            call ("add_track", R"({"kind":"audio","name":"MP3 Src"})");
+            call ("import_audio", R"({"track":"MP3 Src","path":")" + tonePath + R"(","start_bar":1})");
+            auto r320 = call ("bounce", R"({"name":"st112 mp3","start_seconds":0,"end_seconds":6,"format":"mp3","mp3_bitrate":320,"title":"Selftest Song","artist":"Jamar Stewart","tracks":["MP3 Src"]})");
+            auto rv0 = call ("bounce", R"({"name":"st112 mp3 v0","start_seconds":0,"end_seconds":6,"format":"mp3","mp3_vbr_quality":0,"tracks":["MP3 Src"]})");
+            auto f320 = session->bouncesDir.getChildFile ("st112 mp3.mp3"), fv0 = session->bouncesDir.getChildFile ("st112 mp3 v0.mp3");
+            double rate = 0;
+            auto dec = readFile (f320, rate);
+            // align by cross-correlation, then level and correlation against the source tone
+            int lag = 0; double bestC = -1e30;
+            for (int L = 0; L < 4000 && dec.getNumSamples() > 0; ++L)
+            {
+                double c = 0; for (int i = 20000; i < 40000; i += 2) c += (double) std::sin (juce::MathConstants<double>::twoPi * 441.0 * i / rate) * dec.getSample (0, i + L);
+                if (c > bestC) { bestC = c; lag = L; }
+            }
+            double xy = 0, xx = 0, yy = 0;
+            for (int i = 20000; i < (int) (5.0 * rate) && i + lag < dec.getNumSamples(); ++i)
+            {
+                const double x = 0.4 * std::sin (juce::MathConstants<double>::twoPi * 441.0 * i / rate), y = dec.getSample (0, i + lag);
+                xy += x * y; xx += x * x; yy += y * y;
+            }
+            const double corr = xy / std::sqrt (xx * yy + 1e-30), lvl = 10.0 * std::log10 ((yy + 1e-30) / (xx + 1e-30));
+            // first audio frame after the ID3 tag and the Info frame: its header's bitrate index
+            juce::MemoryBlock mb; f320.loadFileAsData (mb);
+            auto* d = (const uint8_t*) mb.getData(); const size_t n = mb.getSize();
+            size_t id3 = n > 10 && d[0] == 'I' && d[1] == 'D' && d[2] == '3' ? 10 + (size_t) ((d[6] << 21) | (d[7] << 14) | (d[8] << 7) | d[9]) : 0;
+            int kbps = 0; bool info = false;
+            if (id3 + 4 < n && d[id3] == 0xFF)
+            {
+                static const int brs[] = { 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320 };
+                const int bri = d[id3 + 2] >> 4, sri = (d[id3 + 2] >> 2) & 3; const int pad = (d[id3 + 2] >> 1) & 1;
+                const int frameLen = 144 * brs[bri] * 1000 / (sri == 0 ? 44100 : sri == 1 ? 48000 : 32000) + pad;
+                info = id3 + 40 < n && (memcmp (d + id3 + 36, "Info", 4) == 0 || memcmp (d + id3 + 21, "Info", 4) == 0);
+                const size_t a2 = id3 + (size_t) frameLen;
+                if (a2 + 3 < n && d[a2] == 0xFF) kbps = brs[d[a2 + 2] >> 4];
+            }
+            auto findBytes = [&] (const char* what, size_t len) { for (size_t i = 0; i + len <= juce::jmin<size_t> (n, 4096); ++i) if (memcmp (d + i, what, len) == 0) return true; return false; };
+            const bool hasTitle = id3 > 0 && findBytes ("TIT2", 4) && findBytes ("TPE1", 4) && findBytes ("S\0e\0l\0f\0t\0e\0s\0t\0", 16);
+            check (dec.getNumSamples() > (int) (5.5 * rate) && corr > 0.99 && std::abs (lvl) < 0.5 && kbps == 320 && info && hasTitle,
+                   "MP3 export (own encoder): 320 kb/s CBR decodes with correlation " + juce::String (corr, 4) + ", level " + juce::String (lvl, 2) + " dB, header " + juce::String (kbps)
+                   + " kb/s, Info frame and ID3 title / artist tags");
+            check (fv0.existsAsFile() && fv0.getSize() < f320.getSize() && rv0.contains ("VBR V0"), "MP3 VBR V0 export (" + juce::String (fv0.getSize() / 1024) + " KB vs " + juce::String (f320.getSize() / 1024) + " KB at 320)");
+            check (r320.contains ("MP3 320 kb/s") && ! f320.getSiblingFile ("st112 mp3 (mp3 source).wav").existsAsFile(), "bounce reports the MP3 settings and removes its temporary WAV");
+            call ("delete_track", R"({"track":"MP3 Src"})");
+        }
+
+        // --- B. Mute automation lane
+        call ("add_track", R"({"kind":"audio","name":"M1"})");
+        call ("import_audio", R"({"track":"M1","path":")" + tonePath + R"(","start_bar":1})");
+        if (auto* m1 = session->findTrack ("M1"))
+        {
+            MixCtl::setView (*session, *m1, "mute");
+            auto* ma = Session::getMuteAuto (*m1);
+            check (ma != nullptr && MixCtl::viewParam (*session, *m1) == ma->mute.get() && MixCtl::viewLabel (*session, *m1) == "mute"
+                   && ! Session::getInserts (m1->pluginList, m1).contains (ma) && m1->pluginList.indexOf (ma) == m1->pluginList.indexOf (m1->getVolumePlugin()) - 1,
+                   "Mute lane: Track View shows it, hidden from the inserts, just before the fader");
+            call ("write_automation", R"({"track":"M1","target":"mute","points":[{"seconds":4.0,"value":true},{"seconds":6.0,"value":false}]})");
+            call ("bounce", R"({"name":"st112 mute","start_seconds":0,"end_seconds":8,"bit_depth":32,"dither":false})");
+            double rate = 0;
+            auto mb = readFile (session->bouncesDir.getChildFile ("st112 mute.wav"), rate);
+            const float before = rmsDb (mb, rate, 1.0, 3.9), during = rmsDb (mb, rate, 4.05, 5.95), after = rmsDb (mb, rate, 6.05, 7.9);
+            float maxStep = 0, toneStep = (float) (0.4 * 2.0 * std::sin (juce::MathConstants<double>::pi * 441.0 / juce::jmax (1.0, rate))) * 1.15f;
+            for (int i = (int) (3.95 * rate); i < (int) (6.05 * rate) && i < mb.getNumSamples(); ++i)
+                if (i > 0) maxStep = juce::jmax (maxStep, std::abs (mb.getSample (0, i) - mb.getSample (0, i - 1)));
+            check (mb.getNumSamples() > 0 && std::abs (before - after) < 0.1f && during < -100.0f && maxStep <= toneStep,
+                   "Mute lane: muted 4-6 s renders silence (" + juce::String (during, 1) + " dB) and full level either side ("
+                   + juce::String (before, 1) + " / " + juce::String (after, 1) + " dB), no click at the edges");
+            // the Pencil on a mute lane draws blocks
+            auto& curve = ma->mute->getCurve();
+            curve.clear (nullptr);
+            MuteLane::paint (curve, te::TimePosition::fromSeconds (1.0), te::TimePosition::fromSeconds (2.0), true, nullptr);
+            MuteLane::paint (curve, te::TimePosition::fromSeconds (2.0), te::TimePosition::fromSeconds (2.5), true, nullptr);
+            check (! MuteLane::valueAt (curve, te::TimePosition::fromSeconds (0.99), 0.0f) && MuteLane::valueAt (curve, te::TimePosition::fromSeconds (1.0), 0.0f)
+                   && MuteLane::valueAt (curve, te::TimePosition::fromSeconds (2.25), 0.0f) && ! MuteLane::valueAt (curve, te::TimePosition::fromSeconds (2.52), 0.0f)
+                   && curve.getNumPoints() <= 4,
+                   "Mute lane: the Pencil paints on / off blocks with sharp edges (" + juce::String (curve.getNumPoints()) + " points)");
+            auto cl = call ("clear_automation", R"({"track":"M1","target":"mute"})");
+            check (curve.getNumPoints() == 0, "Mute lane: clear_automation target mute");
+        }
+        // --- C. Sync point
+        {
+            call ("sync_point", R"({"track":"M1","clip":1,"at_seconds_in_clip":1.25})");
+            call ("spot_clip", R"({"track":"M1","clip":1,"to_seconds":10.0,"anchor":"sync"})");
+            auto* m1 = dynamic_cast<te::AudioTrack*> (session->findTrack ("M1"));
+            te::Clip* c = m1 != nullptr && ! m1->getClips().isEmpty() ? m1->getClips()[0] : nullptr;
+            const double st1 = c != nullptr ? c->getPosition().getStart().inSeconds() : -1;
+            check (c != nullptr && std::abs (st1 - 8.75) < 1e-6, "Sync point: a clip with its sync point 1.25 s in, spotted to 10.0 s, starts at " + juce::String (st1, 4) + " s");
+            if (c != nullptr)
+            {
+                auto pos = c->getPosition();
+                c->setPosition ({ { pos.getStart() + te::TimeDuration::fromSeconds (0.5), pos.getEnd() }, pos.getOffset() + te::TimeDuration::fromSeconds (0.5) });
+                auto sp = EditOps::syncPointTime (*c);
+                auto g = juce::JSON::parse (call ("sync_point", R"({"track":"M1","clip":1})"));
+                check (sp && std::abs (sp->inSeconds() - 10.0) < 1e-6 && std::abs ((double) g["sync_point_in_clip_seconds"] - 0.75) < 1e-6,
+                       "Sync point stays on the same sound when the clip start is trimmed (10.0 s, 0.75 s into the clip)");
+                call ("sync_point", R"({"track":"M1","clip":1,"action":"clear"})");
+                check (! EditOps::hasSyncPoint (*c), "Sync point: clear");
+            }
+        }
+        // --- D. Spectrum: 1/12-octave bands, waterfall / sonogram history
+        {
+            AnalysisHub hub; hub.prepare (48000.0); hub.update();
+            SpectrumHistory hist;
+            juce::AudioBuffer<float> sb (2, 4096);
+            for (int blk = 0; blk < 8; ++blk)
+            {
+                for (int i = 0; i < 4096; ++i) { const float v = 0.25f * (float) std::sin (juce::MathConstants<double>::twoPi * 1000.0 * (blk * 4096 + i) / 48000.0); sb.setSample (0, i, v); sb.setSample (1, i, v); }
+                hub.push (sb, 0, 4096); hub.update(); hist.update (hub.spectrum, hub.sr);
+            }
+            auto bands = SpectrumBands::compute (hub.spectrum, hub.sr, 12);
+            const SpectrumBands::Band* at1k = nullptr; const SpectrumBands::Band* up2 = nullptr; const SpectrumBands::Band* dn2 = nullptr;
+            for (auto& b : bands)
+            {
+                if (std::abs (b.centre - 1000.0f) < 1.0f) at1k = &b;
+                if (std::abs (b.centre - 1000.0f * std::pow (2.0f, 2.0f / 12.0f)) < 1.0f) up2 = &b;
+                if (std::abs (b.centre - 1000.0f * std::pow (2.0f, -2.0f / 12.0f)) < 1.0f) dn2 = &b;
+            }
+            const float want = juce::Decibels::gainToDecibels (0.25f);
+            check (at1k != nullptr && up2 != nullptr && dn2 != nullptr && std::abs (at1k->db - want) < 0.5f && at1k->db - up2->db > 20.0f && at1k->db - dn2->db > 20.0f,
+                   "Spectrum 1/12 octave: a 1 kHz sine at " + juce::String (want, 1) + " dBFS reads " + (at1k ? juce::String (at1k->db, 2) : juce::String ("-")) + " dB in its band, "
+                   + (at1k && up2 && dn2 ? juce::String (at1k->db - juce::jmax (up2->db, dn2->db), 1) : juce::String ("-")) + " dB above the bands two away");
+            auto b3 = SpectrumBands::compute (hub.spectrum, hub.sr, 3);
+            float b3db = -200.0f; for (auto& b : b3) if (std::abs (b.centre - 1000.0f) < 1.0f) b3db = b.db;
+            check (std::abs (b3db - want) < 0.5f && (int) b3.size() == 31 && (int) bands.size() == 121, "Spectrum 1/3 octave reads the same sine at " + juce::String (b3db, 2) + " dB (31 ISO bands; 1/12: " + juce::String ((int) bands.size()) + ")");
+            int brightest = 0;
+            if (! hist.rows.empty()) for (int c = 1; c < SpectrumHistory::columns; ++c) if (hist.rows.back()[(size_t) c] > hist.rows.back()[(size_t) brightest]) brightest = c;
+            const float bf = 0.5f * (SpectrumHistory::columnHz (brightest) + SpectrumHistory::columnHz (brightest + 1));
+            check ((int) hist.rows.size() == 8 && std::abs (std::log2 (bf / 1000.0f)) < 1.0f / 24.0f,
+                   "Waterfall / sonogram: one row per frame (" + juce::String ((int) hist.rows.size()) + "), brightest row at " + juce::String (bf, 0) + " Hz");
+        }
+        // --- E. External Effect: ping through a software loop (the same bridge code the audio device runs)
+        {
+            auto& bridge = ExternalFxBridge::get();
+            bridge.manualOnly = true;
+            auto pp = session->edit->engine.getPluginManager().createNewPlugin (*session->edit, SqExternalFxPlugin::xmlTypeName, {});
+            auto* fx = dynamic_cast<SqExternalFxPlugin*> (pp.get());
+            if (fx != nullptr)
+            {
+                const double rate = 48000.0; const int block = 256, loopDelay = 300;
+                fx->setPairs (2, 2);
+                fx->baseClassInitialise ({ te::TimePosition(), rate, block });
+                // the "outboard gear": outputs 3-4 -> a 300-sample cable -> inputs 3-4
+                std::vector<float> cable ((size_t) (loopDelay + block * 4), 0.0f); size_t cw = 0;
+                juce::AudioBuffer<float> devIn (4, block), devOut (4, block), buf (2, block); te::MidiMessageArray midi;
+                double clock = 0;
+                auto runBlock = [&] (const std::function<float (int)>& src, std::vector<float>* outL)
+                {
+                    for (int i = 0; i < block; ++i) { const float v = src ? src (i) : 0.0f; buf.setSample (0, i, v); buf.setSample (1, i, v); }
+                    te::PluginRenderContext fc (&buf, 0, block, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (clock / rate), te::TimePosition::fromSeconds ((clock + block) / rate)), true, false, false, false);
+                    fx->applyToBuffer (fc);
+                    if (outL) for (int i = 0; i < block; ++i) outL->push_back (buf.getSample (0, i));
+                    devOut.clear();
+                    // what arrives at the inputs this block: what left the outputs loopDelay samples ago
+                    for (int i = 0; i < block; ++i)
+                    {
+                        const size_t rd = (cw + cable.size() + (size_t) i - (size_t) loopDelay) % cable.size();
+                        devIn.setSample (2, i, cable[rd]); devIn.setSample (3, i, cable[rd]);
+                    }
+                    const float* ins[4] = { devIn.getReadPointer (0), devIn.getReadPointer (1), devIn.getReadPointer (2), devIn.getReadPointer (3) };
+                    float* outs[4] = { devOut.getWritePointer (0), devOut.getWritePointer (1), devOut.getWritePointer (2), devOut.getWritePointer (3) };
+                    bridge.processDeviceBlock (ins, 4, outs, 4, block);
+                    for (int i = 0; i < block; ++i) cable[(cw + (size_t) i) % cable.size()] = devOut.getSample (2, i);
+                    cw = (cw + (size_t) block) % cable.size();
+                    clock += block;
+                };
+                for (int k = 0; k < 8; ++k) runBlock ({}, nullptr);
+                fx->startPing();
+                for (int k = 0; k < (int) (1.2 * rate / block) && fx->isPinging(); ++k) runBlock ({}, nullptr);
+                const int measured = fx->lastPing();
+                check (measured == loopDelay + block, "External Effect: Ping measures the round trip to the sample (" + juce::String (measured) + " = " + juce::String (loopDelay) + "-sample loop + one "
+                       + juce::String (block) + "-sample device block)");
+                if (measured > 0) fx->applyPing (measured);
+                // 100 % wet through the loop vs the dry input delayed by the reported latency
+                std::vector<float> outL, inL;
+                auto sine = [&] (int i) { const float v = 0.3f * (float) std::sin (juce::MathConstants<double>::twoPi * 997.0 * (clock + i) / rate); inL.push_back (v); return v; };
+                for (int k = 0; k < 200; ++k) runBlock (sine, &outL);
+                double e = 0, r = 0; const int L = fx->latencySamples.get();
+                for (size_t i = (size_t) L + 4096; i < outL.size(); ++i) { const double d = outL[i] - inL[i - (size_t) L]; e += d * d; r += (double) inL[i - (size_t) L] * inL[i - (size_t) L]; }
+                const double nullDb = 10.0 * std::log10 (juce::jmax (1.0e-20, e) / juce::jmax (1.0e-20, r));
+                check (L > 0 && nullDb < -60.0 && std::abs (fx->getLatencySeconds() * rate - L) < 0.5,
+                       "External Effect: compensated return nulls against the dry signal (" + juce::String (nullDb, 1) + " dB) and reports " + juce::String (L) + " samples to delay compensation");
+                fx->mixPct = 50.0f;
+                std::vector<float> o2; inL.clear(); outL.clear();
+                for (int k = 0; k < 60; ++k) runBlock (sine, &o2);
+                double e2 = 0, r2 = 0;
+                for (size_t i = 4096; i < o2.size(); ++i) { const double d = o2[i] - inL[i - (size_t) L]; e2 += d * d; r2 += (double) inL[i - (size_t) L] * inL[i - (size_t) L]; }
+                check (10.0 * std::log10 (juce::jmax (1.0e-20, e2) / juce::jmax (1.0e-20, r2)) < -60.0, "External Effect: 50 % mix stays phase-aligned (dry and return add without comb filtering)");
+                fx->baseClassDeinitialise();
+            }
+            else check (false, "External Effect plug-in creates");
+            pp = nullptr;
+            bridge.manualOnly = false;
+            auto ex = juce::JSON::parse (call ("external_fx", R"({"track":"M1","action":"add","out_pair":5,"in_pair":7,"send_db":-3})"));
+            check (ex["outputs"].toString() == "5-6" && ex["inputs"].toString() == "7-8" && std::abs ((double) ex["send_db"] + 3.0) < 1e-6,
+                   "external_fx: add on a track with outputs 5-6 / inputs 7-8 and send -3 dB");
+            call ("external_fx", R"({"track":"M1","action":"remove"})");
+        }
+        // --- F. Mastering track macros + the spectrum over MCP
+        {
+            MasteringProject mp (*session);
+            tools.ui.mastering = [&] { return &mp; };
+            call ("mastering_new", R"({"name":"Selftest 112 Album"})");
+            const auto tp = tone.getFullPathName().replace ("\\", "\\\\");
+            call ("mastering_add_tracks", "{\"paths\":[\"" + tp + "\",\"" + tp + "\",\"" + tp + "\"]}");
+            call ("mastering_insert", R"({"target":1,"plugin":"Prism EQ"})");
+            call ("mastering_insert", R"({"target":1,"plugin":"Clamp Limiter"})");
+            call ("mastering_set_track", R"({"track":1,"fader_db":-2.5,"fade_in":0.4,"fade_out":1.2})");
+            auto sv = call ("mastering_macro", R"({"action":"save","name":"Selftest 112 Chain","track":1})");
+            auto ap = call ("mastering_macro", R"({"action":"apply","name":"Selftest 112 Chain","tracks":[2,3]})");
+            auto tr = mp.tracks();
+            auto sig = [&] (te::AudioTrack* t)
+            {
+                juce::String s2;
+                for (auto pl : Session::getInserts (t->pluginList, t)) { mp.edit->flushPluginStateIfNeeded (*pl); auto c = pl->state.createCopy(); c.removeProperty (te::IDs::id, nullptr); s2 << c.toXmlString().hashCode64() << ";"; }
+                if (auto vp = t->getVolumePlugin()) s2 << juce::String (vp->getVolumeDb(), 2);
+                if (auto c = MasteringProject::clipOf (*t)) s2 << "|" << juce::String (c->getFadeIn().inSeconds(), 2) << "|" << juce::String (c->getFadeOut().inSeconds(), 2);
+                return s2;
+            };
+            check (tr.size() == 3 && Session::getInserts (tr[1]->pluginList, tr[1]).size() == 2 && sig (tr[0]) == sig (tr[1]) && sig (tr[0]) == sig (tr[2]) && sv.contains ("2 rack plug-in"),
+                   "Mastering track macro applied to three tracks gives identical racks, fader (-2.5 dB) and fades (" + (tr.size() == 3 ? sig (tr[2]).fromLastOccurrenceOf (";", false, false) : juce::String()) + ")");
+            auto ls = juce::JSON::parse (call ("mastering_macro", R"({"action":"list"})"));
+            bool listed = false; if (auto arr = ls["macros"].getArray()) for (auto& v : *arr) listed = listed || v.toString() == "Selftest 112 Chain";
+            call ("mastering_macro", R"({"action":"delete","name":"Selftest 112 Chain"})");
+            check (listed && ! MasteringMacros::fileFor ("Selftest 112 Chain").existsAsFile(), "mastering_macro list / delete");
+            auto spj = juce::JSON::parse (call ("mastering_spectrum", R"({"resolution":"twelfth"})"));
+            check (spj["bands"].isArray() && spj["bands"].size() == 121, "mastering_spectrum reports 121 1/12-octave bands");
+            tools.ui.mastering = nullptr;
+        }
+        std::cout << "  (1.12 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)\n";
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));

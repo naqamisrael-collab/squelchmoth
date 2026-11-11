@@ -14,6 +14,7 @@ static const BuiltinPluginInfo builtinPlugins[] = {
     { "lowpass", "Low/High Pass Filter", "Filter" },
     { "impulseResponse", "Impulse Response (Convolution)", "Reverb" },
     { "midiModifier", "MIDI Modifier", "MIDI" },
+    { "sqmExternalFx", "External Effect (hardware insert)", "Utility" },
     { "airwindows_adclip7", "AW ADClip 7", "AirWindows" },
     { "airwindows_adt", "AW ADT", "AirWindows" },
     { "airwindows_aquickvoiceclip", "AW A Quick Voice Clip", "AirWindows" },

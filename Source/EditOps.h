@@ -657,11 +657,37 @@ namespace EditOps
         return n;
     }
 
-    /** Spot: move a clip so its start (or sync point / end) lands on an exact time. */
-    inline void spot (te::Clip& c, te::TimePosition to, int anchor /* 0 = start, 1 = end */)
+    //==========================================================================
+    // 1.12: Sync Point (Pro Tools Identify Sync Point). Stored in source time (seconds into the clip's audio), so it
+    // stays on the same sound when the clip is trimmed or moved. A clip has at most one.
+    inline bool hasSyncPoint (const te::Clip& c)        { return c.state.hasProperty ("sqmSyncSrc"); }
+    inline void clearSyncPoint (te::Clip& c)            { c.state.removeProperty ("sqmSyncSrc", &c.edit.getUndoManager()); }
+
+    /** Where the sync point sits on the timeline, if the clip has one and it is inside the clip. */
+    inline std::optional<te::TimePosition> syncPointTime (const te::Clip& c)
+    {
+        if (! hasSyncPoint (c)) return {};
+        auto pos = c.getPosition();
+        const double t = pos.getStart().inSeconds() + (double) c.state["sqmSyncSrc"] - pos.getOffset().inSeconds();
+        if (t < pos.getStart().inSeconds() - 1e-9 || t > pos.getEnd().inSeconds() + 1e-9) return {};
+        return te::TimePosition::fromSeconds (t);
+    }
+
+    /** Sets the sync point at a timeline time inside the clip. False if the time is outside the clip. */
+    inline bool setSyncPoint (te::Clip& c, te::TimePosition at)
+    {
+        auto pos = c.getPosition();
+        if (at < pos.getStart() || at > pos.getEnd()) return false;
+        c.state.setProperty ("sqmSyncSrc", (at - pos.getStart()).inSeconds() + pos.getOffset().inSeconds(), &c.edit.getUndoManager());
+        return true;
+    }
+
+    /** Spot: move a clip so its start, end or sync point lands on an exact time. */
+    inline void spot (te::Clip& c, te::TimePosition to, int anchor /* 0 = start, 1 = end, 2 = sync point */)
     {
         auto pos = c.getPosition();
         if (anchor == 1) to = to - pos.getLength();
+        if (anchor == 2) if (auto sp = syncPointTime (c)) to = to - (*sp - pos.getStart());
         c.setStart (juce::jmax (te::TimePosition(), to), false, true);
     }
 

@@ -373,16 +373,36 @@ The Mastering window is Squelchmoth's version of the Studio One / Fender Studio 
    ("Activate all / bypass all" A/Bs the processing).
 5. **Detect Loudness** measures the selected track (EBU R128 integrated LUFS, loudness range, true peak,
    RMS - pre-FX and post-FX) and shows it in the list.
-6. The meters at the bottom run all the time: **Spectrum** (octave, 1/3 octave, FFT, FFT curve, freeze),
+6. The meters at the bottom run all the time: **Spectrum** (octave, 1/3 octave, 1/12 octave, FFT, FFT
+   curve, **Waterfall** and **Sonogram** with 5 s or 20 s of history, **Segments** for LED-style bars with a
+   dB ruler, freeze),
    **Level / Loudness** (Peak/RMS, EBU R128 with momentary, short-term, integrated, LRA and true peak,
    K-20 / K-14 / K-12 scales, clip indicator, reset) and the **Phase** meter (goniometer + correlation).
-7. Publish: **Digital Release...** writes one tagged WAV / AIFF / FLAC / OGG per track and can match every
+7. **Track Macros** (right-click a track): save a track's whole device rack, fader and fades as a named
+   recipe, then apply it to one track or every enabled track in one step.
+8. Publish: **Digital Release...** writes one tagged WAV / AIFF / FLAC / OGG / **MP3** per track (MP3 at
+   320 kb/s or VBR V0, ID3-tagged with title, artist, album, track number, year, genre and ISRC) and can match every
    track (or the album as a whole) to a streaming service's loudness - Spotify, Apple Music, YouTube,
    Amazon, Tidal, Deezer, SoundCloud, podcast, broadcast, CD-loud or custom - with the max true peak
    always winning. **Image...** writes one continuous 16-bit / 44.1 kHz WAV plus a CUE sheet.
    **DDP...** writes a DDP 2.00 fileset (DDPID, DDPMS, PQDESCR, IMAGE.DAT, CDTEXT.BIN, checksums,
    IMAGE.CUE) for a pressing plant - check it in a DDP player before you send it.
    Projects are saved automatically as .sqmaster files in *Squelchmoth Sessions/Mastering*.
+
+## F2b. New in 1.12 "Finish Line"
+
+- **MP3 everywhere you export.** Bounce Mix, Export Stems and Digital Release write MP3 with Squelchmoth's own
+  encoder: 320 / 256 / 192 / 128 kb/s or VBR V0 / V2 / V4, ID3 tags, an Info frame so players show the right
+  length. Mixes at 88.2 / 96 kHz and up are resampled to 44.1 / 48 kHz first. MP3 files also import now.
+- **Mute automation.** Track View > mute: the Pencil paints muted / playing blocks; playback switches with a
+  5 ms ramp, so there is never a click. Claude: `write_automation` with `target: "mute"`.
+- **Sync Point.** Select a clip, put the playhead on the hit, Clip > Identify Sync Point (Cmd+Shift+,). A flag
+  marks it; the Spot dialog gets a Sync Point field, and typing a time there lines the hit up with it.
+- **External Effect** (plug-in menu > Utility): run a track through outboard gear. Pick the output pair that
+  feeds the unit and the input pair it comes back on, then press Ping (Claude: `external_fx` action `ping`): a
+  click goes out, the round trip is timed to the sample and compensated, so the return lines up with
+  everything else. Offline bounces pass the dry signal (outboard gear can't run faster than real time):
+  record the return to print it.
 
 ## F3. EQ reference chart (Options → EQ Frequency Chart)
 

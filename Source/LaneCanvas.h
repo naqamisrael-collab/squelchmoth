@@ -966,6 +966,13 @@ private:
         // replace any point within 2 px of this time
         auto tol = te::TimeDuration::fromSeconds (state.secondsPerPixel * 2.0);
         auto um = &session.edit->getUndoManager();
+        if (MixCtl::currentView (*row) == "mute")
+        {
+            // 1.12: the Mute lane draws blocks (upper half = muted), not ramps - Pro Tools' Pencil on a mute lane
+            MuteLane::paint (curve, t, t + tol + tol, norm >= 0.5f, um);
+            param->updateStream();
+            return;
+        }
         for (int i = curve.getNumPoints(); --i >= 0;)
             if (std::abs ((curve.getPointTime (i) - t).inSeconds()) < tol.inSeconds()) curve.removePoint (i, um);
         curve.addPoint (t, value, 0.0f, um);
@@ -1081,6 +1088,16 @@ private:
             drawSteps (g, *sc, body, colour);
 
         g.restoreState();
+
+        // 1.12: the sync point - a small flag at the bottom of the clip, as in Pro Tools
+        if (auto sp = EditOps::syncPointTime (c))
+        {
+            const float sx = state.timeToX (sp->inSeconds());
+            g.setColour (Theme::text().withAlpha (muted ? 0.4f : 0.95f));
+            g.drawVerticalLine (juce::roundToInt (sx), r.getBottom() - 12.0f, r.getBottom());
+            juce::Path flag; flag.addTriangle (sx, r.getBottom() - 12.0f, sx + 7.0f, r.getBottom() - 9.0f, sx, r.getBottom() - 6.0f);
+            g.fillPath (flag);
+        }
 
         if (auto ac = dynamic_cast<te::AudioClipBase*> (&c))
         {
@@ -1331,6 +1348,8 @@ public:
         aw->addTextEditor ("start", TimeFmt::format (edit, pos.getStart(), fmt), "Start");
         aw->addTextEditor ("end", TimeFmt::format (edit, pos.getEnd(), fmt), "End");
         aw->addTextEditor ("dur", TimeFmt::formatLength (edit, pos.getStart(), pos.getEnd(), fmt), "Duration");
+        const auto syncAt = EditOps::syncPointTime (*c);   // 1.12: Pro Tools' Sync Point field
+        if (syncAt && which == 0) aw->addTextEditor ("sync", TimeFmt::format (edit, *syncAt, fmt), "Sync Point");
         double originalStamp = -1.0;
         if (auto wc = dynamic_cast<te::WaveAudioClip*> (c.get()))
         {
@@ -1359,9 +1378,11 @@ public:
             safe->getTextEditor ("start")->setText (TimeFmt::format (*session.edit, p.getStart(), k));
             safe->getTextEditor ("end")->setText (TimeFmt::format (*session.edit, p.getEnd(), k));
             safe->getTextEditor ("dur")->setText (TimeFmt::formatLength (*session.edit, p.getStart(), p.getEnd(), k));
+            if (auto* se = safe->getTextEditor ("sync")) if (auto sp = EditOps::syncPointTime (*c)) se->setText (TimeFmt::format (*session.edit, *sp, k));
         };
         const juce::String s0 = aw->getTextEditorContents ("start"), e0 = aw->getTextEditorContents ("end"), d0 = aw->getTextEditorContents ("dur");
-        aw->enterModalState (true, juce::ModalCallbackFunction::create ([this, aw, c, which, s0, e0, d0, originalStamp, userStamp] (int r)
+        const juce::String y0 = aw->getTextEditor ("sync") != nullptr ? aw->getTextEditorContents ("sync") : juce::String();
+        aw->enterModalState (true, juce::ModalCallbackFunction::create ([this, aw, c, which, s0, e0, d0, y0, originalStamp, userStamp] (int r)
         {
             aw->setVisible (false);
             if (r == 0 || session.edit == nullptr || c->getClipTrack() == nullptr) return;
@@ -1382,6 +1403,10 @@ public:
             else if (which == 2)
             {
                 if (auto t = TimeFmt::parse (ed, en, k); t && *t > p.getStart()) c->setEnd (*t, true);
+            }
+            else if (aw->getTextEditor ("sync") != nullptr && aw->getTextEditorContents ("sync") != y0)
+            {
+                if (auto t = TimeFmt::parse (ed, aw->getTextEditorContents ("sync"), k)) EditOps::spot (*c, *t, 2);
             }
             else if (st != s0) { if (auto t = TimeFmt::parse (ed, st, k)) EditOps::spot (*c, *t, 0); }
             else if (en != e0) { if (auto t = TimeFmt::parse (ed, en, k)) EditOps::spot (*c, *t, 1); }
