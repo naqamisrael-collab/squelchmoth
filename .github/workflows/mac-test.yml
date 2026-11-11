@@ -1,0 +1,85 @@
+name: Mac test (the downloads we sell)
+
+# Unzips the two Mac downloads exactly as a customer gets them, runs the full self-test on real Mac hardware
+# (an Intel Mac and an Apple Silicon Mac), and takes a screenshot of the app.
+# Results: the "mac-test-<arch>" artifact, and the mac-results-<arch> branch (readable with git).
+on:
+  push:
+    paths: [ "dist/Squelchmoth-Mac-Intel.zip", "dist/Squelchmoth-Mac-AppleSilicon.zip", ".github/workflows/mac-test.yml" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mac-test
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: intel
+            runner: macos-15-intel
+            zip: Squelchmoth-Mac-Intel.zip
+            dir: Squelchmoth-Intel
+          - arch: applesilicon
+            runner: macos-15
+            zip: Squelchmoth-Mac-AppleSilicon.zip
+            dir: Squelchmoth-AppleSilicon
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip like a customer (Finder keeps the quarantine flag; clear it as the guide's right-click > Open does)
+        run: |
+          uname -m; sw_vers
+          ditto -x -k "dist/${{ matrix.zip }}" m
+          APP="m/${{ matrix.dir }}/Squelchmoth.app"
+          xattr -dr com.apple.quarantine "$APP" || true
+          codesign --verify --deep --verbose=2 "$APP"
+          lipo -info "$APP/Contents/MacOS/Squelchmoth"
+          echo "APP=$APP" >> "$GITHUB_ENV"
+
+      - name: Self-test (driven through Claude's tools)
+        run: |
+          set +e
+          "$APP/Contents/MacOS/Squelchmoth" --selftest > selftest.log 2> selftest.err
+          code=$?
+          grep -a "FAIL" selftest.log | head -60
+          tail -5 selftest.log
+          echo "exit code: $code"
+          exit $code
+
+      - name: Screenshot of the running app
+        if: always()
+        run: |
+          open "$APP"
+          sleep 45
+          screencapture -x screenshot.png || true
+          ps aux | grep -i "[S]quelchmoth.app" | head -3
+          pkill -x Squelchmoth || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-test-${{ matrix.arch }}
+          path: |
+            selftest.log
+            selftest.err
+            screenshot.png
+
+      - name: Save results to the mac-results branch (readable with git)
+        if: always()
+        run: |
+          mkdir -p out
+          for f in selftest.log selftest.err screenshot.png; do [ -f "$f" ] && cp "$f" out/; done
+          echo "run: ${{ github.run_id }}  sha: ${{ github.sha }}  arch: ${{ matrix.arch }} ($(uname -m), macOS $(sw_vers -productVersion))  job status: ${{ job.status }}  when: $(date -u +%FT%TZ)" > out/RESULT.txt
+          cd out
+          git init -q -b mac-results-${{ matrix.arch }}
+          git config user.name "mac-test"; git config user.email "actions@github.com"
+          git add -A; git commit -qm "Mac test results (${{ matrix.arch }}) for ${{ github.sha }}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" mac-results-${{ matrix.arch }}
