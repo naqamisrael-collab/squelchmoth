@@ -28,6 +28,7 @@
 #include "Console.h"
 #include "MonitorChain.h"
 #include "PluginMenu.h"
+#include "ScoreExport.h"
 
 //==============================================================================
 struct ToolResult
@@ -412,6 +413,7 @@ private:
         register181Tools();
         register110Tools();
         registerVoice111Tools();
+        registerScoreTools();
     }
 
     #include "McpToolsParity.h"
@@ -425,6 +427,7 @@ private:
     #include "McpToolsRack.h"
     #include "McpTools181.h"
     #include "McpTools110.h"
+    #include "McpToolsScore.h"
 
     //==============================================================================
     void registerSessionTools()

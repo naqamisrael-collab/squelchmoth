@@ -3,6 +3,7 @@
 // structure (File, Edit, View, Track, Clip, Event, AudioSuite, Options, Setup, Window, Claude, Help),
 // floating windows, global keyboard shortcuts, session templates and the welcome window.
 
+#include "ScoreWindow.h"
 #include "TransportBar.h"
 #include "TimelineView.h"
 #include "MixerView.h"
@@ -416,6 +417,7 @@ public:
         if (cmd && code == 'Z') { shift ? session.edit->redo() : session.edit->undo(); return true; }
         if (cmd && code == 'S' && ! shift) { if (session.save()) session.log.add ("You", "Saved"); else if (! session.savingAllowed()) showLicenceDialog (true); return true; }
         if (cmd && code == 'S' && shift) { menuItemSelected (4, 0); return true; }
+        if (cmd && k.getModifiers().isAltDown() && code == 'N') { toggleWindow ("score"); return true; }
         if (cmd && code == 'N' && ! shift) { menuItemSelected (1, 0); return true; }
         if (cmd && code == 'O') { menuItemSelected (2, 0); return true; }
         if (cmd && code == 'Q') { juce::JUCEApplication::getInstance()->systemRequestedQuit(); return true; }
@@ -808,6 +810,7 @@ public:
             m.addItem (916, "Claude Panel", true, currentView == "claude");
             m.addItem (923, "Channel Rack  (" SQ_CMD "+6)", hasEdit, isWindowVisible ("rack"));
             m.addItem (924, "Cut Lab - audio editor  (" SQ_CMD "+Shift+E)", true, cutLab != nullptr && cutLab->isVisible());
+            m.addItem (926, "Score - notation  (" SQ_CMD "+" SQ_OPT "+N)", hasEdit, isWindowVisible ("score"));
             {
                 juce::PopupMenu lay;
                 for (int i = 1; i <= 5; ++i) lay.addItem (8870 + i, "Recall Layout " + juce::String (i) + "  (" SQ_CMD "+" SQ_OPT "+" + juce::String (i) + ")", Prefs::getString (("layout_slot_" + juce::String (i)).toRawUTF8()).isNotEmpty());
@@ -1115,6 +1118,7 @@ public:
         else if (id == 903) toggleWindow ("bigcounter");
         else if (id == 904) toggleWindow ("memory");
         else if (id == 905) toggleWindow ("cliplist");
+        else if (id == 926) toggleWindow ("score");
         else if (id == 906) toggleWindow ("groups");
         else if (id == 907) toggleWindow ("undo");
         else if (id == 908) toggleWindow ("colors");
@@ -1504,6 +1508,11 @@ private:
             c->onEdit = [this] (te::MarkerClip& m) { timeline.editMarker (m); };
             c->onChanged = repaintViews;
             w = std::make_unique<SqWindow> ("Memory Locations", name); w->setContentOwned (c, true);
+        }
+        else if (name == "score")
+        {
+            auto c = new ScoreContent (session);
+            w = std::make_unique<SqWindow> ("Score", name); w->setContentOwned (c, true); w->setResizable (true, false);
         }
         else if (name == "cliplist")  { auto c = new ClipListContent (session, st); c->onChanged = repaintViews; w = std::make_unique<SqWindow> ("Clip List", name); w->setContentOwned (c, true); }
         else if (name == "groups")    { auto c = new GroupsContent (session, st); c->onChanged = repaintViews; w = std::make_unique<SqWindow> ("Groups", name); w->setContentOwned (c, true); }

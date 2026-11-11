@@ -8,6 +8,7 @@
 #include "ChatPanel.h"
 #include "MixerView.h"
 #include "SqEngine111.h"
+#include "ScoreWindow.h"
 
 /** Set by Main for "--preset-audit [report.md]": the self-test sets up the engine, runs the audit and returns. */
 struct SelfTestMode { static inline bool presetAuditOnly = false, renderFaces = false; static inline juce::String reportPath, facesDir, facePreset; static inline juce::StringArray only; };
@@ -3335,6 +3336,64 @@ inline int runSelfTest()
             tools.ui.mastering = nullptr;
         }
         std::cout << "  (1.12 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)\n";
+    }
+
+    // ===================================================================== 1.13 "Score"
+    {
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest Score","tempo":96})");
+        call ("add_track", R"({"kind":"instrument","name":"Melody","instrument":"4osc"})");
+        auto w = call ("score", R"({"action":"write","track":"Melody","bar":1,"notes":["C4 quarter","E4 eighth","F#4 eighth","G4 half","[C4 E4 G4] dotted half","rest quarter","D5 triplet eighth","E5 triplet eighth","F5 triplet eighth","G5 quarter","Bb4 half"]})");
+        auto rd = call ("score", R"({"action":"read","track":"Melody"})");
+        const juce::String want = "Bar 1 (4/4): C4 quarter E4 eighth F#4 eighth G4 half\nBar 2: [C4 E4 G4] dotted half rest quarter\nBar 3: D5 triplet eighth E5 triplet eighth F5 triplet eighth G5 quarter Bb4 half";
+        check (rd.contains (want), "score write + read: spelled names, dotted chord, rest, triplets (" + rd.fromFirstOccurrenceOf ("Bar 1", true, false).upToFirstOccurrenceOf ("\n\n", false, false).replace ("\n", " / ") + ")");
+        call ("score", R"({"action":"set","key":"F major","staves":"grand","track":"Melody"})");
+        auto rd2 = call ("score", R"({"action":"read","track":"Melody"})");
+        check (rd2.contains ("Key F major, grand staff") && rd2.contains ("Bb4 half"), "score set: key F major and grand staff");
+        call ("score", R"({"action":"set","key":"session","staves":"auto","track":"Melody"})");
+        // MusicXML out and back in
+        auto xmlFile = session->bouncesDir.getChildFile ("st113.musicxml");
+        auto ex = call ("score", juce::String (R"({"action":"export","format":"musicxml","track":"Melody","path":")") + xmlFile.getFullPathName().replace ("\\", "/") + R"("})");
+        auto im = call ("score", juce::String (R"({"action":"import","path":")") + xmlFile.getFullPathName().replace ("\\", "/") + R"("})");
+        const auto importedName = im.fromFirstOccurrenceOf ("as tracks: ", false, false).trim();
+        juce::String rd3;
+        for (auto t : session->getTracks()) if (t->getName() == importedName && t != session->findTrack ("Melody")) { auto parts = ScoreModel::build (*session, { t }); if (! parts.empty()) rd3 = Notation::toText (parts[0].score); }
+        check (xmlFile.existsAsFile() && juce::XmlDocument::parse (xmlFile) != nullptr && im.contains ("Imported 1 part") && rd3.contains (want),
+               "MusicXML export -> import gives the same score on a new track");
+        // PDF and PNG
+        auto pdf = session->bouncesDir.getChildFile ("st113.pdf"), png = session->bouncesDir.getChildFile ("st113.png");
+        auto ep = call ("score", juce::String (R"({"action":"export","format":"pdf","track":"Melody","path":")") + pdf.getFullPathName().replace ("\\", "/") + R"("})");
+        auto eg = call ("score", juce::String (R"({"action":"export","format":"png","path":")") + png.getFullPathName().replace ("\\", "/") + R"("})");
+        juce::MemoryBlock pm; pdf.loadFileAsData (pm);
+        auto img = juce::ImageFileFormat::loadFrom (png);
+        check (pm.getSize() > 10000 && memcmp (pm.getData(), "%PDF-1.4", 8) == 0 && ep.contains ("1 page(s)") && img.isValid() && img.getHeight() > img.getWidth(),
+               "score export: PDF (" + juce::String ((int) (pm.getSize() / 1024)) + " KB, 1 page) and a portrait PNG page (" + juce::String (img.getWidth()) + "x" + juce::String (img.getHeight()) + ")");
+        // the page really has ink on it: dark pixels in the staff area
+        int dark = 0;
+        if (img.isValid()) for (int y = 0; y < img.getHeight(); y += 3) for (int x = 0; x < img.getWidth(); x += 3) if (img.getPixelAt (x, y).getBrightness() < 0.4f) ++dark;
+        check (dark > 800, "score page is engraved (" + juce::String (dark) + " ink samples)");
+        if (auto keep = juce::File::getCurrentWorkingDirectory().getChildFile ("docs/internal"); keep.isDirectory()) png.copyFileTo (juce::File ("/tmp/score_selftest.png"));
+        // edits through the model (what the window does): transpose, move, delete, add
+        {
+            auto* mel = session->findTrack ("Melody");
+            auto parts = ScoreModel::build (*session, { mel });
+            std::vector<ScoreModel::NoteRef> first { parts[0].refs[0] };
+            ScoreModel::transpose (*session, first, 2);
+            ScoreModel::addNote (*session, *mel, 16.0, 1.0, 72);
+            auto after = call ("score", R"({"action":"read","track":"Melody"})");
+            check (after.contains ("Bar 1 (4/4): D4 quarter") && after.contains ("Bar 5: C5 quarter"), "score edits: transpose a note, enter a note in an empty bar");
+        }
+        {
+            // the Score window itself, drawn offscreen (what the user sees)
+            auto sc = std::make_unique<ScoreContent> (*session);
+            sc->setSize (1180, 700);
+            sc->getView().zoom = 1.3f; sc->getView().relayout();
+            auto snap = sc->createComponentSnapshot (sc->getLocalBounds());
+            juce::File ("/tmp/score_window.png").deleteFile();
+            { juce::FileOutputStream os (juce::File ("/tmp/score_window.png")); juce::PNGImageFormat().writeImageToStream (snap, os); }
+            check (snap.isValid() && sc->getView().summary().contains ("2 part(s)"), "Score window: " + sc->getView().summary());
+        }
+        std::cout << "  (1.13 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));

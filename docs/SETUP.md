@@ -389,6 +389,23 @@ The Mastering window is Squelchmoth's version of the Studio One / Fender Studio 
    IMAGE.CUE) for a pressing plant - check it in a DDP player before you send it.
    Projects are saved automatically as .sqmaster files in *Squelchmoth Sessions/Mastering*.
 
+## F2c. Score - notation (Window > Score, Cmd+Opt+N) - new in 1.13
+
+Your MIDI tracks as an engraved score: clefs (treble, bass or a grand staff chosen from the range), the key
+signature, the meter and every meter change, spelled notes with accidentals that carry through the bar, beams,
+ties, rests, dotted notes and triplets.
+- **Display**: Quantise display (1/4 - 1/32; the MIDI itself never moves), Triplets on / off, Staves (automatic,
+  treble, bass, grand), Key (from the session or any key), spelling (from the key, sharps, flats), Pages or scroll.
+- **Edit**: click a note to select (Shift adds), drag up / down or use the arrow keys for pitch (Shift = octave),
+  left / right moves by the grid, Delete removes, keys 1-6 or the palette set the length (whole ... 1/32, `.` dot,
+  `3` triplet). **Note Entry** (N): click a line or space to add a note of the palette's length - sharps and flats
+  from the key, Alt for a sharp, Shift+Alt for a flat. Clicking a note plays it. Every edit is one undo step and
+  shows in the piano roll at once.
+- **Exchange**: MusicXML export / import (every major notation program and notation app reads it),
+  PDF and PNG (A4, title, page numbers) to print or send.
+- **Claude**: `score` reads any track as notation text, writes notes by name ("F#4 dotted eighth",
+  "[C4 E4 G4] half", "rest quarter"), sets the display and exports / imports.
+
 ## F2b. New in 1.12 "Finish Line"
 
 - **MP3 everywhere you export.** Bounce Mix, Export Stems and Digital Release write MP3 with Squelchmoth's own
