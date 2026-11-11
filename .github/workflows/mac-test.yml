@@ -2,7 +2,7 @@ name: Mac test (the downloads we sell)
 
 # Unzips the two Mac downloads exactly as a customer gets them, runs the full self-test on real Mac hardware
 # (an Intel Mac and an Apple Silicon Mac), and takes a screenshot of the app.
-# Results: the "mac-test-<arch>" artifact, and the mac-results-<arch> branch (readable with git).
+# Results (rerun on push of this file): the "mac-test-<arch>" artifact, and the mac-results-<arch> branch (readable with git).
 on:
   push:
     paths: [ "dist/Squelchmoth-Mac-Intel.zip", "dist/Squelchmoth-Mac-AppleSilicon.zip", ".github/workflows/mac-test.yml" ]
