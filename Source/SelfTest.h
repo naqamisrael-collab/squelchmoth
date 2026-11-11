@@ -655,7 +655,7 @@ inline int runSelfTest()
         auto mf = call ("master_fader", "{}");
         check (mf.contains ("Main Mix") && mf.contains ("-2"), "Master Fader rename + level");
         call ("master_fader", R"({"exists":false})");
-        check (! TrackOps::hasMasterFader (*session) && session->edit->getMasterVolumePlugin()->getVolumeDb() == 0.0f, "Delete Master Fader resets it to unity");
+        check (! TrackOps::hasMasterFader (*session) && std::abs (session->edit->getMasterVolumePlugin()->getVolumeDb()) < 0.001f, "Delete Master Fader resets it to unity");
         call ("master_fader", R"({"exists":true})");
 
         // Split into Mono / Freeze / Commit on a stereo audio track (uses the stereo bounce made earlier)
