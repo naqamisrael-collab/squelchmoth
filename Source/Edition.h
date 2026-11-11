@@ -19,13 +19,13 @@ namespace Edition
     {
         static const std::vector<Product> p {
             { "CORE",     "Squelchmoth",           "$189.99", "$299.99", "The full program: unlimited tracks, every core plug-in and instrument, Mastering, Cut Lab, stems and DDP" },
-            { "COMPLETE", "Squelchmoth Complete",  "$349.99", "$599.99", "Squelchmoth and every add-on pack" },
-            { "VOCAL",    "Vocal Suite",           "$79",     "$129",    "Moth Tune, Moth Tune FX and Double Wing ADT" },
+            { "COMPLETE", "Squelchmoth Complete",  "$399.99", "$699.99", "Squelchmoth and every add-on pack, Color & Space and the whole Vocal Suite included" },
+            { "VOCAL",    "Vocal Suite",           "$149",    "$249",    "The whole Voice family: Moth Tune, Moth Tune FX 2, Moth Key, Siren Comp, Siren EQ, Hush De-Ess 2, Siren Verb, Mic Closet, Larynx, Exhale, Hive Choir, Double Wing 2, Double Wing ADT, Mutant, Vox Moth, Talk Wing and Clean Room" },
             { "MASTER",   "Mastering Suite",       "$99",     "$149",    "The Apex series, Pulse EQ and Opto Leveler" },
             { "INSTR",    "Instrument Collection", "$99",     "$149",    "Hexwing, Toxin FM, Lantern, Lantern Exo, Pollen, Blossom 2, Thorn Bass, Larva Bass, Chrysalis 2 and Chrysalis SF" },
             { "BEAT",     "Beat Lab Expansion",    "$49",     "$79",     "Carapace, Live Drum Synth, Drum Pad Model, Thump Live, Mandible, Mandible Lite, ten more kits and 51 genre loops" },
             { "CREATIVE", "Creative FX",           "$49",     "$79",     "Time Weaver, Larva Filter, Oil Can Delay, Bucket Brigade, Halo Ring, Twelve Phase and Silk Ladder" },
-            { "COLOR",    "Color & Space",         "$179",    "$299",    "Cinder and the 1.11 Color & Space family: saturation, delays, plates, modulation and space" } };
+            { "COLOR",    "Color & Space",         "$179",    "$299",    "Cinder, Wingbeat Echo, Foil Plate, Radiant, Maw, Vellum EQ, Tremor, Orbit Pan, Mirror Shift, Shutter Delay, Shard, Murmuration, Masquerade, Larva Filter 2, Twelve Phase 2 and Hive Rack" } };
         return p;
     }
     inline const Product* productFor (Pack p)

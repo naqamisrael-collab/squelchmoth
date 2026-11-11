@@ -7,12 +7,13 @@ window.SQM_STORE = {
   products: {
     DEMO:     "",   // free product: the installer zips, price $0 - captures the email
     CORE:     "",   // Squelchmoth                 $189.99  (upload "CORE keys (500).txt")
-    COMPLETE: "",   // Squelchmoth Complete        $349.99  (upload "COMPLETE keys (500).txt")
-    VOCAL:    "",   // Vocal Suite                 $79
+    COMPLETE: "",   // Squelchmoth Complete        $399.99  (upload "COMPLETE keys (500).txt")
+    VOCAL:    "",   // Vocal Suite                 $149  (upload "VOCAL keys (500).txt")
     MASTER:   "",   // Mastering Suite             $99
     INSTR:    "",   // Instrument Collection       $99
     BEAT:     "",   // Beat Lab Expansion          $49
-    CREATIVE: ""    // Creative FX                 $49
+    CREATIVE: "",   // Creative FX                 $49
+    COLOR:    ""    // Color & Space               $179  (upload "COLOR keys (500).txt")
   }
 };
 

@@ -1,11 +1,11 @@
 # Squelchmoth built-in plugin suite
 
-Squelchmoth ships **the Signature bundle (87 instruments and processors - 27 of them instruments)**, the complete
+Squelchmoth ships **the Signature bundle (123 instruments and processors - 27 of them instruments)**, the complete
 AirWindows collection (186 effects), 27 drum sound kits and **Cut Lab**, the audio editor. Everything is included,
 loads with no extra licence, and can be inserted by name from the Mix window or by Claude (`insert_plugin`).
 Names below are exactly what you type.
 
-## The Squelchmoth Signature bundle (87)
+## The Squelchmoth Signature bundle (123)
 
 Every Signature plugin has its own editor (artwork behind the panel, a live display made for the job), factory
 presets and full control from Claude.
@@ -41,7 +41,7 @@ presets and full control from Claude.
 | **Mandible Lite** | The quick slicer: drop a loop, pick the resolution, play the slices from C1 (51 factory loops) |
 | **Pollen** | The preset-pack instrument: 11 packs on the wavetable + analogue engine, four named macros per sound (163 presets) |
 | **Moth Tune** | The flagship vocal tuner. Live engine (under 1 ms) or Studio engine (exact formants); Retune Speed, Humanize, Flex Tune, Classic/Modern, Vibrato Keep, natural vibrato, create vibrato, formant + throat, transpose, MIDI target notes, Auto-Key, 4 harmony voices, and the Graph editor for note-by-note correction |
-| **Moth Tune FX** | Creative tuning: 12 editable Motion patterns (step, glide, scale steps, latch, hold) plus a six-slot X/Y effects rack - Mutate, Duet, Vocode, Talkbox, Octaver, Stutter and more |
+| **Moth Tune FX 2** | Creative tuning: 24 editable Motion patterns (Hard, Soft or Legato; step, glide, scale steps, latch, hold) plus a six-slot X/Y rack of 21 modules, each slot with its own trigger - see 1.11 below |
 | **Apex Dynamics** | Compressor, expander, gate, ducker and upward compressor: lookahead, negative ratios, Smart detection, key filter and key input |
 | **Apex Limiter** | True-peak limiter with lookahead and Character, a full BS.1770-4 loudness meter (integrated / short-term / momentary, LRA, true peak) and one-click loudness targets |
 | **Apex Multiband** | Up to six bands, minimum or linear phase, flip, solo, auto gain, live spectrum with draggable crossovers |
@@ -99,6 +99,71 @@ presets and full control from Claude.
 | **Dither Dust** | Mastering dither with noise-shaping |
 | **Trim Gain** | Ultra-clean gain trim |
 | **MIDI Shaper** | Transpose, velocity scale, channel remap |
+
+## 1.11 "Color & Voice" (37 plug-ins, 3,360 factory presets)
+
+Every 1.11 plug-in has its own Higgsfield-painted face with a live display, presets that each leave the material they
+were made for at the level it came in (+-1 dB, measured by the app's own preset audit), and full control from Claude
+(`studio_fx`, `vocal_fx`, `hive_rack` and `moth_tune_fx`). The shared engines underneath: Wing Mod (LFO, rhythm,
+envelope, random, step and ADSR modulation with a key input), Analog Style (seven oversampled drive voicings), the
+nonlinear core (1-16x oversampling, ten saturation models) and the voice core (pitch, voicing, formants and the
+harmonic / noise split, shared by the Voice family).
+
+### Color & Space pack (16)
+
+| Plug-in | What it is | Presets |
+| --- | --- | --- |
+| **Cinder** | Ten-model saturation: tape preamp to diode fuzz, oversampled to 16x with anti-aliased curves, Model Blend, Bias, Dynamics, Mid/Side, ducked drive, Delta and a live harmonic readout | 140 |
+| **Wingbeat Echo** | The 36-style echo: tape, tube, spring, bucket, oil can, radios and digital racks; Single, Dual, Ping-Pong and 32-tap Rhythm, up to 30 s, ducking, freeze and a live tap map | 160 |
+| **Foil Plate** | Plate reverb: seven plates from steel to gold foil, four audible input stages, decay per band, auto-decay that shortens or lengthens (or follows a key), freeze | 120 |
+| **Radiant** | Two-stage tube mixer colour: 60s mixer, 50s broadcast pre or tube line amp, Baxandall bass / treble, Mic / Line, noise floor, heat VU, Mid/Side | 90 |
+| **Maw** | The crushing podium limiter: Crush, Crunch, Darkness, Mix, 1.3 ms attack, a release that stretches as it saturates, external key with HPF, GR history | 110 |
+| **Vellum EQ** | Seventies broadcast-console EQ: shelf or very-low-bell low, six-step mid whose Q narrows as it rises, a second sweepable mid, gentle low-pass or very-high-bell high, Stepped detents, Mid/Side and L/R, oversampled Drive | 80 |
+| **Tremor** | Tremolo to a full gate: LFO or a 16-step rhythm with per-step depth, nine shapes, Feel, Groove, Accent, Env / Gate dynamics with a key input, audio-rate Rate Mod, stereo phase, harmonic split-band mode, Analog Style and Mix | 100 |
+| **Orbit Pan** | Auto-pan in seven modes (LFO, Rhythm Step, Rhythm Shape, Ping-Pong, Random, Random Step and Circle with depth and Haas cues), +-105 deg offset, 210 deg width, audio trigger with a 1-16 divider, binaural mode, pan laws and Mix | 90 |
+| **Mirror Shift** | Micro-pitch widener: five styles (two classic micro-shifts, a wandering rack pitch-delay, Tape ADT and Prism), Detune and Delay in %, a Focus crossover, ducked width and a mono-compatibility meter | 60 |
+| **Shutter Delay** | Late-70s digital rack delay: Multiply 1/2/4/8x halves the clock each step (12 / 6 / 3 / 1.5 kHz bandwidth), 8- or 12-bit companding colour, two lines to 10 s, six algorithms, LFO to 256 Hz, Freeze and a Smooth or Glitch time change | 100 |
+| **Shard** | Granular reverse pitch echo: splices up to 8 s, reversed by chance, pitched +-48 st by a Vintage or Clean engine, spray, density, Recycle in three modes, scale-quantised pitch, Gate / Duck with a key and a two-LFO + envelope modulation matrix | 220 |
+| **Murmuration** | Tap-cloud space: up to 2048 taps over 10 ms to 90 s, an X/Y or drawn envelope, Texture from echoes to wash, Warp, evolving Color, Shimmer, Blur, Grain, loop or spectral Freeze and an Infinite tail | 120 |
+| **Masquerade** | Voice changer: Pitch and Formant +-24 st on Moth Tune's engine, Transpose, Quantize to the key, Robot and MIDI (held notes become chords), Cinder-family drive, stereo in, Live (under 1 ms) or Studio engine | 100 |
+| **Larva Filter 2** | Eight-stage multi-filter: transistor and diode ladders, Sallen-Key and state-variable models per stage, series / parallel / 4+4, LP / HP / BP / notch, Wing Mod (LFO, rhythm steps, envelope follower, ADSR on audio or MIDI), Analog drive pre or post | 150 |
+| **Twelve Phase 2** | Phaser workstation: 2 to 24 allpass stages, 72 styles from twelve classic phaser families, through-zero, resonance around or inside the chain, Wing Mod, stereo phase, Analog drive | 130 |
+| **Hive Rack** | Effects rack: eight slots for any Signature effect, serial or two parallel lanes, Recycle feedback around the whole rack, eight macros and 200 factory chains | 200 |
+
+### Vocal Suite: the Voice family (15 new in 1.11, with Moth Tune and Double Wing ADT)
+
+| Plug-in | What it is | Presets |
+| --- | --- | --- |
+| **Moth Tune FX 2** | Creative tuning: editable Motion patterns (Hard, Soft or Legato) plus a six-slot X/Y effects rack of 21 modules — Mutate, Duet, Vocode, Talkbox, Octaver, Stutter, EQ, Phaser, Flanger, Auto-Pan, Fuzz and more — each slot with its own trigger | 140 |
+| **Moth Key** | Key, scale and tempo from audio — live input, a track or a file — with key changes over time written to the session for every Moth Tune | - |
+| **Siren Comp** | Vocal compressor: FET (4 / 8 / 12 / 20 / All), two Opto cells and Modern, single or dual series, warm, GR per stage, pitch-filter duck, Assist you can audition, Punch with ceiling | 110 |
+| **Siren EQ** | Vocal EQ: six bands that are fixed, locked to the singer's pitch (any harmonic) or dynamic; HP / LP 6-24 dB/oct, Air to 40 kHz, Tilt, Vocal Learning you hear before you apply | 100 |
+| **Hush De-Ess 2** | De-esser with separate Hard (T, K, Ch) and Soft (S, Sh, Z) detection, split-band reduction only, Link, Solo, Assist and a detection history | 60 |
+| **Siren Verb** | Vocal reverb: seven algorithms (Hall, Plate, Room, Chamber, Spring, Ambience, Shimmer), pre-verb Pitch / Throat / Tube / De-Ess / Reverse, a pitch-tracked Auto-EQ that keeps the singer's notes out of the tail, compressor, gate, ducking, mono or ping-pong echo, Assist and Dice | 140 |
+| **Mic Closet** | Microphone modelling: 45 response archetypes (condensers, dynamics, ribbons, devices, originals), source-to-target conversion, distance and proximity, polar pattern, low cut, pad, colour and self-noise | 80 |
+| **Larynx** | Vocal-tract modeller: the voice's own tract and source separated, then a new glottis (hard / soft, pulse width, breathiness) and tract (length, 8-point shape) — stereo, level matched, guarded against whistling | 60 |
+| **Exhale** | Breathiness control: the voice split into its harmonic tone and its breath, the breath set from none to +12 dB with its own tone, consonants protected, the tone untouched | 30 |
+| **Hive Choir** | Harmony and choir: four voices by interval, scale step, MIDI chord or MIDI omni, each with Throat, level, pan, vibrato and its own choir of 1-32 singers with pitch, time and timbre variation — true stereo | 120 |
+| **Double Wing 2** | Auto-doubler: 1-4 doubles with pitch, timing and timbre variation, spread, and vibrato that can be added only where the singer holds a straight note | 60 |
+| **Mutant** | Extreme voice designer: pitch and Throat +-24 st, a ring modulator that follows the singer, tempo-synced Alienization and grain stutter, Analog drive | 60 |
+| **Vox Moth** | Vocoder: 20 voicings, 4-64 bands, four filter shapes, Stretch and Slide, band shift and level curve, Smear, sibilance and noise, an 8-voice two-oscillator carrier played by MIDI or by the voice through a built-in tuner, or a key input; ring, drive, chorus, X/Y pad | 140 |
+| **Talk Wing** | Talk box: a voice on the key input shapes this track's instrument (or the other way round) — formants and level transferred, formant shift, precision, articulation, sibilance, gate, tube colour; with no key the voice drives a built-in buzz | 40 |
+| **Clean Room** | Vocal cleaner under one knob: hum (50 / 60 Hz found automatically) and buzz, hiss, noise (tracked or learned), room and clicks, artefact guard, residual listen, Studio and Live engines | 40 |
+
+### Lite versions (in the Demo and in Squelchmoth itself)
+
+Wingbeat Jr. and Foil Plate Lite are in the free Demo; Radiant Pre, Maw Lite, Mirror Shift Lite and Shutter Lite are
+in Squelchmoth (core).
+
+| Plug-in | What it is | Presets |
+| --- | --- | --- |
+| **Wingbeat Jr.** | The quick echo: eight styles, Normal / Wide / Ping-Pong, glide or stretch when the time changes | 60 |
+| **Foil Plate Lite** | The steel plate in four knobs: Decay, Low Cut, Mod, Mix | 30 |
+| **Radiant Pre** | Tube mic preamp colour: one hot stage, a Bias switch for choppy breakup, a vintage noise floor | 40 |
+| **Maw Lite** | Crush and Crunch: instant room-mic attitude | 30 |
+| **Mirror Shift Lite** | Instant width: three styles and one Amount knob | 20 |
+| **Shutter Lite** | The digital rack delay in four knobs: Time, Multiply, Feedback, Mix | 30 |
+
 
 ## The instruments (1.8 "Rack" and 1.8.1)
 

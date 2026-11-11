@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Payhip product covers (1280x720 PNG) for the 8 store products, rendered from the site's own art and screenshots.
+"""Payhip product covers (1280x720 PNG) for the 9 store products, rendered from the site's own art and screenshots.
     python3 scripts/make_covers.py <out_dir>
 """
 import os, sys, subprocess, json
@@ -9,10 +9,11 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'dist/covers')
 os.makedirs(OUT, exist_ok=True)
 
 C = [  # code, title, line, price, list, image, accent
-    ('DEMO', 'Squelchmoth Demo', 'Free forever · 16 tracks · the basic instruments and effects · five kits', 'FREE', '', 'img/shots/edit.jpg', '#3affb0'),
-    ('CORE', 'Squelchmoth', 'The full program for macOS · unlimited tracks · 54 Signature plug-ins + 186 AirWindows · Mastering · Cut Lab', '$189.99', '$299.99', 'img/shots/edit.jpg', '#d4ff3a'),
-    ('COMPLETE', 'Squelchmoth Complete', 'The program and all five add-on packs · 87 Signature plug-ins · 27 kits · 51 loops', '$349.99', '$599.99', 'img/shots/mastering.jpg', '#b06bff'),
-    ('VOCAL', 'Vocal Suite', 'Moth Tune · Moth Tune FX · Double Wing ADT', '$79', '$129', 'img/shots/mothtune.jpg', '#19e3ff'),
+    ('DEMO', 'Squelchmoth Demo', 'Free forever · Mac and Windows · 16 tracks · 28 instruments and effects · five kits', 'FREE', '', 'img/shots/edit.jpg', '#3affb0'),
+    ('CORE', 'Squelchmoth', 'The full program for Mac and Windows · unlimited tracks · 60 Signature plug-ins + 186 AirWindows · Mastering · Cut Lab', '$189.99', '$299.99', 'img/shots/edit.jpg', '#d4ff3a'),
+    ('COMPLETE', 'Squelchmoth Complete', 'The program and all six add-on packs · 123 Signature plug-ins · 5,300+ presets · 27 kits · 51 loops', '$399.99', '$699.99', 'img/shots/mastering.jpg', '#b06bff'),
+    ('VOCAL', 'Vocal Suite', '17 vocal plug-ins · Moth Tune · Hive Choir · Vox Moth · Talk Wing · Clean Room · and more', '$149', '$249', 'img/shots/voxmoth.jpg', '#19e3ff'),
+    ('COLOR', 'Color & Space', '16 plug-ins · Cinder · Wingbeat Echo · Foil Plate · Hive Rack · and more · 3,000+ presets', '$179', '$299', 'img/shots/cinder.jpg', '#ff6a3a'),
     ('MASTER', 'Mastering Suite', 'The Apex series · Pulse EQ · Opto Leveler', '$99', '$149', 'img/shots/apexlim.jpg', '#ff5a3a'),
     ('INSTR', 'Instrument Collection', 'Hexwing · Toxin FM · Lantern · Lantern Exo · Pollen · Blossom 2 · and four more', '$99', '$149', 'img/shots/hexwing.jpg', '#3ad7ff'),
     ('BEAT', 'Beat Lab Expansion', 'Carapace · Live Drum Synth · Mandible · ten more kits · 51 genre loops', '$49', '$79', 'img/shots/carapace.jpg', '#ff9a3a'),
@@ -40,7 +41,7 @@ p{{margin:0;font-size:22px;line-height:1.4;color:#c9c0e2}}
 <div class="price"><b>{price}</b><s>{lst}</s></div></div><div class="bar"></div></body></html>'''
 pages = []
 for code, title, line, price, lst, img, accent in C:
-    tag = 'macOS 11+ · Intel & Apple Silicon' if code in ('DEMO', 'CORE', 'COMPLETE') else 'Add-on pack · works in every edition'
+    tag = 'Mac & Windows · one key works on both' if code in ('DEMO', 'CORE', 'COMPLETE') else 'Add-on pack · works in every edition'
     f = os.path.join(SITE, f'_cover_{code}.html')
     open(f, 'w').write(TPL.format(img=img, accent=accent, title=title, line=line, price=price, lst=lst, tag=tag, fs=78 if len(title) < 16 else 62))
     pages.append((f, os.path.join(OUT, f'{code} cover.png')))
