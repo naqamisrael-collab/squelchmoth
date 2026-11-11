@@ -79,6 +79,34 @@ namespace PresetAudit
         return juce::Time::getMillisecondCounterHiRes();
     }
 
+    /** 1.12: the CPU budget (25 % of one core) is defined on the reference build machine. On a slower computer (an older
+        Intel Mac, a shared CI runner) the self-test scales its limits by how much slower this machine runs a fixed DSP
+        workload, so the check still means "within budget for this plug-in", not "this computer is slower". */
+    inline float& cpuBudgetScale()   { static float s = 1.0f; return s; }
+
+    /** Thread CPU time (ms) of a fixed DSP workload (filters, multiplies, sines); the minimum of five runs. The reference
+        build machine (Linux, clang -O3) takes 44 ms. */
+    static constexpr double referenceMachineMs = 44.0;
+    inline double referenceWorkloadMs()
+    {
+        double best = 1.0e9;
+        for (int run = 0; run < 5; ++run)
+        {
+            const double t0 = threadCpuMs();
+            double z1 = 0, z2 = 0, acc = 0, ph = 0;
+            for (int i = 0; i < 4000000; ++i)
+            {
+                ph += 0.0123; if (ph > 6.283185307) ph -= 6.283185307;
+                const double x = std::sin (ph) * 0.5 + (double) (i & 255) * 0.001;
+                const double y = 0.2 * x + 0.4 * z1 - 0.3 * z2; z2 = z1; z1 = y; acc += y * y;
+            }
+            const double t = threadCpuMs() - t0;
+            if (acc < 0) return 0;   // keeps the loop from being optimised away
+            best = juce::jmin (best, t);
+        }
+        return best;
+    }
+
     /** Renders one preset through a private copy of the plug-in. */
     inline Row auditPreset (te::Edit& edit, const Signature::Entry& e, const Signature::Preset& pr, double sr, double seconds, bool strictLevel)
     {
@@ -129,7 +157,7 @@ namespace PresetAudit
         // Wall-clock timing can only be inflated by the OS taking the core away (a busy CI machine, a background
         // indexer). If the first measurement is over the limit, time the pink-noise pass again, twice, and keep
         // the lowest: a plug-in that is really over budget is over budget every time.
-        for (int retry = 0; retry < 2 && row.cpuPercent > 25.0f; ++retry)
+        for (int retry = 0; retry < 2 && row.cpuPercent > 25.0f * cpuBudgetScale(); ++retry)
         {
             pp->reset(); double b2 = 0, t2 = 0; const size_t n = sig.l[0].size();
             for (size_t p = 0; p + (size_t) block <= n; p += (size_t) block)
@@ -153,7 +181,7 @@ namespace PresetAudit
         row.target = targetSignal (e.category, row.category, pr.name);
         if (row.levelChecked && std::abs (row.levelDb[row.target]) > 1.0f)
             why.add ("level " + juce::String (row.levelDb[row.target], 1) + " dB on " + sig.names[row.target]);
-        if (row.cpuPercent > 25.0f) why.add ("CPU " + juce::String (row.cpuPercent, 1) + " %");
+        if (row.cpuPercent > 25.0f * cpuBudgetScale()) why.add ("CPU " + juce::String (row.cpuPercent, 1) + " %" + (cpuBudgetScale() > 1.01f ? " (limit " + juce::String (25.0f * cpuBudgetScale(), 1) + " % on this machine)" : juce::String()));
         for (int k = 0; k < 3; ++k) if (row.levelDb[k] < -60.0f) { why.add ("silent on " + juce::String (sig.names[k])); break; }
         row.pass = why.isEmpty();
         row.why = why.joinIntoString ("; ");

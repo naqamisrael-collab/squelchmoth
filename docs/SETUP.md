@@ -555,7 +555,7 @@ In the MIDI Editor (double-click a MIDI clip, or **PIANO ROLL** in the rack):
 - Claude: `chords` (genres, list, preview, generate, stamp, nudge, detect, labels). Chord Track (a session-wide chord lane
   with Follow per channel) comes in 1.8.2.
 
-## G. What Claude can do (124 tools + every menu command)
+## G. What Claude can do (143 tools + every menu command)
 
 Session: get_session, new_session, open_session, save_session, list_sessions, undo
 Transport: transport, set_loop, set_tempo, set_click, **set_record_mode** (normal / loop / quickpunch, pre/post-roll, count-off, wait for note, MIDI merge)

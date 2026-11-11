@@ -255,6 +255,13 @@ inline int runSelfTest()
     check (schemasOk, "all tool schemas are object schemas");
 
     call ("get_session", "{}", false);   // no session yet -> error
+    {
+        // 1.12: CPU limits are set on the reference machine; a slower computer gets proportionally more room
+        const double ms = PresetAudit::referenceWorkloadMs();
+        PresetAudit::cpuBudgetScale() = (float) juce::jlimit (1.0, 3.0, ms / PresetAudit::referenceMachineMs);
+        std::cout << "  machine speed: reference workload " << juce::String (ms, 1) << " ms (reference machine " << juce::String (PresetAudit::referenceMachineMs, 0)
+                  << " ms) - CPU limits x" << juce::String (PresetAudit::cpuBudgetScale(), 2) << std::endl;
+    }
     call ("new_session", R"({"name":"Selftest"})");
     call ("get_session", "{}");
     call ("set_tempo", R"({"bpm":92,"numerator":4,"denominator":4})");
@@ -2608,7 +2615,7 @@ inline int runSelfTest()
                 const double t0 = juce::Time::getMillisecondCounterHiRes();
                 for (size_t i = 0; i + 128 <= l.size(); i += 128) { float* ch[2] = { l.data() + i, r.data() + i }; p.process (ch, 2, 128); }
                 const double pct = (juce::Time::getMillisecondCounterHiRes() - t0) / 5000.0 * 100.0;
-                check (pct < 12, "Hive Choir: 32 singers (4 voices x 8), Studio engine, " + juce::String (pct, 2) + " % of one core");
+                check (pct < 12 * PresetAudit::cpuBudgetScale(), "Hive Choir: 32 singers (4 voices x 8), Studio engine, " + juce::String (pct, 2) + " % of one core");
             }
             {
                 // Double Wing 2: vibrato only where the note is straight
