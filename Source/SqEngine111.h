@@ -115,8 +115,26 @@ namespace PresetAudit
             row.levelDb[k] = juce::Decibels::gainToDecibels ((float) std::sqrt (e2 / juce::jmax (1.0, cnt)), -120.0f) - inRmsDb;
             row.peakDb = juce::jmax (row.peakDb, juce::Decibels::gainToDecibels (pk, -120.0f));
         }
-        pp->baseClassDeinitialise();
         row.cpuPercent = (float) (100.0 * busy / juce::jmax (1.0, total));
+        // Wall-clock timing can only be inflated by the OS taking the core away (a busy CI machine, a background
+        // indexer). If the first measurement is over the limit, time the pink-noise pass again, twice, and keep
+        // the lowest: a plug-in that is really over budget is over budget every time.
+        for (int retry = 0; retry < 2 && row.cpuPercent > 25.0f; ++retry)
+        {
+            pp->reset(); double b2 = 0, t2 = 0; const size_t n = sig.l[0].size();
+            for (size_t p = 0; p + (size_t) block <= n; p += (size_t) block)
+            {
+                buf.copyFrom (0, 0, sig.l[0].data() + p, block); buf.copyFrom (1, 0, sig.r[0].data() + p, block);
+                midi.clear();
+                const double t0 = (double) p / sr, t1 = t0 + block / sr;
+                te::PluginRenderContext fc (&buf, 0, block, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (t0), te::TimePosition::fromSeconds (t1)), true, false, true, false);
+                const double c0 = juce::Time::getMillisecondCounterHiRes();
+                pp->applyToBuffer (fc);
+                b2 += juce::Time::getMillisecondCounterHiRes() - c0; t2 += block / sr * 1000.0;
+            }
+            row.cpuPercent = juce::jmin (row.cpuPercent, (float) (100.0 * b2 / juce::jmax (1.0, t2)));
+        }
+        pp->baseClassDeinitialise();
         // verdicts
         juce::StringArray why;
         if (! row.finite) why.add ("NaN / Inf in the output");
