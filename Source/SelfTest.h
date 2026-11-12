@@ -576,6 +576,31 @@ inline int runSelfTest()
         auto flipped = coreKey.substring (0, 20) + (coreKey[20] == 'A' ? "B" : "A") + coreKey.substring (21);
         check (! Licence::verifyStoreKey (flipped, prod, serial, testPub), "a store key with one character changed is refused");
         check (! Licence::verifyStoreKey ("SQM2-AAAA", prod, serial, testPub), "garbage store key is refused");
+        // 1.13.1 short keys: a test table built here, so no real key is ever in the program or the log
+        {
+            auto entry = [] (const juce::String& k, uint8_t product)
+            {
+                juce::MemoryBlock e (juce::SHA256 (("squelchmoth3:" + k).toUTF8()).getRawData().getData(), 12);
+                e.append (&product, 1); return e;
+            };
+            const juce::String testA = "7K3QM2XRB9TNH4VWZ8PC", testB = "A1B2C3D4E5F6G7H8J9K0";
+            juce::Array<juce::MemoryBlock> rows { entry (testA, 3), entry (testB, 2) };
+            std::sort (rows.begin(), rows.end(), [] (auto& x, auto& y) { return std::memcmp (x.getData(), y.getData(), 12) < 0; });
+            juce::MemoryBlock table; for (auto& r : rows) table.append (r.getData(), r.getSize());
+            juce::String p, s;
+            auto look = [&] (const juce::String& typed) { p = {}; return Licence::verifyShortKey (Licence::normaliseShortKey (typed), p, s, table.getData(), table.getSize()); };
+            check (look ("7K3QM-2XRB9-TNH4V-WZ8PC") && p == "VOCAL" && s.length() == 8, "a short key (23 characters with dashes) is found and names its pack");
+            check (look ("7k3qm 2xrb9 tnh4v wz8pc") && p == "VOCAL", "short keys ignore case and spaces");
+            check (look ("AIB2C3D4E5F6G7H8J9KO") && p == "COMPLETE", "short keys read O as 0 and I as 1");
+            check (! look ("7K3QM-2XRB9-TNH4V-WZ8PD"), "a short key with one character wrong is refused");
+            check (! look ("7K3QM-2XRB9-TNH4V") && Licence::normaliseShortKey ("SQM2-AREiM0SQ").isEmpty(), "a short key with characters missing is refused");
+            check (BinaryData::keys3_binSize >= 13 * 8001 && BinaryData::keys3_binSize % 13 == 0 && ! Licence::verifyShortKey (Licence::normaliseShortKey (testA), p, s),
+                   "the shipped short-key table is intact (" + juce::String (BinaryData::keys3_binSize / 13) + " keys) and holds no test key");
+            bool sorted = true;
+            for (int i = 1; i < BinaryData::keys3_binSize / 13; ++i)
+                if (std::memcmp (BinaryData::keys3_bin + (i - 1) * 13, BinaryData::keys3_bin + i * 13, 12) >= 0) { sorted = false; break; }
+            check (sorted, "the shipped short-key table is sorted, so every key is found");
+        }
         {
             // a fresh install has no full access: the Demo edition, no time-limited trial
             const auto saved = Edition::owned();
@@ -585,6 +610,13 @@ inline int runSelfTest()
             auto ownerKey = juce::SystemStats::getEnvironmentVariable ("SQUELCH_TEST_KEY", {});
             if (ownerKey.isNotEmpty())
                 check (lic.activate (ownerKey, false).isEmpty() && lic.isLicensed() && Edition::editionName() == "Squelchmoth Complete", "owner key activates against the shipped public key and unlocks everything");
+            auto shortKey = juce::SystemStats::getEnvironmentVariable ("SQUELCH_TEST_SHORT_KEY", {});
+            if (shortKey.isNotEmpty())
+            {
+                lic.clear (false);
+                check (lic.activate (shortKey.toLowerCase(), false).isEmpty() && lic.isLicensed() && Edition::owned().color && Edition::owned().vocal,
+                       "the short owner key (typed in lower case) unlocks the full program and every pack");
+            }
             Edition::owned() = saved;
         }
     }

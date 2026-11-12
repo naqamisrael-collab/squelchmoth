@@ -373,7 +373,7 @@ def support():
 <section class="pagehead"><div class="wrap"><div class="eyebrow">Support</div><h1>Help, keys and answers.</h1><p class="lede">Most answers are below. Anything else: <a href="mailto:support@squelchmoth.com">support@squelchmoth.com</a> — every email gets a personal reply.</p></div></section>
 <section class="band tight" id="activate"><div class="wrap split">
   <div><div class="eyebrow">Activate a key</div><h2>Paste it once. Works offline.</h2>
-    <ol class="steps"><li>Find the key in your purchase email. It starts with <code>SQM2-</code>.</li><li>Open Squelchmoth, choose <strong>Help › Licences and Upgrades</strong>.</li><li>Paste the key and press <strong>Activate</strong>. The product's card turns to <em>Owned</em>.</li><li>If a session already had locked plug-ins, press <strong>Reopen session to unlock</strong>.</li></ol>
+    <ol class="steps"><li>Find the key in your purchase email. It looks like <code>7K3QM-2XRB9-TNH4V-WZ8PC</code> (older keys start with <code>SQM2-</code>; both work).</li><li>Open Squelchmoth, choose <strong>Help › Licences and Upgrades</strong>.</li><li>Paste the key and press <strong>Activate</strong>. The product's card turns to <em>Owned</em>.</li><li>If a session already had locked plug-ins, press <strong>Reopen session to unlock</strong>.</li></ol>
     <p>Bought more than one product? Enter each key — they stack. Keys are checked on your computer with a digital signature; nothing is sent anywhere.</p></div>
   {figure(unlock, 'The Licences and Upgrades window', 'Help › Licences and Upgrades: what you own, every product, and the key field.')}
 </div></section>

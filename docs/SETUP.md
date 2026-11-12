@@ -30,7 +30,7 @@ the Claude link waits quietly (status bar: *Offline*) and connects by itself whe
 7. Choose your audio interface: **Setup → Playback Engine…**.
 8. **Editions:** without a key Squelchmoth runs as the free **Demo** (no time limit): 16 tracks, the basic
    instruments and effects, kits 1–5, save and bounce your mix. To unlock what you bought, choose
-   **Help → Licences and Upgrades…**, paste the key from your purchase email (it starts with `SQM2-`) and click
+   **Help → Licences and Upgrades…**, paste the key from your purchase email (it looks like `7K3QM-2XRB9-TNH4V-WZ8PC`; older keys start with `SQM2-` and still work) and click
    **Activate**. Keys stack: enter one per product (Squelchmoth, Complete or an add-on pack). Plug-ins you don't
    own yet load as *Locked* panels that keep their settings; after unlocking, click **Reopen session to unlock**.
    Buy at squelchmoth.com, or from the Buy buttons in the same window.

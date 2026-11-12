@@ -5,11 +5,15 @@
 //  - SQM2 keys: one per product bought in the store (CORE, COMPLETE, VOCAL, MASTER, INSTR, BEAT, CREATIVE), signed
 //    with the store's Ed25519 key. Format: SQM2-<base64url of product(1) | serial(4) | signature(64)> = 97 characters
 //    (the store's key lists take at most 100). Several keys stack: Squelchmoth + any packs.
+//  - Short keys (1.13.1): XXXXX-XXXXX-XXXXX-XXXXX, 20 random characters. The app ships only a sorted table of
+//    SHA-256 prefixes (Resources/licence/keys3.bin, made by scripts/make_short_keys.py) - never the keys.
+//    Typing is forgiving: any case, dashes and spaces optional, O reads as 0 and I / L as 1.
 //  - SQM1 keys (the owner key and 1.x customers): RSA-2048, signed with Jamar Stewart's owner key; they unlock everything.
 // Only public keys are compiled in. The private halves never enter the repo, a build or a zip.
 
 #include <JuceHeader.h>
 #include "Ed25519.h"
+#include "BinaryData.h"
 #include "Edition.h"
 
 class Licence
@@ -52,7 +56,13 @@ public:
         auto key = keyIn.removeCharacters (" \t\r\n");
         if (key.isEmpty()) return "No key entered";
         Key k; k.key = key;
-        if (key.startsWith ("SQM2-"))
+        if (auto shortKey = normaliseShortKey (key); shortKey.isNotEmpty())
+        {
+            if (! verifyShortKey (shortKey, k.product, k.serial)) return "That key is not valid for Squelchmoth. Check each character and try again.";
+            if (revokedSerials().contains (k.serial)) return "That key has been switched off (refunded or shared). Contact support if you think this is a mistake.";
+            key = k.key = shortKey.substring (0, 5) + "-" + shortKey.substring (5, 10) + "-" + shortKey.substring (10, 15) + "-" + shortKey.substring (15);
+        }
+        else if (key.startsWith ("SQM2-"))
         {
             if (! verifyStoreKey (key, k.product, k.serial)) return "That key is not valid for Squelchmoth. Check for missing characters and try again.";
             if (revokedSerials().contains (k.serial)) return "That key has been switched off (refunded or shared). Contact support if you think this is a mistake.";
@@ -84,6 +94,43 @@ public:
     }
 
     //==========================================================================
+    /** A short key reduced to its 20 characters (upper case, O->0, I/L->1, no dashes), or empty if it isn't one. */
+    static juce::String normaliseShortKey (const juce::String& in)
+    {
+        auto s = in.removeCharacters (" \t\r\n-").toUpperCase().replaceCharacters ("OIL", "011");
+        if (s.length() != 20) return {};
+        for (auto c : s) if (! juce::String ("0123456789ABCDEFGHJKMNPQRSTVWXYZ").containsChar (c)) return {};
+        return s;
+    }
+
+    /** Looks a normalised short key up in a sorted table of 13-byte entries (12-byte hash prefix + product). */
+    static bool verifyShortKey (const juce::String& norm, juce::String& productOut, juce::String& serialOut,
+                                const void* table = nullptr, size_t tableBytes = 0)
+    {
+        if (table == nullptr) { table = BinaryData::keys3_bin; tableBytes = (size_t) BinaryData::keys3_binSize; }
+        if (norm.length() != 20) return false;
+        juce::SHA256 sha (("squelchmoth3:" + norm).toUTF8());
+        auto h = sha.getRawData();
+        auto* t = static_cast<const uint8_t*> (table);
+        size_t lo = 0, hi = tableBytes / 13;
+        while (lo < hi)
+        {
+            auto mid = (lo + hi) / 2;
+            int c = std::memcmp (t + mid * 13, h.getData(), 12);
+            if (c == 0)
+            {
+                static const char* codes[] = { "", "CORE", "COMPLETE", "VOCAL", "MASTER", "INSTR", "BEAT", "CREATIVE", "COLOR" };
+                auto p = t[mid * 13 + 12];
+                if (p < 1 || p > 8) return false;
+                productOut = codes[p];
+                serialOut = juce::String::toHexString (h.getData(), 4, 0).toUpperCase();
+                return true;
+            }
+            if (c < 0) lo = mid + 1; else hi = mid;
+        }
+        return false;
+    }
+
     static bool verifyStoreKey (const juce::String& key, juce::String& productOut, juce::String& serialOut, const juce::String& pubHex = storePublicKey)
     {
         if (! key.startsWith ("SQM2-")) return false;
