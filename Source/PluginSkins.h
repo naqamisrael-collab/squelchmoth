@@ -1515,13 +1515,14 @@ namespace Skins
     #include "SkinsVoice111e.inl"
     #include "SkinsVoice111f.inl"
     #include "SkinsVoice111g.inl"
+    #include "SkinsSpectra.inl"
     #include "SkinsSynths.inl"
     #include "SkinsSynths2.inl"
     #include "SkinsFx181.inl"
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -1962,6 +1963,8 @@ namespace Skins
                                                          G ("OUT", { "Mix", "Output" }, true, 1),
                                                          G ("CONSONANTS", { "Sibilance", "Gate" }, false, 2),
                                                          G ("TUBE", { "Tube", "Brightness" }, false, 2) }; }
+        else if (name == "Spectra EQ")    { s.family = Family::spectra; s.knob = KnobStyle::flat; s.width = 1320; s.height = 840; s.vizH = 840 - 62 - 16; s.resizable = true;
+                                            s.hiddenPrefixes = { "Band ", "Output" }; }   // the whole window is the display (output is the OUT chip)
         else if (name == "Clean Room")    { s.family = Family::cleanroom; s.knob = KnobStyle::ring; s.width = 1360; s.height = 860; s.vizH = 280; s.rowSplit = 3; s.row1Share = 0.45f; s.resizable = true;
                                             s.groups = { G ("CLEAN", { "Clean", "Engine", "Artefact Guard" }, true, 3),
                                                          G ("WHAT TO TAKE OUT", { "Hum", "Buzz", "Hiss", "Noise", "Room", "Clicks" }, true, 3),
@@ -3026,6 +3029,7 @@ namespace Skins
                 case Family::voxmoth: viz = std::make_unique<VoxMothViz> (handles, plugin, accent); break;
                 case Family::talkwing: viz = std::make_unique<TalkWingViz> (handles, plugin, accent); break;
                 case Family::cleanroom: viz = std::make_unique<CleanRoomViz> (handles, plugin, accent); break;
+                case Family::spectra:   { auto sv = std::make_unique<SpectraViz> (handles, plugin, accent); sv->onChange = [this] { repaintControls(); }; viz = std::move (sv); break; }
                 case Family::ring:      viz = std::make_unique<RingViz> (handles, plugin, accent); break;
                 case Family::phase12:   viz = std::make_unique<Phase12Viz> (handles, plugin, accent); break;
                 case Family::bbd:       viz = std::make_unique<BucketViz> (handles, plugin, accent); break;

@@ -51,6 +51,7 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqMawPlugin>();
     engine->getPluginManager().createBuiltInType<SqMawLitePlugin>();
     engine->getPluginManager().createBuiltInType<SqVellumPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSpectraEqPlugin>();
     engine->getPluginManager().createBuiltInType<SqTremorPlugin>();
     engine->getPluginManager().createBuiltInType<SqOrbitPanPlugin>();
     engine->getPluginManager().createBuiltInType<SqMirrorShiftPlugin>();
@@ -3426,6 +3427,94 @@ inline int runSelfTest()
             check (snap.isValid() && sc->getView().summary().contains ("2 part(s)"), "Score window: " + sc->getView().summary());
         }
         std::cout << "  (1.13 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
+    }
+
+    // ===================================================================== 1.14 "Studio Line": Spectra EQ
+    {
+        std::cout << "\n-- 1.14 Studio Line: Spectra EQ --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest Spectra"})");
+        call ("add_track", R"({"kind":"audio","name":"EQ"})");
+        auto added = call ("spectra_eq", R"({"track":"EQ","action":"add"})");
+        SqSpectraEqPlugin* eq = nullptr;
+        if (auto tt = session->findTrack ("EQ")) for (auto pl : tt->pluginList) if (auto e = dynamic_cast<SqSpectraEqPlugin*> (pl)) eq = e;
+        check (eq != nullptr && added.contains ("Spectra EQ"), "Spectra EQ inserted by spectra_eq add");
+        if (eq != nullptr)
+        {
+            call ("spectra_eq", R"({"track":"EQ","action":"band","shape":"bell","freq":3000,"gain":9,"q":2})");
+            call ("spectra_eq", R"({"track":"EQ","action":"band","shape":"high shelf","freq":12000,"gain":-6,"q":0.707})");
+            call ("spectra_eq", R"({"track":"EQ","action":"band","shape":"low cut","freq":40,"slope":24})");
+            auto g = call ("spectra_eq", R"({"track":"EQ","action":"get"})");
+            int bell = -1, shelf = -1, cut = -1;
+            for (int i = 0; i < SqSpectraEqPlugin::numBands; ++i) { const auto b = eq->band (i); if (! b.enabled) continue; if (b.shape == SqSpectra::Shape::bell) bell = i; if (b.shape == SqSpectra::Shape::highShelf) shelf = i; if (b.shape == SqSpectra::Shape::lowCut) cut = i; }
+            check (bell >= 0 && shelf >= 0 && cut >= 0 && g.contains ("curve_db") && eq->band (cut).slope == 24 && bell == 0,
+                   "spectra_eq: three bands made by name (bell, high shelf, 24 dB/oct low cut) and read back with the curve");
+            check (bell >= 0 && shelf >= 0 && cut >= 0 && std::abs (eq->curveDb (3000) - (eq->bandDb (bell, 3000) + eq->bandDb (shelf, 3000) + eq->bandDb (cut, 3000))) < 0.01 && std::abs (eq->curveDb (3000) - 9.0) < 0.3,
+                   "Spectra EQ: the curve is +" + juce::String (eq->curveDb (3000), 2) + " dB at 3 kHz");
+
+            // render through a separate instance with the same state (the session's copy keeps playing)
+            auto measure = [&] (te::Plugin& p, double hz, float amp) -> double
+            {
+                p.baseClassInitialise ({ te::TimePosition(), 48000.0, 256 });
+                const int N = 48000; juce::AudioBuffer<float> buf (2, 256); te::MidiMessageArray midi;
+                double si = 0, co = 0; int counted = 0;
+                for (int q = 0; q + 256 <= N; q += 256)
+                {
+                    for (int i = 0; i < 256; ++i) { const float v = amp * (float) std::sin (juce::MathConstants<double>::twoPi * hz * (q + i) / 48000.0); buf.setSample (0, i, v); buf.setSample (1, i, v); }
+                    te::PluginRenderContext fc (&buf, 0, 256, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / 48000.0), te::TimePosition::fromSeconds ((q + 256) / 48000.0)), true, false, true, false);
+                    p.applyToBuffer (fc);
+                    if (q >= N / 2)
+                        for (int i = 0; i < 256; ++i) { const double t = juce::MathConstants<double>::twoPi * hz * (q + i) / 48000.0; si += buf.getSample (0, i) * std::sin (t); co += buf.getSample (0, i) * std::cos (t); ++counted; }
+                }
+                p.baseClassDeinitialise();
+                return 20.0 * std::log10 (2.0 * std::sqrt (si * si + co * co) / counted / amp + 1e-12);
+            };
+            auto twin = session->edit->getPluginCache().createNewPlugin (SqSpectraEqPlugin::xmlTypeName, {});
+            auto* tw = dynamic_cast<SqSpectraEqPlugin*> (twin.get());
+            if (tw != nullptr)
+            {
+                tw->restorePluginStateFromValueTree (eq->state);
+                double worst = 0; juce::String at;
+                for (double hz : { 100.0, 1000.0, 3000.0, 6000.0, 12000.0, 18000.0 }) { const double e = std::abs (measure (*tw, hz, 0.1f) - tw->curveDb (hz)); if (e > worst) { worst = e; at = juce::String ((int) hz); } }
+                check (worst < 0.3, "Spectra EQ (Zero Latency) rendered: within " + juce::String (worst, 3) + " dB of its analog curve, 100 Hz-18 kHz (worst at " + at + " Hz), latency 0");
+                for (int mode : { 1, 2 })
+                {
+                    tw->phaseMode.setValue (mode, nullptr);
+                    double w2 = 0; for (double hz : { 100.0, 3000.0, 12000.0 }) w2 = juce::jmax (w2, std::abs (measure (*tw, hz, 0.1f) - tw->curveDb (hz)));
+                    const int lat = juce::roundToInt (tw->getLatencySeconds() * 48000.0);
+                    check (w2 < (mode == 1 ? 0.15 : 0.1) && lat == (mode == 1 ? 47 : 4096 + 256), juce::String (mode == 1 ? "Natural" : "Linear") + " phase rendered within " + juce::String (w2, 3) + " dB of the curve; latency " + juce::String (lat) + " samples reported to the engine");
+                }
+                tw->phaseMode.setValue (0, nullptr);
+                // a dynamic band: loud 3 kHz pulls it down, quiet doesn't
+                const int bb = juce::jmax (0, bell);
+                tw->props[(size_t) bb].dyn.setValue (true, nullptr);
+                tw->bank.params[(size_t) (bb * SqSpectraEqPlugin::perBand + SqSpectraEqPlugin::pThresh)]->setParameter (-30.0f, juce::dontSendNotification);
+                tw->bank.params[(size_t) (bb * SqSpectraEqPlugin::perBand + SqSpectraEqPlugin::pRange)]->setParameter (-6.0f, juce::dontSendNotification);
+                const double loud = measure (*tw, 3000, 0.5f), quiet = measure (*tw, 3000, 0.003f);
+                check (std::abs ((loud - quiet) + 6.0) < 0.5, "Spectra EQ dynamic band: a loud 3 kHz tone is pulled " + juce::String (loud - quiet, 2) + " dB below a quiet one (range -6)");
+            }
+            // mid / side and undo
+            call ("spectra_eq", R"({"track":"EQ","action":"band","band":4,"shape":"high shelf","freq":8000,"gain":4,"placement":"side"})");
+            check (eq->band (3).place == SqSpectra::Place::side && eq->band (3).enabled, "spectra_eq: a side-only high shelf");
+            call ("undo", "{}");
+            check (! eq->band (3).enabled, "one undo removes the band Claude just added");
+            // presets
+            int nPre = 0, nAdv = 0; for (auto& e : Signature::entries()) if (juce::String (e.type) == "sqmSpectraEq") { nPre = (int) e.presets.size(); for (auto& pr : e.presets) nAdv += pr.advanced ? 1 : 0; }
+            auto pl = call ("spectra_eq", R"({"track":"EQ","action":"preset","preset":"Vocal | Clarity"})");
+            int on = 0; for (int i = 0; i < SqSpectraEqPlugin::numBands; ++i) on += eq->band (i).enabled ? 1 : 0;
+            check (nPre >= 30 && nAdv >= 8 && pl.contains ("Loaded") && on == 4, "Spectra EQ: " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " Advanced); 'Vocal | Clarity' loads its 4 bands");
+            check (Edition::packOf ("sqmSpectraEq") == Edition::Pack::mastering, "Spectra EQ belongs to the Mastering Suite");
+            // the window, offscreen
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = eq->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*eq);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (600);
+                auto snap = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                { juce::FileOutputStream os (juce::File ("/tmp/spectra_window.png")); os.setPosition (0); os.truncate(); juce::PNGImageFormat().writeImageToStream (snap, os); }
+                check (snap.isValid() && snap.getWidth() >= 1000, "Spectra EQ window renders offscreen (" + juce::String (snap.getWidth()) + " x " + juce::String (snap.getHeight()) + ")");
+            }
+        }
+        std::cout << "  (1.14 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));

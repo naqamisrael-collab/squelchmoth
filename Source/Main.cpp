@@ -221,6 +221,7 @@ public:
         engine->getPluginManager().createBuiltInType<SqMawPlugin>();
         engine->getPluginManager().createBuiltInType<SqMawLitePlugin>();
         engine->getPluginManager().createBuiltInType<SqVellumPlugin>();
+        engine->getPluginManager().createBuiltInType<SqSpectraEqPlugin>();
         engine->getPluginManager().createBuiltInType<SqTremorPlugin>();
         engine->getPluginManager().createBuiltInType<SqOrbitPanPlugin>();
         engine->getPluginManager().createBuiltInType<SqMirrorShiftPlugin>();

@@ -46,6 +46,7 @@ namespace SignaturePresets
 #include "SignaturePresets111.inl"
 #include "SignaturePresets111v.inl"
 #include "SignaturePresets111d.inl"
+#include "SignaturePresets114.inl"
 #include "SignaturePresets111e.inl"
 #include "SignaturePresets111f.inl"
 #include "SignaturePresets111g.inl"
@@ -942,6 +943,7 @@ namespace SignaturePresets
             add111h (base);   // 1.11 Voice, second wave (part 2)
             add111i (base);   // 1.11 Voice, second wave (part 3)
             add111j (base);   // 1.11 Voice, second wave (part 4): Moth Tune FX 2
+            add114 (base);    // 1.14 Studio Line
             return base; }();
         return b;
     }

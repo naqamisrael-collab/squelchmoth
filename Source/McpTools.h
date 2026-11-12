@@ -414,6 +414,7 @@ private:
         register110Tools();
         registerVoice111Tools();
         registerScoreTools();
+        registerSpectraTools();
     }
 
     #include "McpToolsParity.h"
@@ -428,6 +429,7 @@ private:
     #include "McpTools181.h"
     #include "McpTools110.h"
     #include "McpToolsScore.h"
+    #include "McpToolsSpectra.h"
 
     //==============================================================================
     void registerSessionTools()

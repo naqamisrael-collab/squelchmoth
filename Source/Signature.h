@@ -27,6 +27,7 @@
 #include "SqRadiantMaw.h"
 #include "SqVoice111.h"
 #include "SqVoice111g.h"
+#include "SqSpectra.h"
 
 namespace te = tracktion;
 
@@ -95,6 +96,7 @@ namespace Signature
             { "Clean Room",       "sqmCleanRoom",    "Pitch & Vocal", "Vocal cleaner under one knob: hum (50 / 60 Hz found automatically) and buzz, hiss, noise (tracked or learned), room and clicks, artefact guard, residual listen, Studio and Live engines", 0xff7ee8ff, "cleanroom" },
             { "Moth Tune FX 2",   "sqmTuneFx",       "Pitch & Vocal", "Creative tuning: editable Motion patterns (Hard, Soft or Legato) plus a six-slot X/Y effects rack of 21 modules - Mutate, Duet, Vocode, Talkbox, Octaver, Stutter, EQ, Phaser, Flanger, Auto-Pan, Fuzz and more - each slot with its own trigger", 0xffff2fd6, "mothtunefx2" },
             // ---------------- EQ & filters
+            { "Spectra EQ",       "sqmSpectraEq",    "EQ & Filter", "The flagship EQ: 24 bands, ten shapes, cuts to 96 dB/oct and brickwall, analog-matched curves with no top-end cramping, Zero Latency / Natural / Linear phase, per-band Stereo / L / R / Mid / Side, dynamic bands with an external key, live analyser and auto gain", 0xff7c6bff, "spectraeq" },
             { "Vellum EQ",        "sqmVellum",       "EQ & Filter", "Seventies broadcast-console EQ: shelf or very-low-bell low, six-step mid whose Q narrows as it rises, a second sweepable mid, gentle low-pass or very-high-bell high, Stepped detents, Mid/Side and L/R, oversampled Drive", 0xffe8c87a, "vellum" },
             { "Pulse EQ",         "sqmPulse",        "EQ & Filter", "Passive program EQ: the boost-and-cut low end, bandwidth high boost, high attenuation, plus a peak-dip-peak mid section and tube", 0xff2fe0ff, "pulseeq" },
             { "Silk Ladder",      "sqmLadder",       "EQ & Filter", "Four- or two-pole transistor-ladder low-pass with envelope follower, resonance and drive", 0xffff7a1a, "silkladder" },

@@ -406,6 +406,25 @@ ties, rests, dotted notes and triplets.
 - **Claude**: `score` reads any track as notation text, writes notes by name ("F#4 dotted eighth",
   "[C4 E4 G4] half", "rest quarter"), sets the display and exports / imports.
 
+
+## F2d. Spectra EQ (the flagship EQ, Mastering Suite)
+
+1. In the Mix window, click an insert slot and choose **EQ & Filter > Spectra EQ**. It opens flat (no bands).
+2. **Add a band:** double-click the display. Near the left edge you get a low cut, near the right edge a high cut,
+   anywhere else a bell at that frequency and gain.
+3. **Shape it:** drag the node (left / right = frequency, up / down = gain; hold **Shift** for fine moves). Roll the
+   mouse wheel over a node to change Q.
+4. **Everything else:** right-click a node for Shape, Slope (6-96 dB/oct or Brickwall), Placement (Stereo, Left,
+   Right, Mid, Side), Dynamic and the external key - or use the band strip under the display: drag a number up or
+   down, click a choice, double-click a number to reset it.
+5. **Dynamic band:** turn Dynamic on, set Threshold and Range (minus cuts when the band gets loud, plus boosts).
+   The node shows how far it is moving right now.
+6. **Phase:** click the first pill at the top - Zero Latency (default, no delay), Natural (closest to analog in the
+   top octave, 47 samples) or Linear (no phase shift at all; choose its quality, more taps = more delay).
+7. **Remove a band:** double-click its node, or select it and press Delete. Every edit undoes with Cmd+Z.
+8. **Ask Claude:** "On the Vox track add Spectra EQ, cut 300 Hz 3 dB, and make 6.5 kHz a dynamic cut of 5 dB above
+   -30 dB" - Claude uses the `spectra_eq` tool.
+
 ## F2b. New in 1.12 "Finish Line"
 
 - **MP3 everywhere you export.** Bounce Mix, Export Stems and Digital Release write MP3 with Squelchmoth's own
