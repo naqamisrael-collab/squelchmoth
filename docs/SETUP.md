@@ -443,6 +443,34 @@ ties, rests, dotted notes and triplets.
 8. **Blend:** Mix below 100 % is parallel compression; above 100 % it digs deeper (200 % = twice the gain reduction).
 9. **Ask Claude:** "Put Torque Comp on the drum bus, Glue style, 2 dB of gain reduction, low cut the key at 90 Hz."
 
+
+## F2f. Summit Limiter (the flagship limiter, Mastering Suite)
+
+1. Insert **Dynamics > Summit Limiter** as the last plug-in on your master. It opens on *Start | Transparent -1 dBTP*.
+2. Click **TARGET** in the loudness panel and choose where the song is going (Streaming, Podcast, Club...).
+3. Play the loudest part and raise **INPUT** until the coral gain-reduction marks bite the peaks.
+4. Play the whole song through. The panel shows the integrated loudness and how far it is from the target.
+5. Adjust INPUT until the difference reads about 0 LU (or ask Claude: "match the Summit to the target").
+6. Pick an **algorithm** with the arrows if you want a different character - Punch for drums, Smooth for vocals and
+   acoustic, Aggressive for club and trap.
+7. Click **LISTEN REMOVED** to hear only what the limiter takes away; click **UNITY** to compare at equal loudness.
+8. When you bounce to 16 bit, choose **DITHER 16 BIT** with **STRONG** shaping (or load *Export | 16-bit with Shaped
+   Dither*).
+
+## F2g. Atrium Verb (the flagship reverb, Color & Space)
+
+1. Put Atrium Verb on an aux / FX track and send to it, or insert it on a track and lower **MIX** (it opens at 30 %).
+   On an aux, set MIX to 100 %.
+2. Choose a **space** with the arrows or click its name for the list - each one says what it is.
+3. Set **DECAY** (the time to fall 60 dB) and **SIZE**. The timeline shows the hit, the predelay, every early
+   reflection and the tail as it will really decay.
+4. Shape the tail in the **decay landscape**: drag the LOW corner down so the bass dies sooner (less mud), drag the
+   HIGH corner down for a darker, more natural top. Sideways moves the crossover. Double-click a corner to reset it.
+5. **PREDELAY** separates a vocal from its reverb; click **PREDELAY FREE** to lock it to the tempo instead.
+6. **DUCKING** pulls the reverb down while the dry sound plays and lets it bloom in the gaps.
+7. **FREEZE** holds the tail forever - play a chord, freeze, and you have a pad.
+8. Ask Claude: "put a bright plate on the vocal with an 1/8 predelay and ducking".
+
 ## F2b. New in 1.12 "Finish Line"
 
 - **MP3 everywhere you export.** Bounce Mix, Export Stems and Digital Release write MP3 with Squelchmoth's own

@@ -93,7 +93,7 @@
             juce::Path outFill (outP); outFill.lineTo (p.getRight(), p.getBottom()); outFill.closeSubPath();
             grP.lineTo (p.getRight(), p.getY()); grP.closeSubPath();
             g.setGradientFill (juce::ColourGradient (frost().withAlpha (0.16f), 0, p.getY(), frost().withAlpha (0.02f), 0, p.getBottom(), false)); g.fillPath (inP);
-            g.setGradientFill (juce::ColourGradient (ice().withAlpha (0.45f), 0, p.getY(), teal().withAlpha (0.06f), 0, p.getBottom(), false)); g.fillPath (outFill);
+            g.setGradientFill (juce::ColourGradient (ice().withAlpha (0.28f), 0, p.getY(), teal().withAlpha (0.03f), 0, p.getBottom(), false)); g.fillPath (outFill);
             g.setColour (ice()); g.strokePath (outP, juce::PathStrokeType (1.2f));
             g.setGradientFill (juce::ColourGradient (coral().withAlpha (0.75f), 0, p.getY(), coral().withAlpha (0.10f), 0, p.getY() + p.getHeight() * 0.45f, false)); g.fillPath (grP);
             // the ceiling

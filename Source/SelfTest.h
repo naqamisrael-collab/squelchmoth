@@ -53,6 +53,8 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqVellumPlugin>();
     engine->getPluginManager().createBuiltInType<SqSpectraEqPlugin>();
     engine->getPluginManager().createBuiltInType<SqTorqueCompPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSummitLimiterPlugin>();
+    engine->getPluginManager().createBuiltInType<SqAtriumVerbPlugin>();
     engine->getPluginManager().createBuiltInType<SqTremorPlugin>();
     engine->getPluginManager().createBuiltInType<SqOrbitPanPlugin>();
     engine->getPluginManager().createBuiltInType<SqMirrorShiftPlugin>();
@@ -3588,6 +3590,127 @@ inline int runSelfTest()
             }
         }
         std::cout << "  (1.14 Torque section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
+    }
+
+    // ===================================================================== 1.14 "Studio Line": Summit Limiter
+    {
+        std::cout << "\n-- 1.14 Studio Line: Summit Limiter --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest Summit"})");
+        call ("add_track", R"({"kind":"audio","name":"Master Bus"})");
+        auto added = call ("summit_limiter", R"({"track":"Master Bus","action":"add"})");
+        SqSummitLimiterPlugin* sl = nullptr;
+        if (auto tt = session->findTrack ("Master Bus")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqSummitLimiterPlugin*> (pl)) sl = c;
+        check (sl != nullptr && added.contains ("Summit Limiter"), "Summit Limiter inserted by summit_limiter add");
+        if (sl != nullptr)
+        {
+            auto st = call ("summit_limiter", R"({"track":"Master Bus","action":"set","algorithm":"aggressive","input":10,"ceiling":-1,"oversampling":4,"dither":16,"noise_shaping":"strong","target":"club"})");
+            check (sl->algorithm.get() == 4 && std::abs (sl->bank[SqSummitLimiterPlugin::input] - 10.0f) < 0.01f && sl->oversample.get() == 2 && sl->ditherBits.get() == 1 && sl->noiseShape.get() == 2 && sl->target.get() == 5 && st.contains ("Aggressive"),
+                   "summit_limiter set: algorithm, input, 4x, 16-bit strong-shaped dither, the club target - by name");
+            call ("summit_limiter", R"({"track":"Master Bus","action":"set","oversampling":1,"dither":0})");
+            auto twin = session->edit->getPluginCache().createNewPlugin (SqSummitLimiterPlugin::xmlTypeName, {});
+            if (auto* tw = dynamic_cast<SqSummitLimiterPlugin*> (twin.get()))
+            {
+                tw->restorePluginStateFromValueTree (sl->state);
+                tw->baseClassInitialise ({ te::TimePosition(), 44100.0, 512 });
+                const int N = 44100 * 3; juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi; juce::Random rnd (5);
+                std::vector<float> outL; outL.reserve ((size_t) N);
+                for (int q = 0; q + 512 <= N; q += 512)
+                {
+                    for (int i = 0; i < 512; ++i)
+                    {
+                        const double t = (q + i) / 44100.0, beat = std::fmod (t, 0.25);
+                        const float v = (float) ((beat < 0.03 ? (1 - beat / 0.03) * (rnd.nextDouble() * 2 - 1) : 0) + 0.5 * std::sin (juce::MathConstants<double>::twoPi * 55 * t));
+                        buf.setSample (0, i, v); buf.setSample (1, i, v * 0.8f);
+                    }
+                    te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / 44100.0), te::TimePosition::fromSeconds ((q + 512) / 44100.0)), true, false, true, false);
+                    tw->applyToBuffer (fc);
+                    for (int i = 0; i < 512; ++i) outL.push_back (buf.getSample (0, i));
+                }
+                tw->baseClassDeinitialise();
+                // exact band-limited true peak of the last two seconds (FFT, spectrum zero-padded 8x)
+                const int M = 65536; juce::dsp::FFT f (16), g (19);
+                std::vector<std::complex<float>> a ((size_t) M), A ((size_t) M), B ((size_t) M * 8), b ((size_t) M * 8);
+                for (int i = 0; i < M; ++i) a[(size_t) i] = outL[(size_t) (outL.size() - M + i)];
+                f.perform (a.data(), A.data(), false);
+                for (int k = 0; k < M / 2; ++k) { B[(size_t) k] = A[(size_t) k]; if (k > 0) B[(size_t) (M * 8 - k)] = A[(size_t) (M - k)]; }
+                g.perform (B.data(), b.data(), true);
+                double tp = 0; for (int i = 4096 * 8; i < (M - 4096) * 8; ++i) tp = std::max (tp, (double) std::abs (b[(size_t) i].real()) * 8);
+                const double tpDb = 20 * std::log10 (tp + 1e-12);
+                check (tpDb <= -0.9, "Summit (Aggressive, +10 dB, -1 dBTP) rendered: true peak by exact reconstruction " + juce::String (tpDb, 2) + " dBTP");
+                check (std::abs (tw->getLatencySeconds() * 44100.0 - (2 * SqSummit::BandGuard::delay + std::lround (0.002 * 44100.0) + SqSummit::TruePeak4::delay + SqSummit::Engine::safetyDelay())) < 1.5,
+                       "latency reported: " + juce::String (tw->getLatencySeconds() * 1000.0, 2) + " ms (guards, 2 ms lookahead, detector, safety stage)");
+                check (tw->integrated.load() < 0 && tw->momentary.load() > -40, "the loudness panel measures (momentary " + juce::String (tw->momentary.load(), 1) + " LUFS)");
+            }
+            int nPre = 0, nAdv = 0; for (auto& e : Signature::entries()) if (juce::String (e.type) == "sqmSummitLim") { nPre = (int) e.presets.size(); for (auto& pr : e.presets) nAdv += pr.advanced ? 1 : 0; }
+            auto pl = call ("summit_limiter", R"({"track":"Master Bus","action":"preset","preset":"Export | 16-bit"})");
+            check (nPre >= 24 && nAdv >= 8 && pl.contains ("Loaded") && sl->ditherBits.get() == 1 && sl->noiseShape.get() == 2, "Summit Limiter: " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " Advanced); the 16-bit export preset sets shaped dither");
+            check (Edition::packOf ("sqmSummitLim") == Edition::Pack::mastering, "Summit Limiter belongs to the Mastering Suite");
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = sl->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*sl);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (600);
+                auto snap = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                check (snap.isValid() && snap.getWidth() >= 1000, "Summit Limiter window renders offscreen (" + juce::String (snap.getWidth()) + " x " + juce::String (snap.getHeight()) + ")");
+            }
+        }
+        std::cout << "  (1.14 Summit section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
+    }
+
+    // ===================================================================== 1.14 "Studio Line": Atrium Verb
+    {
+        std::cout << "\n-- 1.14 Studio Line: Atrium Verb --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest Atrium"})");
+        call ("add_track", R"({"kind":"audio","name":"Verb Return"})");
+        auto added = call ("atrium_verb", R"({"track":"Verb Return","action":"add"})");
+        SqAtriumVerbPlugin* at = nullptr;
+        if (auto tt = session->findTrack ("Verb Return")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqAtriumVerbPlugin*> (pl)) at = c;
+        check (at != nullptr && added.contains ("Atrium Verb"), "Atrium Verb inserted by atrium_verb add");
+        if (at != nullptr)
+        {
+            auto st = call ("atrium_verb", R"({"track":"Verb Return","action":"set","space":"cathedral","decay":3,"size":70,"predelay_sync":"1/8","low_decay":1.5,"ducking":6,"low_cut":120,"mix":100})");
+            check (at->space.get() == 6 && std::abs (at->bank[SqAtriumVerbPlugin::decay] - 3.0f) < 0.01f && at->predelaySync.get() == 4 && std::abs (at->bank[SqAtriumVerbPlugin::duck] - 6.0f) < 0.01f
+                   && st.contains ("Cathedral") && st.contains ("decay_by_frequency_s"), "atrium_verb set: space, decay, synced predelay, low decay, ducking, low cut - by name");
+            check (std::abs (at->predelayMs() - 250.0) < 1.0, "predelay synced to 1/8 at 120 BPM = " + juce::String (at->predelayMs(), 1) + " ms");
+            call ("atrium_verb", R"({"track":"Verb Return","action":"set","space":"concert hall","decay":2,"predelay":0,"ducking":0,"low_cut":10,"low_decay":1,"high_decay":1,"early":0})");
+            check (at->predelaySync.get() == 0, "a predelay in ms sets the sync back to free");
+            auto twin = session->edit->getPluginCache().createNewPlugin (SqAtriumVerbPlugin::xmlTypeName, {});
+            if (auto* tw = dynamic_cast<SqAtriumVerbPlugin*> (twin.get()))
+            {
+                tw->restorePluginStateFromValueTree (at->state);
+                tw->baseClassInitialise ({ te::TimePosition(), 44100.0, 512 });
+                const int N = 44100 * 4; juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                std::vector<double> e; e.reserve ((size_t) N); bool finite = true;
+                for (int q = 0; q + 512 <= N; q += 512)
+                {
+                    buf.clear(); if (q == 0) { buf.setSample (0, 0, 1.0f); buf.setSample (1, 0, 1.0f); }
+                    te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / 44100.0), te::TimePosition::fromSeconds ((q + 512) / 44100.0)), true, false, true, false);
+                    tw->applyToBuffer (fc);
+                    for (int i = 0; i < 512; ++i) { const float v = buf.getSample (0, i); if (! std::isfinite (v)) finite = false; e.push_back ((double) v * v); }
+                }
+                tw->baseClassDeinitialise();
+                // broadband Schroeder decay, T20 x 3
+                for (int i = (int) e.size() - 2; i >= 0; --i) e[(size_t) i] += e[(size_t) i + 1];
+                double t5 = -1, t25 = -1;
+                for (size_t i = 0; i < e.size(); ++i) { const double d = 10 * std::log10 (std::max (1e-300, e[i] / e[0])); if (t5 < 0 && d <= -5) t5 = i / 44100.0; if (t25 < 0 && d <= -25) { t25 = i / 44100.0; break; } }
+                const double rt = 3 * (t25 - t5);
+                check (finite && t25 > 0 && std::abs (rt / 2.0 - 1) < 0.15, "Atrium (Concert Hall, Decay 2 s) rendered: measured RT60 " + juce::String (rt, 2) + " s");
+                check (std::abs (tw->decayAt (1000.0) / 2.0 - 1) < 0.05, "the face's decay curve at 1 kHz reads " + juce::String (tw->decayAt (1000.0), 2) + " s");
+            }
+            int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmAtriumVerb") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+            auto pl = call ("atrium_verb", R"({"track":"Verb Return","action":"preset","preset":"Freeze Pad"})");
+            check (nPre >= 24 && nAdv >= 8 && pl.contains ("Loaded") && at->freeze.get() && at->space.get() == 9, "Atrium Verb: " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " Advanced); the freeze preset freezes the Bloom space");
+            check (Edition::packOf ("sqmAtriumVerb") == Edition::Pack::color, "Atrium Verb belongs to Color & Space");
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = at->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*at);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (600);
+                auto snap = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                check (snap.isValid() && snap.getWidth() >= 1000, "Atrium Verb window renders offscreen (" + juce::String (snap.getWidth()) + " x " + juce::String (snap.getHeight()) + ")");
+            }
+        }
+        std::cout << "  (1.14 Atrium section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));

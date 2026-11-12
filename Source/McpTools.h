@@ -416,6 +416,8 @@ private:
         registerScoreTools();
         registerSpectraTools();
         registerTorqueTools();
+        registerSummitTools();
+        registerAtriumTools();
     }
 
     #include "McpToolsParity.h"
@@ -432,6 +434,8 @@ private:
     #include "McpToolsScore.h"
     #include "McpToolsSpectra.h"
     #include "McpToolsTorque.h"
+    #include "McpToolsSummit.h"
+    #include "McpToolsAtrium.h"
 
     //==============================================================================
     void registerSessionTools()

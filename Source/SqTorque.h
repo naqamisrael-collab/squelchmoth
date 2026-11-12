@@ -61,6 +61,7 @@ public:
             const auto n = juce::String (b + 1);
             keyProps[(size_t) b].on.referTo (state, "k" + n + "On", um, false); keyProps[(size_t) b].shape.referTo (state, "k" + n + "Shape", um, b == 0 ? 4 : 0); keyProps[(size_t) b].slope.referTo (state, "k" + n + "Slope", um, 12);
         }
+        histIn.fill (-100.0f); histOut.fill (-100.0f); histGr.fill (0.0f);   // an empty history draws nothing
     }
     ~SqTorqueCompPlugin() override { cancelPendingUpdate(); notifyListenersOfDeletion(); bank.detach(); }
 

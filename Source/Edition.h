@@ -21,11 +21,11 @@ namespace Edition
             { "CORE",     "Squelchmoth",           "$189.99", "$299.99", "The full program: unlimited tracks, every core plug-in and instrument, Mastering, Cut Lab, stems and DDP" },
             { "COMPLETE", "Squelchmoth Complete",  "$399.99", "$699.99", "Squelchmoth and every add-on pack, Color & Space and the whole Vocal Suite included" },
             { "VOCAL",    "Vocal Suite",           "$149",    "$249",    "The whole Voice family: Moth Tune, Moth Tune FX 2, Moth Key, Siren Comp, Siren EQ, Hush De-Ess 2, Siren Verb, Mic Closet, Larynx, Exhale, Hive Choir, Double Wing 2, Double Wing ADT, Mutant, Vox Moth, Talk Wing and Clean Room" },
-            { "MASTER",   "Mastering Suite",       "$99",     "$149",    "Spectra EQ, Torque Comp, the Apex series, Pulse EQ and Opto Leveler" },
+            { "MASTER",   "Mastering Suite",       "$99",     "$149",    "Spectra EQ, Torque Comp, Summit Limiter, the Apex series, Pulse EQ and Opto Leveler" },
             { "INSTR",    "Instrument Collection", "$99",     "$149",    "Hexwing, Toxin FM, Lantern, Lantern Exo, Pollen, Blossom 2, Thorn Bass, Larva Bass, Chrysalis 2 and Chrysalis SF" },
             { "BEAT",     "Beat Lab Expansion",    "$49",     "$79",     "Carapace, Live Drum Synth, Drum Pad Model, Thump Live, Mandible, Mandible Lite, ten more kits and 51 genre loops" },
             { "CREATIVE", "Creative FX",           "$49",     "$79",     "Time Weaver, Larva Filter, Oil Can Delay, Bucket Brigade, Halo Ring, Twelve Phase and Silk Ladder" },
-            { "COLOR",    "Color & Space",         "$179",    "$299",    "Cinder, Wingbeat Echo, Foil Plate, Radiant, Maw, Vellum EQ, Tremor, Orbit Pan, Mirror Shift, Shutter Delay, Shard, Murmuration, Masquerade, Larva Filter 2, Twelve Phase 2 and Hive Rack" } };
+            { "COLOR",    "Color & Space",         "$179",    "$299",    "Cinder, Wingbeat Echo, Foil Plate, Radiant, Maw, Vellum EQ, Tremor, Orbit Pan, Mirror Shift, Shutter Delay, Shard, Murmuration, Masquerade, Larva Filter 2, Twelve Phase 2, Hive Rack and Atrium Verb" } };
         return p;
     }
     inline const Product* productFor (Pack p)
@@ -73,7 +73,7 @@ namespace Edition
             { "sqmSirenVerb", Pack::vocal }, { "sqmMicCloset", Pack::vocal }, { "sqmLarynx", Pack::vocal }, { "sqmExhale", Pack::vocal },
             { "sqmHiveChoir", Pack::vocal }, { "sqmDoubleWing2", Pack::vocal }, { "sqmMutant", Pack::vocal },
             { "sqmVoxMoth", Pack::vocal }, { "sqmTalkWing", Pack::vocal }, { "sqmCleanRoom", Pack::vocal },
-            { "sqmSpectraEq", Pack::mastering }, { "sqmTorqueComp", Pack::mastering }, { "sqmApexDyn", Pack::mastering }, { "sqmApexLim", Pack::mastering }, { "sqmApexMB", Pack::mastering }, { "sqmApexSub", Pack::mastering },
+            { "sqmSpectraEq", Pack::mastering }, { "sqmTorqueComp", Pack::mastering }, { "sqmSummitLim", Pack::mastering }, { "sqmApexDyn", Pack::mastering }, { "sqmApexLim", Pack::mastering }, { "sqmApexMB", Pack::mastering }, { "sqmApexSub", Pack::mastering },
             { "sqmApexTriad", Pack::mastering }, { "sqmPulse", Pack::mastering }, { "sqmOpto", Pack::mastering },
             { "sqmHexwing", Pack::instruments }, { "sqmToxin", Pack::instruments }, { "sqmLantern", Pack::instruments }, { "sqmLanternExo", Pack::instruments },
             { "sqmPollen", Pack::instruments }, { "sqmBlossom", Pack::instruments }, { "sqmThornBass", Pack::instruments }, { "sqmLarvaBass", Pack::instruments },
@@ -85,7 +85,7 @@ namespace Edition
             { "sqmCinder", Pack::color }, { "sqmWingbeat", Pack::color }, { "sqmFoilPlate", Pack::color }, { "sqmRadiant", Pack::color }, { "sqmMaw", Pack::color },
             { "sqmVellum", Pack::color }, { "sqmTremor", Pack::color }, { "sqmOrbitPan", Pack::color }, { "sqmMirrorShift", Pack::color }, { "sqmShutter", Pack::color },
             { "sqmShard", Pack::color }, { "sqmMurmuration", Pack::color }, { "sqmMasquerade", Pack::color },
-            { "sqmLarvaFilter2", Pack::color }, { "sqmPhase12v2", Pack::color }, { "sqmHiveRack", Pack::color } };
+            { "sqmLarvaFilter2", Pack::color }, { "sqmPhase12v2", Pack::color }, { "sqmHiveRack", Pack::color }, { "sqmAtriumVerb", Pack::color } };
         auto it = m.find (type); return it != m.end() ? it->second : Pack::none;
     }
     /** The Demo's basic set: 16 effects, 6 instruments and what the rack needs to run. */

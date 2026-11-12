@@ -45,6 +45,7 @@ public:
         noiseShape.referTo (state, "noiseShape", um, 0); target.referTo (state, "target", um, 0);
         truePeak.referTo (state, "truePeak", um, true); bandLimit.referTo (state, "bandLimit", um, true); dcFilter.referTo (state, "dcFilter", um, true);
         unity.referTo (state, "unity", um, false); listenRemoved.referTo (state, "listenRemoved", um, false); linkOwn.referTo (state, "linkOwn", um, true);
+        histIn.fill (-100.0f); histOut.fill (-100.0f); histGr.fill (0.0f);   // an empty history draws nothing
     }
     ~SqSummitLimiterPlugin() override { cancelPendingUpdate(); notifyListenersOfDeletion(); bank.detach(); }
 
