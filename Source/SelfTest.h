@@ -52,6 +52,7 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqMawLitePlugin>();
     engine->getPluginManager().createBuiltInType<SqVellumPlugin>();
     engine->getPluginManager().createBuiltInType<SqSpectraEqPlugin>();
+    engine->getPluginManager().createBuiltInType<SqTorqueCompPlugin>();
     engine->getPluginManager().createBuiltInType<SqTremorPlugin>();
     engine->getPluginManager().createBuiltInType<SqOrbitPanPlugin>();
     engine->getPluginManager().createBuiltInType<SqMirrorShiftPlugin>();
@@ -3515,6 +3516,78 @@ inline int runSelfTest()
             }
         }
         std::cout << "  (1.14 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
+    }
+
+    // ===================================================================== 1.14 "Studio Line": Torque Comp
+    {
+        std::cout << "\n-- 1.14 Studio Line: Torque Comp --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest Torque"})");
+        call ("add_track", R"({"kind":"audio","name":"Comp"})");
+        auto added = call ("torque_comp", R"({"track":"Comp","action":"add"})");
+        SqTorqueCompPlugin* tq = nullptr;
+        if (auto tt = session->findTrack ("Comp")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqTorqueCompPlugin*> (pl)) tq = c;
+        check (tq != nullptr && added.contains ("Torque Comp"), "Torque Comp inserted by torque_comp add");
+        if (tq != nullptr)
+        {
+            auto st = call ("torque_comp", R"({"track":"Comp","action":"set","style":"variable mu","threshold":-24,"ratio":4,"knee":0,"attack":5,"release":100,"routing":"mid only","colour":"warm","oversampling":8})");
+            check (tq->style.get() == 4 && std::abs (tq->bank[SqTorqueCompPlugin::threshold] + 24.0f) < 0.01f && tq->routing.get() == 1 && tq->characterMode.get() == 2 && tq->oversample.get() == 3 && st.contains ("Variable Mu"),
+                   "torque_comp set: style by name, threshold, Mid Only, warm colour, 8x oversampling");
+            call ("torque_comp", R"({"track":"Comp","action":"set","style":"clean","routing":"stereo","colour":"off","threshold":-24,"ratio":4,"knee":0})");
+            auto measure = [&] (te::Plugin& p, double hz, float amp, int seconds = 1) -> double
+            {
+                p.baseClassInitialise ({ te::TimePosition(), 48000.0, 256 });
+                const int N = 48000 * seconds; juce::AudioBuffer<float> buf (2, 256); te::MidiMessageArray midi; double pk = 0;
+                for (int q = 0; q + 256 <= N; q += 256)
+                {
+                    for (int i = 0; i < 256; ++i) { const float v = amp * (float) std::sin (juce::MathConstants<double>::twoPi * hz * (q + i) / 48000.0); buf.setSample (0, i, v); buf.setSample (1, i, v); }
+                    te::PluginRenderContext fc (&buf, 0, 256, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / 48000.0), te::TimePosition::fromSeconds ((q + 256) / 48000.0)), true, false, true, false);
+                    p.applyToBuffer (fc);
+                    if (q > N - 9600) pk = std::max (pk, (double) buf.getMagnitude (0, 0, 256));
+                }
+                p.baseClassDeinitialise();
+                return 20.0 * std::log10 (pk + 1e-12);
+            };
+            auto twin = session->edit->getPluginCache().createNewPlugin (SqTorqueCompPlugin::xmlTypeName, {});
+            if (auto* tw = dynamic_cast<SqTorqueCompPlugin*> (twin.get()))
+            {
+                tw->restorePluginStateFromValueTree (tq->state);
+                const double out = measure (*tw, 1000, 0.5f), want = tw->curveOutDb (-6.02);
+                check (std::abs (out - want) < 0.6, "Torque Comp (Clean, -24 dB, 4:1) rendered: a -6 dBFS sine comes out at " + juce::String (out, 2) + " dBFS (its curve says " + juce::String (want, 2) + ")");
+                tw->bank.params[(size_t) SqTorqueCompPlugin::lookahead]->setParameter (5.0f, juce::dontSendNotification);
+                check (juce::roundToInt (tw->getLatencySeconds() * 48000.0) == 240, "5 ms lookahead reports 240 samples of latency to the engine");
+                tw->bank.params[(size_t) SqTorqueCompPlugin::lookahead]->setParameter (0.0f, juce::dontSendNotification);
+                tw->bank.params[(size_t) SqTorqueCompPlugin::mix]->setParameter (200.0f, juce::dontSendNotification);
+                const double deep = measure (*tw, 1000, 0.5f);
+                const double mk = tw->bank[SqTorqueCompPlugin::makeup], gr1 = out + 6.02 - mk, gr2 = deep + 6.02 - mk;   // the makeup isn't gain reduction
+                check (std::abs (gr2 - 2.0 * gr1) < 0.8, "Mix 200 %: twice the gain reduction (" + juce::String (gr1, 1) + " -> " + juce::String (gr2, 1) + " dB)");
+                // every style renders finite and in range
+                bool ok = true; juce::String bad;
+                tw->bank.params[(size_t) SqTorqueCompPlugin::mix]->setParameter (100.0f, juce::dontSendNotification);
+                for (int sIdx = 0; sIdx < 14; ++sIdx) { tw->style.setValue (sIdx, nullptr); const double o = measure (*tw, 220, 0.7f); if (! std::isfinite (o) || o > 6) { ok = false; bad = SqTorque::styles()[(size_t) sIdx].name; } }
+                check (ok, "all 14 styles render a loud tone finite and in range" + (ok ? juce::String() : " - " + bad));
+            }
+            // MIDI key
+            call ("torque_comp", R"({"track":"Comp","action":"set","key":"midi","style":"pump"})");
+            check (tq->keySource.get() == 2 && tq->style.get() == 11 && tq->takesMidiInput(), "the MIDI key: note-ons duck the track (Pump style)");
+            // key EQ
+            call ("torque_comp", R"({"track":"Comp","action":"key_band","band":1,"shape":"low cut","freq":120,"slope":24})");
+            check (tq->keyProps[0].on.get() && tq->keyProps[0].shape.get() == 4 && std::abs (tq->bank[SqTorqueCompPlugin::k1Freq] - 120.0f) < 0.5f, "torque_comp key_band: a 120 Hz low cut in the detector");
+            // presets
+            int nPre = 0, nAdv = 0; for (auto& e : Signature::entries()) if (juce::String (e.type) == "sqmTorqueComp") { nPre = (int) e.presets.size(); for (auto& pr : e.presets) nAdv += pr.advanced ? 1 : 0; }
+            auto pl = call ("torque_comp", R"({"track":"Comp","action":"preset","preset":"Drums | Bus Glue"})");
+            check (nPre >= 30 && nAdv >= 10 && pl.contains ("Loaded") && tq->style.get() == 2 && tq->keyProps[0].on.get(), "Torque Comp: " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " Advanced); 'Drums | Bus Glue' loads Glue with its key EQ");
+            check (Edition::packOf ("sqmTorqueComp") == Edition::Pack::mastering, "Torque Comp belongs to the Mastering Suite");
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = tq->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*tq);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (600);
+                auto snap = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                { juce::FileOutputStream os (juce::File ("/tmp/torque_window.png")); os.setPosition (0); os.truncate(); juce::PNGImageFormat().writeImageToStream (snap, os); }
+                check (snap.isValid() && snap.getWidth() >= 1000, "Torque Comp window renders offscreen (" + juce::String (snap.getWidth()) + " x " + juce::String (snap.getHeight()) + ")");
+            }
+        }
+        std::cout << "  (1.14 Torque section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));

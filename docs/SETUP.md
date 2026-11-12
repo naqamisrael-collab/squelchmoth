@@ -425,6 +425,24 @@ ties, rests, dotted notes and triplets.
 8. **Ask Claude:** "On the Vox track add Spectra EQ, cut 300 Hz 3 dB, and make 6.5 kHz a dynamic cut of 5 dB above
    -30 dB" - Claude uses the `spectra_eq` tool.
 
+
+## F2e. Torque Comp (the flagship compressor, Mastering Suite)
+
+1. Insert **Dynamics > Torque Comp**. It opens on *Start | Gentle 2:1*.
+2. **Pick a style** with the arrows beside the style name, or click the name for the list - each one says what it does
+   (Glue for buses, Opto for vocals, Punch for drums, Upward to lift quiet detail...).
+3. **Set how hard:** drag **Threshold** down until the GR meter moves, then **Ratio**. Shift-drag any knob for fine
+   moves, double-click to reset it, or roll the mouse wheel.
+4. **Shape it in time:** Attack, Release (or **AUTO RELEASE**), Hold, and Lookahead to catch peaks before they happen.
+5. **Watch it:** the history shows the input, the output and the gain reduction; the transfer curve shows the dot
+   where your signal is right now.
+6. **Key:** click **KEY** to compress from another track (External), from MIDI notes or in time with the song
+   (Tempo). Double-click the **KEY EQ** panel to add a band - a low cut stops the bass from pumping the mix.
+   **LISTEN KEY** lets you hear what the detector hears.
+7. **Colour:** click **COLOUR** for Warm, Bright, Iron or the style's own; choose 4x-32x oversampling for clean highs.
+8. **Blend:** Mix below 100 % is parallel compression; above 100 % it digs deeper (200 % = twice the gain reduction).
+9. **Ask Claude:** "Put Torque Comp on the drum bus, Glue style, 2 dB of gain reduction, low cut the key at 90 Hz."
+
 ## F2b. New in 1.12 "Finish Line"
 
 - **MP3 everywhere you export.** Bounce Mix, Export Stems and Digital Release write MP3 with Squelchmoth's own

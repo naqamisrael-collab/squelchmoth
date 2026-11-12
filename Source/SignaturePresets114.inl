@@ -79,7 +79,78 @@ SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_spectra()   // Spectra
     };
 }
 
+SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_torque()   // Torque Comp
+{
+    return {
+        B ("Start | Gentle 2:1", { N ("threshold", -18.0f), N ("ratio", 2.0f), N ("knee", 6.0f), N ("attack", 10.0f), N ("release", 120.0f), N ("makeup", 2.0f) },
+            { { "style", 0.0f } }),
+        B ("Vocal | Smooth Rider", { N ("threshold", -22.0f), N ("ratio", 3.0f), N ("knee", 10.0f), N ("attack", 6.0f), N ("release", 160.0f), N ("makeup", 4.0f) },
+            { { "style", 7.0f }, { "autoRelease", 1.0f } }),
+        B ("Vocal | Upfront Rap", { N ("threshold", -20.0f), N ("ratio", 6.0f), N ("knee", 2.0f), N ("attack", 0.8f), N ("release", 70.0f), N ("makeup", 6.0f), N ("drive", 3.0f) },
+            { { "style", 5.0f }, { "character", 1.0f } }),
+        B ("Vocal | Silky Opto", { N ("threshold", -24.0f), N ("ratio", 4.0f), N ("knee", 6.0f), N ("attack", 12.0f), N ("release", 300.0f), N ("makeup", 5.0f) },
+            { { "style", 3.0f } }),
+        B ("Vocal | Level Then Catch", { N ("threshold", -28.0f), N ("ratio", 2.5f), N ("knee", 12.0f), N ("attack", 40.0f), N ("release", 900.0f), N ("makeup", 4.0f) },
+            { { "style", 9.0f } }),
+        B ("Drums | Kick Snap", { N ("threshold", -16.0f), N ("ratio", 4.0f), N ("knee", 3.0f), N ("attack", 12.0f), N ("release", 80.0f), N ("makeup", 3.0f) },
+            { { "style", 1.0f } }),
+        B ("Drums | Snare Body", { N ("threshold", -20.0f), N ("ratio", 5.0f), N ("knee", 4.0f), N ("attack", 6.0f), N ("release", 110.0f), N ("makeup", 4.0f), N ("drive", 2.0f) },
+            { { "style", 1.0f }, { "character", 1.0f } }),
+        B ("Drums | Bus Glue", { N ("threshold", -14.0f), N ("ratio", 3.0f), N ("knee", 6.0f), N ("attack", 10.0f), N ("release", 200.0f), N ("makeup", 2.0f), N ("k1Freq", 90.0f), N ("k1Gain", 0.0f), N ("k1Q", 0.707f) },
+            { { "style", 2.0f }, { "autoRelease", 1.0f }, { "k1On", 1.0f }, { "k1Shape", 4.0f }, { "k1Slope", 12.0f } }),
+        B ("Drums | Room Smash", { N ("threshold", -30.0f), N ("ratio", 20.0f), N ("knee", 0.0f), N ("attack", 0.2f), N ("release", 60.0f), N ("makeup", 10.0f), N ("drive", 6.0f), N ("mix", 60.0f) },
+            { { "style", 12.0f }, { "character", 1.0f } }),
+        B ("Bass | Even Notes", { N ("threshold", -20.0f), N ("ratio", 4.0f), N ("knee", 6.0f), N ("attack", 15.0f), N ("release", 150.0f), N ("makeup", 4.0f) },
+            { { "style", 6.0f } }),
+        B ("Bass | 808 Hold", { N ("threshold", -14.0f), N ("ratio", 3.0f), N ("knee", 6.0f), N ("attack", 25.0f), N ("release", 250.0f), N ("hold", 20.0f), N ("makeup", 2.0f) },
+            { { "style", 0.0f } }),
+        B ("Guitar | Acoustic Even", { N ("threshold", -22.0f), N ("ratio", 3.0f), N ("knee", 8.0f), N ("attack", 10.0f), N ("release", 250.0f), N ("makeup", 4.0f) },
+            { { "style", 3.0f } }),
+        B ("Guitar | Electric Sustain", { N ("threshold", -26.0f), N ("ratio", 8.0f), N ("knee", 2.0f), N ("attack", 2.0f), N ("release", 200.0f), N ("makeup", 8.0f), N ("drive", 2.0f) },
+            { { "style", 5.0f }, { "character", 1.0f } }),
+        B ("Keys | Piano Gentle", { N ("threshold", -20.0f), N ("ratio", 2.0f), N ("knee", 10.0f), N ("attack", 20.0f), N ("release", 200.0f), N ("makeup", 2.0f) },
+            { { "style", 0.0f } }),
+        B ("Mix Bus | Glue 2 dB", { N ("threshold", -12.0f), N ("ratio", 2.0f), N ("knee", 8.0f), N ("attack", 30.0f), N ("release", 300.0f), N ("makeup", 1.5f), N ("k1Freq", 80.0f), N ("k1Gain", 0.0f), N ("k1Q", 0.707f) },
+            { { "style", 2.0f }, { "autoRelease", 1.0f }, { "k1On", 1.0f }, { "k1Shape", 4.0f }, { "k1Slope", 12.0f } }),
+        B ("Mix Bus | Warm Mu", { N ("threshold", -16.0f), N ("ratio", 4.0f), N ("knee", 6.0f), N ("attack", 20.0f), N ("release", 400.0f), N ("makeup", 2.0f), N ("drive", 2.0f) },
+            { { "style", 4.0f }, { "character", 1.0f } }),
+        B ("Master | Transparent 1 dB", { N ("threshold", -10.0f), N ("ratio", 1.5f), N ("knee", 12.0f), N ("attack", 30.0f), N ("release", 400.0f), N ("makeup", 1.0f) },
+            { { "style", 8.0f }, { "autoRelease", 1.0f } }),
+        B ("Master | Peak Catcher", { N ("threshold", -6.0f), N ("ratio", 10.0f), N ("knee", 1.0f), N ("attack", 0.5f), N ("release", 80.0f), N ("makeup", 1.0f), N ("lookahead", 5.0f) },
+            { { "style", 13.0f } }),
+        B ("Podcast | Even Voice", { N ("threshold", -28.0f), N ("ratio", 4.0f), N ("knee", 8.0f), N ("attack", 5.0f), N ("release", 200.0f), N ("makeup", 8.0f) },
+            { { "style", 7.0f }, { "autoRelease", 1.0f }, { "autoGain", 1.0f } }),
+        B ("Parallel | New York Style Blend", { N ("threshold", -32.0f), N ("ratio", 12.0f), N ("knee", 0.0f), N ("attack", 1.0f), N ("release", 90.0f), N ("makeup", 10.0f), N ("mix", 40.0f) },
+            { { "style", 12.0f } }),
+        A ("Pump | Quarter-Note Duck (tempo)", { N ("threshold", -30.0f), N ("ratio", 20.0f), N ("knee", 0.0f), N ("attack", 1.0f), N ("release", 180.0f), N ("makeup", 0.0f) },
+            { { "style", 11.0f }, { "keySource", 3.0f }, { "tempoDiv", 2.0f } }),
+        A ("Pump | MIDI Kick Duck", { N ("threshold", -30.0f), N ("ratio", 20.0f), N ("knee", 0.0f), N ("attack", 1.0f), N ("release", 160.0f) },
+            { { "style", 11.0f }, { "keySource", 2.0f } }),
+        A ("Pump | Sidechain From Kick Track", { N ("threshold", -28.0f), N ("ratio", 8.0f), N ("knee", 2.0f), N ("attack", 1.0f), N ("release", 140.0f), N ("k1Freq", 150.0f), N ("k1Gain", 0.0f), N ("k1Q", 0.707f) },
+            { { "style", 11.0f }, { "keySource", 1.0f }, { "k1On", 1.0f }, { "k1Shape", 5.0f }, { "k1Slope", 24.0f } }),
+        A ("Mid-Side | Tame Wide Highs", { N ("threshold", -24.0f), N ("ratio", 3.0f), N ("knee", 6.0f), N ("attack", 5.0f), N ("release", 120.0f), N ("k1Freq", 2000.0f), N ("k1Gain", 0.0f), N ("k1Q", 0.707f) },
+            { { "style", 0.0f }, { "routing", 2.0f }, { "k1On", 1.0f }, { "k1Shape", 4.0f }, { "k1Slope", 12.0f } }),
+        A ("Mid-Side | Center Focus", { N ("threshold", -18.0f), N ("ratio", 2.5f), N ("knee", 6.0f), N ("attack", 15.0f), N ("release", 200.0f) },
+            { { "style", 6.0f }, { "routing", 1.0f } }),
+        A ("Upward | Bring Up the Detail", { N ("threshold", -30.0f), N ("ratio", 2.0f), N ("knee", 6.0f), N ("range", 12.0f), N ("attack", 5.0f), N ("release", 200.0f) },
+            { { "style", 10.0f } }),
+        A ("Upward | Quiet Room Lift", { N ("threshold", -40.0f), N ("ratio", 3.0f), N ("knee", 10.0f), N ("range", 18.0f), N ("attack", 10.0f), N ("release", 300.0f) },
+            { { "style", 10.0f } }),
+        A ("Colour | Iron Thickener", { N ("threshold", -10.0f), N ("ratio", 1.5f), N ("knee", 10.0f), N ("attack", 20.0f), N ("release", 200.0f), N ("drive", 8.0f) },
+            { { "style", 6.0f }, { "character", 4.0f }, { "oversample", 3.0f } }),
+        A ("Colour | Bright Edge Pre", { N ("threshold", -18.0f), N ("ratio", 4.0f), N ("knee", 2.0f), N ("attack", 2.0f), N ("release", 90.0f), N ("drive", 6.0f) },
+            { { "style", 5.0f }, { "character", 3.0f }, { "characterPost", 0.0f }, { "oversample", 3.0f } }),
+        A ("De-Ess | Broadband Ess Control", { N ("threshold", -30.0f), N ("ratio", 6.0f), N ("knee", 3.0f), N ("attack", 0.5f), N ("release", 60.0f), N ("k1Freq", 6500.0f), N ("k1Gain", 0.0f), N ("k1Q", 1.5f) },
+            { { "style", 0.0f }, { "k1On", 1.0f }, { "k1Shape", 6.0f }, { "k1Slope", 24.0f } }),
+        A ("Extreme | Double Depth 200%", { N ("threshold", -20.0f), N ("ratio", 3.0f), N ("knee", 6.0f), N ("attack", 10.0f), N ("release", 200.0f), N ("mix", 200.0f), N ("makeup", 6.0f) },
+            { { "style", 2.0f } }),
+        A ("Extreme | Brick 100:1", { N ("threshold", -12.0f), N ("ratio", 100.0f), N ("knee", 0.0f), N ("attack", 0.1f), N ("release", 50.0f), N ("lookahead", 5.0f), N ("makeup", 6.0f) },
+            { { "style", 13.0f } })
+    };
+}
+
 inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
 {
     m["Spectra EQ"] = presets114_spectra();
+    m["Torque Comp"] = presets114_torque();
 }

@@ -17,3 +17,7 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_C_COMPILER_WORKS 1)
 set(CMAKE_CXX_COMPILER_WORKS 1)
+
+# identical floating-point rounding on every platform (no fused multiply-add): DSP measures the same on Apple Silicon as on Intel
+set(CMAKE_C_FLAGS_INIT "${CMAKE_C_FLAGS_INIT} -ffp-contract=off")
+set(CMAKE_CXX_FLAGS_INIT "${CMAKE_CXX_FLAGS_INIT} -ffp-contract=off")

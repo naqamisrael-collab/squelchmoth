@@ -92,6 +92,7 @@ namespace Eng
         {
             const double x = xf, y = b0 * x + z1;
             z1 = b1 * x - a1 * y + z2; z2 = b2 * x - a2 * y;
+            if (! (std::abs (y) < 1.0e6)) { z1 = z2 = 0; return 0.0f; }   // a runaway or a NaN never leaves the filter
             if (std::abs (z1) < 1.0e-25) z1 = 0;
             if (std::abs (z2) < 1.0e-25) z2 = 0;
             return (float) y;

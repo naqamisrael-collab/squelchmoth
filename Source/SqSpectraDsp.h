@@ -224,7 +224,7 @@ namespace SqSpectra
         const double W = 0.5 * (std::sqrt (B0) + std::sqrt (B1));
         if (W * W + B2 < 0) B2 = -W * W;
         q.a1 = a1; q.a2 = a2;
-        q.b0 = 0.5 * (W + std::sqrt (W * W + B2));
+        q.b0 = 0.5 * (W + std::sqrt (std::max (0.0, W * W + B2)));   // never the root of a rounding-error negative
         q.b1 = 0.5 * (std::sqrt (B0) - std::sqrt (B1));
         q.b2 = q.b0 != 0 ? -B2 / (4 * q.b0) : 0;
         double worst = 0;
@@ -235,7 +235,7 @@ namespace SqSpectra
             worst = std::max (worst, std::abs (std::log (std::max (1e-300, N) / Tw[i])));
         }
         errOut = worst;
-        return true;
+        return std::isfinite (q.b0) && std::isfinite (q.b1) && std::isfinite (q.b2) && std::isfinite (worst);
     }
 
     /** The matched digital section for one analog section (see the header comment). */

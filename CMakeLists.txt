@@ -89,6 +89,7 @@ juce_add_binary_data (${TARGET_NAME}BinaryData SOURCES
     Resources/plugart/pa_apexlim.jpg
     Resources/plugart/pa_apexmb.jpg
     Resources/plugart/pa_spectraeq.jpg
+    Resources/plugart/pa_torquecomp.jpg
     Resources/plugart/pa_apexsub.jpg
     Resources/plugart/pa_auroraverb.jpg
     Resources/plugart/pa_optoleveler.jpg
@@ -168,6 +169,14 @@ endif()
 target_include_directories (${TARGET_NAME} PRIVATE
     Source
     ThirdParty)
+
+# Identical floating-point rounding on every platform (no fused multiply-add): DSP measures the same on Apple
+# Silicon as on Intel and Windows (1.14: a feedback loop at exactly unity and a square root at exactly zero differed).
+if (MSVC)
+    target_compile_options (${TARGET_NAME} PRIVATE "/clang:-ffp-contract=off")
+else()
+    target_compile_options (${TARGET_NAME} PRIVATE "-ffp-contract=off")
+endif()
 
 target_compile_definitions (${TARGET_NAME} PRIVATE
     JUCE_PLUGINHOST_AU=1

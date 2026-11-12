@@ -27,3 +27,7 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 set(CMAKE_TRY_COMPILE_CONFIGURATION Release)
 set(CMAKE_POLICY_DEFAULT_CMP0091 NEW)
+
+# identical floating-point rounding on every platform (no fused multiply-add): DSP measures the same on Apple Silicon as on Intel
+set(CMAKE_C_FLAGS_INIT "${CMAKE_C_FLAGS_INIT} /clang:-ffp-contract=off")
+set(CMAKE_CXX_FLAGS_INIT "${CMAKE_CXX_FLAGS_INIT} /clang:-ffp-contract=off")

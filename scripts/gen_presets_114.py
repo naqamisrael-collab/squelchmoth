@@ -55,6 +55,101 @@ add("Creative | Phase Twist (All Pass)", [band("allpass", 300, q=0.7), band("all
 add("Mastering | Linear Phase Glue", [band("lowcut", 20, slope=48), band("lowshelf", 100, 0.5, 0.5), band("highshelf", 10000, 0.8, 0.5)], adv=True, phase=2, auto=True)
 add("Mastering | Mid Focus, Wide Sides", [band("bell", 2000, 1.0, 0.7, place="m"), band("highshelf", 6000, 1.5, 0.7, place="s"), band("lowcut", 100, slope=12, place="s")], adv=True, phase=1)
 
+
+# ---------------------------------------------------------------- Torque Comp
+STY = {n: i for i, n in enumerate(["Clean","Punch","Glue","Opto","Variable Mu","FET","Bus","Vocal","Mastering","Leveler","Upward","Pump","Smash","Transparent Peak"])}
+T = []
+def tadd(name, style, adv=False, key=None, props=None, **v):
+    # v: threshold ratio knee range attack release hold lookahead link drive mix makeup output; props: raw state
+    T.append((name, adv, style, v, props or {}, key or []))
+
+tadd("Start | Gentle 2:1", "Clean", threshold=-18, ratio=2, knee=6, attack=10, release=120, makeup=2)
+tadd("Vocal | Smooth Rider", "Vocal", threshold=-22, ratio=3, knee=10, attack=6, release=160, makeup=4, props={"autoRelease": 1})
+tadd("Vocal | Upfront Rap", "FET", threshold=-20, ratio=6, knee=2, attack=0.8, release=70, makeup=6, drive=3, props={"character": 1})
+tadd("Vocal | Silky Opto", "Opto", threshold=-24, ratio=4, knee=6, attack=12, release=300, makeup=5)
+tadd("Vocal | Level Then Catch", "Leveler", threshold=-28, ratio=2.5, knee=12, attack=40, release=900, makeup=4)
+tadd("Drums | Kick Snap", "Punch", threshold=-16, ratio=4, knee=3, attack=12, release=80, makeup=3)
+tadd("Drums | Snare Body", "Punch", threshold=-20, ratio=5, knee=4, attack=6, release=110, makeup=4, drive=2, props={"character": 1})
+tadd("Drums | Bus Glue", "Glue", threshold=-14, ratio=3, knee=6, attack=10, release=200, makeup=2, props={"autoRelease": 1}, key=[(1, "lowcut", 90, 0, 0.707, 12)])
+tadd("Drums | Room Smash", "Smash", threshold=-30, ratio=20, knee=0, attack=0.2, release=60, makeup=10, drive=6, mix=60, props={"character": 1})
+tadd("Bass | Even Notes", "Bus", threshold=-20, ratio=4, knee=6, attack=15, release=150, makeup=4)
+tadd("Bass | 808 Hold", "Clean", threshold=-14, ratio=3, knee=6, attack=25, release=250, hold=20, makeup=2)
+tadd("Guitar | Acoustic Even", "Opto", threshold=-22, ratio=3, knee=8, attack=10, release=250, makeup=4)
+tadd("Guitar | Electric Sustain", "FET", threshold=-26, ratio=8, knee=2, attack=2, release=200, makeup=8, drive=2, props={"character": 1})
+tadd("Keys | Piano Gentle", "Clean", threshold=-20, ratio=2, knee=10, attack=20, release=200, makeup=2)
+tadd("Mix Bus | Glue 2 dB", "Glue", threshold=-12, ratio=2, knee=8, attack=30, release=300, makeup=1.5, props={"autoRelease": 1}, key=[(1, "lowcut", 80, 0, 0.707, 12)])
+tadd("Mix Bus | Warm Mu", "Variable Mu", threshold=-16, ratio=4, knee=6, attack=20, release=400, makeup=2, drive=2, props={"character": 1})
+tadd("Master | Transparent 1 dB", "Mastering", threshold=-10, ratio=1.5, knee=12, attack=30, release=400, makeup=1, props={"autoRelease": 1})
+tadd("Master | Peak Catcher", "Transparent Peak", threshold=-6, ratio=10, knee=1, attack=0.5, release=80, makeup=1, lookahead=5)
+tadd("Podcast | Even Voice", "Vocal", threshold=-28, ratio=4, knee=8, attack=5, release=200, makeup=8, props={"autoRelease": 1, "autoGain": 1})
+tadd("Parallel | New York Style Blend", "Smash", threshold=-32, ratio=12, knee=0, attack=1, release=90, makeup=10, mix=40)
+# Advanced
+tadd("Pump | Quarter-Note Duck (tempo)", "Pump", adv=True, threshold=-30, ratio=20, knee=0, attack=1, release=180, makeup=0, props={"keySource": 3, "tempoDiv": 2})
+tadd("Pump | MIDI Kick Duck", "Pump", adv=True, threshold=-30, ratio=20, knee=0, attack=1, release=160, props={"keySource": 2})
+tadd("Pump | Sidechain From Kick Track", "Pump", adv=True, threshold=-28, ratio=8, knee=2, attack=1, release=140, props={"keySource": 1}, key=[(1, "highcut", 150, 0, 0.707, 24)])
+tadd("Mid-Side | Tame Wide Highs", "Clean", adv=True, threshold=-24, ratio=3, knee=6, attack=5, release=120, props={"routing": 2}, key=[(1, "lowcut", 2000, 0, 0.707, 12)])
+tadd("Mid-Side | Center Focus", "Bus", adv=True, threshold=-18, ratio=2.5, knee=6, attack=15, release=200, props={"routing": 1})
+tadd("Upward | Bring Up the Detail", "Upward", adv=True, threshold=-30, ratio=2, knee=6, range=12, attack=5, release=200)
+tadd("Upward | Quiet Room Lift", "Upward", adv=True, threshold=-40, ratio=3, knee=10, range=18, attack=10, release=300)
+tadd("Colour | Iron Thickener", "Bus", adv=True, threshold=-10, ratio=1.5, knee=10, attack=20, release=200, drive=8, props={"character": 4, "oversample": 3})
+tadd("Colour | Bright Edge Pre", "FET", adv=True, threshold=-18, ratio=4, knee=2, attack=2, release=90, drive=6, props={"character": 3, "characterPost": 0, "oversample": 3})
+tadd("De-Ess | Broadband Ess Control", "Clean", adv=True, threshold=-30, ratio=6, knee=3, attack=0.5, release=60, key=[(1, "bandpass", 6500, 0, 1.5, 24)])
+tadd("Extreme | Double Depth 200%", "Glue", adv=True, threshold=-20, ratio=3, knee=6, attack=10, release=200, mix=200, makeup=6)
+tadd("Extreme | Brick 100:1", "Transparent Peak", adv=True, threshold=-12, ratio=100, knee=0, attack=0.1, release=50, lookahead=5, makeup=6)
+
+def torque_cpp():
+    rows = []
+    for name, adv, style, v, props, key in T:
+        vals = [(k, x) for k, x in v.items()]
+        pr = {"style": STY[style]}; pr.update(props)
+        for (b, shape, f, gdb, q, slope) in key:
+            vals += [(f"k{b}Freq", f), (f"k{b}Gain", gdb), (f"k{b}Q", q)]
+            pr[f"k{b}On"] = 1; pr[f"k{b}Shape"] = SHAPES[shape]; pr[f"k{b}Slope"] = slope
+        vs = ", ".join(f'N ("{k}", {float(x)}f)' for k, x in vals)
+        ps = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in pr.items())
+        rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
+    return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_torque()   // Torque Comp\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
+
+
+# ---------------------------------------------------------------- Summit Limiter
+ALG = {n: i for i, n in enumerate(["Transparent","Punch","Dense","Smooth","Aggressive","Wide","Bus","Safe","Modern","Clipper"])}
+S = []
+def sadd(name, alg, adv=False, props=None, **v): S.append((name, adv, alg, v, props or {}))
+sadd("Start | Transparent -1 dBTP", "Transparent", input=0, ceiling=-1.0, release=100, lookahead=2)
+sadd("Master | Streaming Ready", "Modern", input=4, ceiling=-1.0, release=100, lookahead=2, props={"target": 0})
+sadd("Master | Gentle and Open", "Smooth", input=2, ceiling=-1.0, release=120, lookahead=3)
+sadd("Master | Loud Pop", "Modern", input=7, ceiling=-0.8, release=90, lookahead=2, props={"target": 6})
+sadd("Master | Hip-Hop Punch", "Punch", input=6, ceiling=-0.8, release=100, lookahead=1.5)
+sadd("Master | Trap and Drill", "Aggressive", input=8, ceiling=-0.5, release=110, lookahead=1)
+sadd("Master | EDM Dense", "Dense", input=8, ceiling=-0.5, release=90, lookahead=1.5, props={"target": 5})
+sadd("Master | Acoustic and Jazz", "Smooth", input=3, ceiling=-1.0, release=140, lookahead=4)
+sadd("Master | Wide Mix Keeper", "Wide", input=4, ceiling=-1.0, release=100, lookahead=2)
+sadd("Bus | Drum Bus Peaks", "Bus", input=3, ceiling=-3.0, release=80, lookahead=1)
+sadd("Bus | Vocal Bus Catch", "Safe", input=2, ceiling=-3.0, release=100, lookahead=2)
+sadd("Safety | Last in the Chain", "Safe", input=0, ceiling=-0.3, release=100, lookahead=2)
+sadd("Podcast | -16 LUFS Voice", "Transparent", input=6, ceiling=-1.0, release=100, lookahead=3, props={"target": 2})
+sadd("Broadcast | EU -23", "Transparent", input=0, ceiling=-1.0, release=100, lookahead=3, props={"target": 3})
+sadd("Broadcast | US -24", "Transparent", input=0, ceiling=-2.0, release=100, lookahead=3, props={"target": 4})
+sadd("Export | 16-bit with Shaped Dither", "Transparent", input=0, ceiling=-1.0, release=100, lookahead=2, props={"ditherBits": 1, "noiseShape": 2})
+# Advanced
+sadd("Clip | Clipper Loudness", "Clipper", adv=True, input=6, ceiling=-0.5, release=100, lookahead=0.5)
+sadd("Clip | Clip Then Limit (8x)", "Dense", adv=True, input=9, ceiling=-0.3, release=80, lookahead=1, props={"oversample": 3})
+sadd("Linking | Transients Free, Release Linked", "Transparent", adv=True, input=4, ceiling=-1.0, release=100, lookahead=2, transientLink=10, releaseLink=100, props={"linkOwn": 0})
+sadd("Linking | Fully Independent", "Transparent", adv=True, input=4, ceiling=-1.0, release=100, lookahead=2, transientLink=0, releaseLink=0, props={"linkOwn": 0})
+sadd("Character | Fast Breathing Release", "Aggressive", adv=True, input=6, ceiling=-1.0, release=40, lookahead=1)
+sadd("Character | Slow Glue Release", "Transparent", adv=True, input=5, ceiling=-1.0, release=300, lookahead=4)
+sadd("Studio | Sample Peak Only (no guard)", "Transparent", adv=True, input=3, ceiling=-0.1, release=100, lookahead=2, props={"truePeak": 0})
+sadd("Studio | Bit-Exact Below Ceiling", "Transparent", adv=True, input=0, ceiling=-0.1, release=100, lookahead=2, props={"bandLimit": 0, "dcFilter": 0})
+
+def summit_cpp():
+    rows = []
+    for name, adv, alg, v, props in S:
+        pr = {"algorithm": ALG[alg]}; pr.update(props)
+        vs = ", ".join(f'N ("{k}", {float(x)}f)' for k, x in v.items())
+        ps = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in pr.items())
+        rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
+    return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_summit()   // Summit Limiter\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
+
 def cpp():
     out = ["// Generated by scripts/gen_presets_114.py - factory presets for the 1.14 Studio Line. Do not edit by hand.",
            "// Included in namespace SignaturePresets (SignaturePresets.h); bank() calls add114().", "",
@@ -75,9 +170,9 @@ def cpp():
         pr = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in props)
         rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {v} }},\n            {{ {pr} }})')
     out.append(",\n".join(rows))
-    out += ["    };", "}", "", "inline void add114 (std::map<juce::String, std::vector<Preset>>& m)", "{", '    m["Spectra EQ"] = presets114_spectra();', "}", ""]
+    out += ["    };", "}", "", torque_cpp(), summit_cpp(), "inline void add114 (std::map<juce::String, std::vector<Preset>>& m)", "{", '    m["Spectra EQ"] = presets114_spectra();', '    m["Torque Comp"] = presets114_torque();', '    m["Summit Limiter"] = presets114_summit();', "}", ""]
     return "\n".join(out)
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 open(os.path.join(root, "Source", "SignaturePresets114.inl"), "w").write(cpp())
-print(len(P), "Spectra EQ presets,", sum(1 for p in P if not p[1]), "basic")
+print(len(P), "Spectra EQ presets,", sum(1 for p in P if not p[1]), "basic;", len(T), "Torque Comp presets,", sum(1 for t in T if not t[1]), "basic;", len(S), "Summit presets")
