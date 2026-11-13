@@ -64,6 +64,7 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqSpeckFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqMotePlugin>();
+    engine->getPluginManager().createBuiltInType<SqMirrorwingPlugin>();
     engine->getPluginManager().createBuiltInType<SqTremorPlugin>();
     engine->getPluginManager().createBuiltInType<SqOrbitPanPlugin>();
     engine->getPluginManager().createBuiltInType<SqMirrorShiftPlugin>();
@@ -4168,6 +4169,64 @@ inline int runSelfTest()
             }
         }
         std::cout << "  (1.14 small tools section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
+    }
+
+    // ===================================================================== 1.14 "Studio Line": phase K - Mirrorwing (the flagship synth)
+    {
+        std::cout << "\n-- 1.14 Studio Line: Mirrorwing --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest Mirrorwing"})");
+        call ("add_track", R"({"kind":"instrument","name":"Wing"})");
+        auto added = call ("mirrorwing", R"({"track":"Wing","action":"add"})");
+        SqMirrorwingPlugin* mw = nullptr;
+        if (auto tt = session->findTrack ("Wing")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqMirrorwingPlugin*> (pl)) mw = c;
+        check (mw != nullptr && added.contains ("\"Mirrorwing\""), "Mirrorwing inserted by mirrorwing add");
+        if (mw != nullptr)
+        {
+            call ("mirrorwing", R"({"track":"Wing","action":"osc","osc":1,"shape":"sine","level":100,"unison":1})");
+            call ("mirrorwing", R"({"track":"Wing","action":"osc","osc":2,"on":false})");
+            call ("mirrorwing", R"({"track":"Wing","action":"filter","filter":1,"on":false})");
+            call ("mirrorwing", R"({"track":"Wing","action":"env","env":1,"attack":1,"sustain":100})");
+            auto st = call ("mirrorwing", R"({"track":"Wing","action":"set","voice":"mono","quality":"eco","params":{"level":0}})");
+            auto md = call ("mirrorwing", R"({"track":"Wing","action":"mod","source":"lfo 2","target":"filter 1 cutoff","amount_units":2})");
+            const int s0 = [&] { for (int s = 0; s < 16; ++s) if (mw->modSrc[(size_t) s].get() == SqMirror::sLfo2) return s; return -1; }();
+            check (mw->polyModeValue().get() == 1 && s0 >= 0 && mw->modDst[(size_t) s0].get() == SqMirror::tFilBase && std::abs (mw->theBank()[(size_t) (SqMirrorwingPlugin::modBase + s0)] * 6.0f - 2.0f) < 0.01f && md.contains ("Filter 1 Cutoff"),
+                   "mirrorwing osc / filter / env / set / mod: a sine, mono, LFO 2 to filter 1 cutoff at +2 oct - by name");
+            call ("mirrorwing", R"({"track":"Wing","action":"mod","source":"off","target":"none","amount":0,"slot":1})");
+            auto pp = engine->getPluginManager().createNewPlugin (*session->edit, SqMirrorwingPlugin::xmlTypeName, {});
+            if (auto* tw = dynamic_cast<SqMirrorwingPlugin*> (pp.get()))
+            {
+                tw->restorePluginStateFromValueTree (mw->state);
+                const double SRm = 48000.0; const int block = 256; pp->baseClassInitialise ({ te::TimePosition(), SRm, block });
+                juce::AudioBuffer<float> buf (2, block); te::MidiMessageArray midi; std::vector<float> out;
+                for (int q = 0; q < (int) SRm; q += block)
+                {
+                    midi.clear(); if (q == 0) midi.addMidiMessage (juce::MidiMessage::noteOn (1, 57, (juce::uint8) 127), 0.0, 0);
+                    te::PluginRenderContext fc (&buf, 0, block, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / SRm), te::TimePosition::fromSeconds ((q + block) / SRm)), true, false, true, false);
+                    pp->applyToBuffer (fc);
+                    for (int i = 0; i < block; ++i) out.push_back (buf.getSample (0, i));
+                }
+                pp->baseClassDeinitialise();
+                double fa = 0, fb = 0; int nc = 0;
+                for (size_t i = 4800; i < out.size(); ++i) if (out[i - 1] < 0 && out[i] >= 0) { const double t = (double) i - 1 + out[i - 1] / (out[i - 1] - out[i]); if (nc == 0) fa = t; fb = t; ++nc; }
+                const double hz = nc > 1 ? (nc - 1) / ((fb - fa) / SRm) : 0;
+                double pk = 0; for (size_t i = 4800; i < out.size(); ++i) pk = std::max (pk, (double) std::abs (out[i]));
+                check (std::abs (1200 * std::log2 (std::max (1.0, hz) / 220.0)) < 0.5 && pk > 0.05 && pk < 1.0, "Mirrorwing rendered: A3 plays " + juce::String (hz, 3) + " Hz, peak " + juce::String (juce::Decibels::gainToDecibels (pk), 1) + " dBFS");
+            }
+            int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmMirrorwing") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+            auto pl = call ("mirrorwing", R"({"track":"Wing","action":"preset","preset":"Mirror Glass"})");
+            int used = 0; for (int s = 0; s < 16; ++s) used += mw->modSrc[(size_t) s].get() != 0 ? 1 : 0;
+            check (nPre >= 24 && nAdv >= 8 && pl.contains ("Loaded") && mw->oscUnison[0].get() == 5 && used == 3, "Mirrorwing: " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " Advanced); Mirror Glass loads 5-voice unison and 3 matrix routings");
+            check (Edition::packOf ("sqmMirrorwing") == Edition::Pack::none, "Mirrorwing is part of the core program");
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = mw->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*mw);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (600);
+                auto snap = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                check (snap.isValid() && snap.getWidth() >= 1400, "Mirrorwing window renders offscreen (" + juce::String (snap.getWidth()) + " x " + juce::String (snap.getHeight()) + ")");
+            }
+        }
+        std::cout << "  (1.14 Mirrorwing section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));

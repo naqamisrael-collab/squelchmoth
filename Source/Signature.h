@@ -39,6 +39,7 @@
 #include "SqFissure.h"
 #include "SqDuet.h"
 #include "SqMote.h"
+#include "SqMirrorwing.h"
 
 namespace te = tracktion;
 
@@ -70,6 +71,7 @@ namespace Signature
             { "Sim Moth",         "sqmSimMoth",      "Instruments", "The simple three-oscillator synth: levels, pitches, pulse width, one filter, two envelopes and an LFO - classic sounds in seconds", 0xffffd23a, "simmoth" },
             { "Mini Moth",        "sqmMiniMoth",     "Instruments", "One-screen, ultra-light synth: oscillator + sub, filter, envelope, vibrato, chorus - stacks by the dozen", 0xff3ad6ff, "minimoth" },
             { "Mote",             "sqmMote",         "Instruments", "The one-oscillator synth done properly: a shape that sweeps sine, triangle, saw and square (width to a pulse), sub, coloured noise, drive, a filter with six types and three slopes, two envelopes with honest times, an LFO with fade-in, poly / mono / legato, glide, unison to 8, HD and an 8-slot matrix", 0xffffa35a, "mote" },
+            { "Mirrorwing",       "sqmMirrorwing",   "Instruments", "The flagship synth: four oscillators (morphing shape, wavefold, unison to 8 each, FM from the one before, hard sync), noise, two filters in series or parallel, four DAHDSR envelopes, four LFOs, a 16-slot matrix you fill by dragging a source onto any knob, four macros, chorus, delay and reverb", 0xffb48cff, "mirrorwing" },
             { "Thump",            "sqmThump",        "Instruments", "Kick drum synth: pitch sweep with curve, body harmonic, click, sub layer, drive and tone - every kick from 808 to hardstyle", 0xffff5a3a, "thump" },
             { "Hive Pads",        "sqmHivePads",     "Instruments", "The pad sampler: 64 pads in 4 banks, 8 layers per pad (velocity / round-robin / random / crossfade), choke groups, per-pad tune / envelope / filter, the 27 kits in one click, slice a loop to pads", 0xffffc23a, "hivepads" },
             { "Dial 10",          "sqmDial10",       "Instruments", "Two-operator FM in sixteen knobs: ratio, index, feedback, two envelopes, vibrato - bells, basses, keys and plucks", 0xffff9a3a, "dial10" },

@@ -1528,13 +1528,14 @@ namespace Skins
     #include "SkinsFissure.inl"
     #include "SkinsDuet.inl"
     #include "SkinsMote.inl"
+    #include "SkinsMirrorwing.inl"
     #include "SkinsSynths.inl"
     #include "SkinsSynths2.inl"
     #include "SkinsFx181.inl"
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -1979,6 +1980,8 @@ namespace Skins
                                             s.hiddenPrefixes = { "Link", "LFO", "Env", "Mix", "Output", "Filter" }; }   // every control is drawn by the face
         else if (name == "Speck Filter")   { s.family = Family::duet; s.knob = KnobStyle::flat; s.width = 1300; s.height = 820; s.vizH = 820 - 62 - 16; s.resizable = true;
                                             s.hiddenPrefixes = { "Cutoff", "Resonance", "Drive", "Gain", "Env", "LFO", "Mix", "Output" }; }
+        else if (name == "Mirrorwing")     { s.family = Family::mirrorwing; s.knob = KnobStyle::flat; s.width = 1700; s.height = 1140; s.vizH = 1140 - 62 - 16; s.resizable = true;
+                                            s.hiddenPrefixes = { "Osc", "Noise", "Filter", "Env", "LFO", "Macro", "Matrix", "Glide", "Velocity", "FX", "Stereo", "Level", "Voice Mode", "Glide Mode", "Unison", "Quality", "Bend Range", "Max Voices" }; }   // every control is drawn by the face
         else if (name == "Mote")           { s.family = Family::mote; s.knob = KnobStyle::flat; s.width = 1480; s.height = 960; s.vizH = 960 - 62 - 16; s.resizable = true;
                                             s.hiddenPrefixes = { "Osc", "Sub", "Noise", "Drive", "Filter", "Amp", "Velocity", "LFO", "Glide", "Unison", "Level", "Voice Mode", "Quality", "Bend Range", "Max Voices" }; }   // the face draws these too
         else if (name == "Fissure Filter") { s.family = Family::fissure; s.knob = KnobStyle::flat; s.width = 1380; s.height = 860; s.vizH = 860 - 62 - 16; s.resizable = true;
@@ -3066,6 +3069,7 @@ namespace Skins
                 case Family::talkwing: viz = std::make_unique<TalkWingViz> (handles, plugin, accent); break;
                 case Family::cleanroom: viz = std::make_unique<CleanRoomViz> (handles, plugin, accent); break;
                 case Family::duet:      { auto dv = std::make_unique<DuetViz> (handles, plugin, accent); dv->onChange = [this] { repaintControls(); }; viz = std::move (dv); break; }
+                case Family::mirrorwing: { auto wv = std::make_unique<MirrorwingViz> (handles, plugin, accent); wv->onChange = [this] { repaintControls(); }; viz = std::move (wv); break; }
                 case Family::mote:      { auto mv = std::make_unique<MoteViz> (handles, plugin, accent); mv->onChange = [this] { repaintControls(); }; viz = std::move (mv); break; }
                 case Family::fissure:   { auto fv = std::make_unique<FissureViz> (handles, plugin, accent); fv->onChange = [this] { repaintControls(); }; viz = std::move (fv); break; }
                 case Family::spindle:   { auto dv = std::make_unique<SpindleViz> (handles, plugin, accent); dv->onChange = [this] { repaintControls(); }; viz = std::move (dv); break; }

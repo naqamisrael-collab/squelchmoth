@@ -457,6 +457,21 @@ ties, rests, dotted notes and triplets.
 8. When you bounce to 16 bit, choose **DITHER 16 BIT** with **STRONG** shaping (or load *Export | 16-bit with Shaped
    Dither*).
 
+## F2o. Mirrorwing (core instrument - the flagship synth)
+
+1. Add an instrument track and choose **Instruments > Mirrorwing** (or ask Claude: "add Mirrorwing with the Mirror Glass pad").
+2. The four **OSC** cards show each oscillator's real wave. Click a card to edit it in the bottom row; click **ON / OFF** to
+   use it, **TO F1 / F2 / BOTH** to pick its filter, **UNI** to stack copies (1-8), **SYNC** to lock it to osc 1.
+3. **FM FROM n**: turn it up on osc 2, 3 or 4 and the oscillator before it bends its pitch at audio rate (bells, metal,
+   growls). Tip: an oscillator at level 0 still works as a modulator.
+4. **FILTERS**: drag the 1 and 2 nodes; click **F1 / F2** to pick one, then its type and slope. **SERIES / PARALLEL** at
+   the top decides how the two connect.
+5. **ENVELOPES** and **LFOs**: click a tab (1-4) and shape it with the knobs in the middle row. Envelope 1 is the volume.
+6. To make anything move: **drag a source chip** from the strip at the top (ENV 2, LFO 1, VELOCITY, MACRO 1...) **onto any
+   knob**. A coloured ring appears around that knob showing how far it reaches, and the routing appears in the
+   **MATRIX** - drag its amount bar to change it, or click the source / target to change them.
+7. **MACROS** 1-4 are sources too: route one to several knobs, then automate just the macro.
+
 ## F2n. Mote, Duet Filter and Speck Filter (core)
 
 **Mote** (an instrument)

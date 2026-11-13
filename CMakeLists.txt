@@ -101,6 +101,7 @@ juce_add_binary_data (${TARGET_NAME}BinaryData SOURCES
     Resources/plugart/pa_mote.jpg
     Resources/plugart/pa_duet.jpg
     Resources/plugart/pa_speck.jpg
+    Resources/plugart/pa_mirrorwing.jpg
     Resources/plugart/pa_apexsub.jpg
     Resources/plugart/pa_auroraverb.jpg
     Resources/plugart/pa_optoleveler.jpg

@@ -609,6 +609,93 @@ def speck_cpp():
         rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
     return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_speck()   // Speck Filter\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
 
+# ---------------------------------------------------------------- Mirrorwing (flagship synth)
+# osc dict keys: on, shape, width, fold, oct, semi, fine, level, pan, udet, uspr, fm, phase, uni, route (0 F1, 1 F2, 2 both), sync, free
+# matrix: (source, target, amount) - sources 1-4 Env 1-4, 5-8 LFO 1-4, 9 Velocity, 10 Key, 11 Wheel, 12 Aftertouch, 13 Random, 14-17 Macros
+# targets: 1 pitch; osc k (1-4): 2 + (k-1)*7 + [0 pitch, 1 shape, 2 width, 3 fold, 4 level, 5 pan, 6 fm]; filter f: 30 + (f-1)*3 + [0 cut, 1 res, 2 drive]; 36 amp; 37 noise
+def OT(k, what): return 2 + (k - 1) * 7 + ["pitch", "shape", "width", "fold", "level", "pan", "fm"].index(what)
+def FT_(f, what): return 30 + (f - 1) * 3 + ["cut", "res", "drive"].index(what)
+MW = []
+def mosc(**kw): return kw
+def mwadd(name, oscs, f1=None, f2=None, env=None, lfo=None, mat=(), glob=None, props=None, adv=False):
+    MW.append((name, adv, oscs, f1 or {}, f2, env or {}, lfo or {}, mat, glob or {}, props or {}))
+mwadd("Init | Two Saws", [mosc(shape=2), mosc(shape=2, fine=7)], f1=dict(cut=2600, res=20), mat=((2, FT_(1, "cut"), 0.3),), env={2: (0, 2, 0, 400, 20, 300)})
+mwadd("Pad | Mirror Glass", [mosc(shape=2, uni=5, udet=18, uspr=90), mosc(shape=0.8, oct=1, level=50), mosc(shape=3, width=30, oct=-1, level=40, uni=3)], f1=dict(cut=1600, res=25),
+      env={1: (0, 900, 0, 1500, 85, 2500), 2: (0, 1500, 0, 2500, 50, 2500)}, lfo={1: (0.18, 0, 0, 0)}, mat=((2, FT_(1, "cut"), 0.35), (5, OT(3, "width"), 0.4), (6, FT_(1, "cut"), 0.1)), glob=dict(fxChorus=30, fxReverb=35, fxSize=75))
+mwadd("Pad | Wings Unfolding", [mosc(shape=1.4, fold=10, uni=4, udet=12), mosc(shape=2.2, semi=7, level=55, uni=2)], f1=dict(cut=900, res=30),
+      env={1: (0, 1800, 0, 2000, 90, 3000), 3: (0, 4000, 0, 4000, 100, 3000)}, mat=((3, OT(1, "fold"), 0.5), (3, FT_(1, "cut"), 0.5)), glob=dict(fxReverb=40, fxSize=80, fxDelay=15))
+mwadd("Pad | Slow Prism Drift", [mosc(shape=2, uni=6, udet=25, uspr=100), mosc(shape=0, oct=1, level=40)], f1=dict(cut=2200, res=15), lfo={3: (0.07, 0, 0, 5)}, props=dict(lfoRetrig3=0),
+      env={1: (0, 1200, 0, 1000, 90, 2000)}, mat=((7, FT_(1, "cut"), 0.25), (7, OT(1, "shape"), 0.15)), glob=dict(fxChorus=40, fxReverb=30))
+mwadd("Bass | Sub + Growl", [mosc(shape=0, oct=-1, level=90), mosc(shape=2.5, fold=25, level=60)], f1=dict(cut=500, res=35, drive=8), env={2: (0, 1, 0, 220, 10, 120)},
+      mat=((2, FT_(1, "cut"), 0.45),), props=dict(polyMode=1))
+mwadd("Bass | FM Rubber", [mosc(shape=0, level=0.0), mosc(shape=0, level=90, fm=120, route=0)], f1=dict(cut=3000, res=10), env={2: (0, 1, 0, 300, 0, 200)},
+      mat=((2, OT(2, "fm"), 0.6),), props=dict(polyMode=1, oscOn1=1))
+mwadd("Bass | Reese Twin", [mosc(shape=2, uni=3, udet=22), mosc(shape=2, fine=-12, uni=3, udet=22)], f1=dict(cut=800, res=20, drive=6), lfo={1: (0.3, 0, 0, 0)}, mat=((5, FT_(1, "cut"), 0.15),), props=dict(polyMode=1))
+mwadd("Bass | Acid Mirror", [mosc(shape=2.6, level=90)], f1=dict(cut=300, res=80, drive=10), env={2: (0, 1, 0, 180, 0, 120)}, mat=((2, FT_(1, "cut"), 0.6), (9, FT_(1, "cut"), 0.2)), glob=dict(glide=60), props=dict(polyMode=2, glideMode=2))
+mwadd("Lead | Sync Scream", [mosc(shape=0, level=0.0), mosc(shape=2, semi=7, sync=1, level=90)], f1=dict(cut=5000, res=25), env={2: (0, 2, 0, 600, 30, 400)},
+      mat=((2, OT(2, "pitch"), 0.5), (11, OT(2, "pitch"), 0.3)), props=dict(polyMode=2, glideMode=2, oscOn1=1), glob=dict(glide=50, fxDelay=20))
+mwadd("Lead | Folded Glass", [mosc(shape=0.5, fold=55), mosc(shape=2, oct=1, level=30)], f1=dict(cut=7000, res=15), lfo={4: (6.0, 0, 400, 0)}, mat=((8, 1, 0.012), (2, OT(1, "fold"), 0.3)), env={2: (0, 5, 0, 500, 40, 300)}, props=dict(polyMode=1))
+mwadd("Lead | Bright Unison", [mosc(shape=2, uni=7, udet=14, uspr=60), mosc(shape=3, width=40, oct=-1, level=40)], f1=dict(cut=6000, res=18), glob=dict(fxDelay=25, fxReverb=15), props=dict(polyMode=2))
+mwadd("Keys | Electric Glass", [mosc(shape=0, level=80), mosc(shape=0, oct=2, level=30, fm=40)], f1=dict(cut=9000, res=0), env={1: (0, 2, 0, 1400, 20, 500), 2: (0, 1, 0, 300, 0, 200)},
+      mat=((2, OT(2, "fm"), 0.5), (9, OT(2, "level"), 0.4)), glob=dict(fxChorus=25, fxReverb=15))
+mwadd("Keys | Soft Square Piano", [mosc(shape=3, width=35), mosc(shape=1, oct=1, level=40)], f1=dict(cut=1800, res=10), env={1: (0, 3, 0, 1200, 10, 600), 2: (0, 2, 0, 700, 10, 400)}, mat=((2, FT_(1, "cut"), 0.35), (9, FT_(1, "cut"), 0.2)))
+mwadd("Pluck | Prism Pluck", [mosc(shape=2.3), mosc(shape=0, oct=1, level=50)], f1=dict(cut=400, res=40), env={1: (0, 1, 0, 450, 0, 300), 2: (0, 1, 0, 220, 0, 200)}, mat=((2, FT_(1, "cut"), 0.6),), glob=dict(fxDelay=25, fxReverb=20))
+mwadd("Pluck | Harp of Mirrors", [mosc(shape=1, uni=2, udet=6), mosc(shape=0, oct=1, level=40)], f1=dict(cut=3000, res=20), env={1: (0, 1, 0, 1600, 0, 900), 2: (0, 1, 0, 500, 0, 400)}, mat=((2, FT_(1, "cut"), 0.4),), glob=dict(fxReverb=35, fxSize=70))
+mwadd("Arp | Gated Sequence Feel", [mosc(shape=2.8, width=45)], f1=dict(cut=900, res=45), lfo={1: (1, 0, 0, 3, 6)}, mat=((5, FT_(1, "cut"), 0.3), (5, 36, -0.4)), glob=dict(fxDelay=30))
+mwadd("Brass | Bold Section", [mosc(shape=2, uni=3, udet=8), mosc(shape=2, fine=-6, uni=2)], f1=dict(cut=700, res=15), env={1: (0, 40, 0, 500, 85, 300), 2: (0, 60, 0, 500, 40, 300)}, mat=((2, FT_(1, "cut"), 0.4),))
+mwadd("Strings | Ensemble", [mosc(shape=2, uni=6, udet=16, uspr=100)], f1=dict(cut=3500, res=5), env={1: (0, 600, 0, 1000, 90, 1200)}, glob=dict(fxChorus=45, fxReverb=30))
+mwadd("FX | Rising Wings", [mosc(shape=2.5, fold=30), mosc(oct=1, shape=0)], f1=dict(cut=500, res=55), env={3: (0, 6000, 0, 1, 100, 1000)}, mat=((3, FT_(1, "cut"), 0.7), (3, 1, 0.5), (3, OT(1, "fold"), 0.6)))
+mwadd("FX | Random Glitter", [mosc(shape=0, oct=2, level=60)], f1=dict(cut=6000, res=40), lfo={1: (12, 0, 0, 4)}, mat=((5, 1, 0.5), (5, FT_(1, "cut"), 0.3)), glob=dict(fxDelay=35, fxReverb=40))
+mwadd("Drone | Dark Mirror", [mosc(shape=2, oct=-1, uni=4, udet=10), mosc(shape=3, oct=-2, width=20, level=50)], f1=dict(cut=400, res=50), lfo={3: (0.05, 0, 0, 5)}, mat=((7, FT_(1, "cut"), 0.3), (7, OT(2, "width"), 0.5)), glob=dict(fxReverb=45, fxSize=85))
+# Advanced
+mwadd("Matrix | Velocity Bends Everything", [mosc(shape=2), mosc(shape=3, width=30)], f1=dict(cut=900, res=30), mat=((9, FT_(1, "cut"), 0.6), (9, OT(2, "width"), 0.4), (9, OT(1, "fold"), 0.4), (9, 36, 0.3)), adv=True)
+mwadd("Matrix | Macro 1 Morphs the Patch", [mosc(shape=0), mosc(shape=2, level=0)], f1=dict(cut=800, res=25), mat=((14, OT(1, "shape"), 1.0), (14, OT(2, "level"), 0.8), (14, FT_(1, "cut"), 0.5)), adv=True)
+mwadd("Matrix | Key Tracks the Fold", [mosc(shape=0, fold=0)], f1=dict(cut=12000), mat=((10, OT(1, "fold"), 0.8),), adv=True)
+mwadd("Routing | Split Filters", [mosc(shape=2, route=0), mosc(shape=3, width=25, oct=1, route=1)], f1=dict(cut=600, res=40), f2=dict(on=1, type=2, slope=12, cut=2500, res=50), mat=((5, FT_(2, "cut"), 0.3),), props=dict(fParallel=1), adv=True)
+mwadd("Routing | Comb Through Low-Pass", [mosc(shape=2, route=0)], f1=dict(cut=3000, res=10), f2=dict(on=1, type=5, slope=12, cut=220, res=85), props=dict(fParallel=0), adv=True)
+mwadd("FM | Three-Stage Bell", [mosc(shape=0, level=0.0), mosc(shape=0, oct=2, fine=3, level=0.0, fm=90), mosc(shape=0, level=80, fm=70)], f1=dict(cut=12000), env={1: (0, 1, 0, 3000, 0, 2000), 2: (0, 1, 0, 900, 0, 500)},
+      mat=((2, OT(3, "fm"), 0.5),), props=dict(oscOn1=1, oscOn2=1, oscOn3=1), glob=dict(fxReverb=30), adv=True)
+mwadd("Unison | Wall of Glass (32 copies)", [mosc(shape=2, uni=8, udet=30, uspr=100), mosc(shape=2, oct=1, uni=8, udet=30, uspr=100, level=50), mosc(shape=3, oct=-1, uni=8, udet=20, level=50), mosc(shape=1, uni=8, udet=40, level=40)],
+      f1=dict(cut=5000, res=10), props=dict(oscOn3=1, oscOn4=1), glob=dict(level=-14), adv=True)
+mwadd("HD | Sync + Fold Lead (2x)", [mosc(shape=0, level=0.0), mosc(shape=2.6, semi=12, sync=1, fold=35)], f1=dict(cut=8000, res=20), env={2: (0, 1, 0, 500, 20, 300)}, mat=((2, OT(2, "pitch"), 0.4), (5, OT(2, "fold"), 0.2)), props=dict(oscOn1=1, quality=1, polyMode=1), adv=True)
+
+def mirror_cpp():
+    rows = []
+    for name, adv, oscs, f1, f2, env, lfo, mat, glob, props in MW:
+        vals, pr = [], {"polyMode": 0, "glideMode": 0, "unison": 1, "quality": 1, "fParallel": 0, "fxDelayTime": 2}
+        for k in range(4):
+            n = k + 1; o = oscs[k] if k < len(oscs) else None
+            pr[f"oscOn{n}"] = 1 if o is not None else 0
+            o = o or {}
+            d = dict(shape=2, width=50, fold=0, oct=0, semi=0, fine=0, level=80, pan=0, udet=15, uspr=70, fm=0, phase=0); d.update({k2: v for k2, v in o.items() if k2 in d})
+            for key, idn in [("shape", "shape"), ("width", "width"), ("fold", "fold"), ("oct", "oct"), ("semi", "semi"), ("fine", "fine"), ("level", "level"), ("pan", "pan"), ("udet", "udet"), ("uspr", "uspr"), ("fm", "fm"), ("phase", "phase")]:
+                vals.append((f"o{n}{idn}", d[key]))
+            pr[f"oscUnison{n}"] = o.get("uni", 1); pr[f"oscRoute{n}"] = o.get("route", 0); pr[f"oscSync{n}"] = o.get("sync", 0); pr[f"oscFree{n}"] = o.get("free", 0)
+        for fi, fd in ((1, f1), (2, f2)):
+            base = dict(on=1 if fi == 1 else 0, type=0 if fi == 1 else 1, slope=24 if fi == 1 else 12, cut=2200 if fi == 1 else 8000, res=20, drive=0, gain=6, key=50)
+            base.update(fd or {})
+            vals += [(f"f{fi}cut", base["cut"]), (f"f{fi}res", base["res"]), (f"f{fi}drive", base["drive"]), (f"f{fi}gain", base["gain"]), (f"f{fi}key", base["key"])]
+            pr[f"fOn{fi}"] = base["on"]; pr[f"fType{fi}"] = base["type"]; pr[f"fSlope{fi}"] = base["slope"]
+        defs = {1: (0, 3, 0, 500, 80, 300), 2: (0, 2, 0, 400, 25, 300), 3: (0, 200, 0, 800, 60, 600), 4: (0, 1000, 0, 2000, 100, 2000)}
+        defs.update(env)
+        for e in range(1, 5):
+            for key, x in zip(["del", "att", "hold", "dec", "sus", "rel"], defs[e]): vals.append((f"e{e}{key}", x))
+        ldefs = {1: (4.0, 0, 0, 0, 0), 2: (0.5, 0, 0, 0, 0), 3: (0.1, 0, 0, 0, 0), 4: (7.0, 0, 0, 0, 0)}
+        for k2, v in lfo.items(): ldefs[k2] = tuple(v) + (0,) * (5 - len(v))
+        for l in range(1, 5):
+            rate, ph, fade, shape, sync = ldefs[l]
+            vals += [(f"l{l}rate", rate), (f"l{l}phase", ph), (f"l{l}fade", fade)]; pr[f"lfoShape{l}"] = shape; pr[f"lfoSync{l}"] = sync; pr.setdefault(f"lfoRetrig{l}", 1)
+        for m in range(16):
+            if m < len(mat): src, dst, amt = mat[m]
+            else: src, dst, amt = 0, 0, 0.0
+            vals.append((f"mod{m+1}", amt)); pr[f"mSrc{m+1}"] = src; pr[f"mDst{m+1}"] = dst
+        g = dict(glide=0, ampVel=60, fxChorus=0, fxDelay=0, fxDelayFb=35, fxReverb=0, fxSize=60, width=100, level=-8); g.update(glob)
+        vals += list(g.items()); pr.update(props)
+        vs = ", ".join(f'N ("{k2}", {float(x)}f)' for k2, x in vals)
+        ps = ", ".join(f'{{ "{k2}", {float(x)}f }}' for k2, x in pr.items())
+        rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
+    return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_mirrorwing()   // Mirrorwing\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
+
 def cpp():
     out = ["// Generated by scripts/gen_presets_114.py - factory presets for the 1.14 Studio Line. Do not edit by hand.",
            "// Included in namespace SignaturePresets (SignaturePresets.h); bank() calls add114().", "",
@@ -629,9 +716,9 @@ def cpp():
         pr = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in props)
         rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {v} }},\n            {{ {pr} }})')
     out.append(",\n".join(rows))
-    out += ["    };", "}", "", torque_cpp(), summit_cpp(), atrium_cpp(), mb2_cpp(), sibyl_cpp(), portcullis_cpp(), kiln_cpp(), spindle_cpp(), fissure_cpp(), mote_cpp(), duet_cpp(), speck_cpp(), "inline void add114 (std::map<juce::String, std::vector<Preset>>& m)", "{", '    m["Spectra EQ"] = presets114_spectra();', '    m["Torque Comp"] = presets114_torque();', '    m["Summit Limiter"] = presets114_summit();', '    m["Atrium Verb"] = presets114_atrium();', '    m["Apex Multiband 2"] = presets114_mb2();', '    m["Sibyl De-Ess"] = presets114_sibyl();', '    m["Portcullis Gate"] = presets114_portcullis();', '    m["Kiln"] = presets114_kiln();', '    m["Spindle Delay"] = presets114_spindle();', '    m["Fissure Filter"] = presets114_fissure();', '    m["Mote"] = presets114_mote();', '    m["Duet Filter"] = presets114_duet();', '    m["Speck Filter"] = presets114_speck();', "}", ""]
+    out += ["    };", "}", "", torque_cpp(), summit_cpp(), atrium_cpp(), mb2_cpp(), sibyl_cpp(), portcullis_cpp(), kiln_cpp(), spindle_cpp(), fissure_cpp(), mote_cpp(), duet_cpp(), speck_cpp(), mirror_cpp(), "inline void add114 (std::map<juce::String, std::vector<Preset>>& m)", "{", '    m["Spectra EQ"] = presets114_spectra();', '    m["Torque Comp"] = presets114_torque();', '    m["Summit Limiter"] = presets114_summit();', '    m["Atrium Verb"] = presets114_atrium();', '    m["Apex Multiband 2"] = presets114_mb2();', '    m["Sibyl De-Ess"] = presets114_sibyl();', '    m["Portcullis Gate"] = presets114_portcullis();', '    m["Kiln"] = presets114_kiln();', '    m["Spindle Delay"] = presets114_spindle();', '    m["Fissure Filter"] = presets114_fissure();', '    m["Mote"] = presets114_mote();', '    m["Duet Filter"] = presets114_duet();', '    m["Speck Filter"] = presets114_speck();', '    m["Mirrorwing"] = presets114_mirrorwing();', "}", ""]
     return "\n".join(out)
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 open(os.path.join(root, "Source", "SignaturePresets114.inl"), "w").write(cpp())
-print(len(P), "Spectra EQ presets,", sum(1 for p in P if not p[1]), "basic;", len(T), "Torque Comp presets,", sum(1 for t in T if not t[1]), "basic;", len(S), "Summit presets,", len(AV), "Atrium presets,", len(MB), "MB2 presets,", len(SB), "Sibyl presets,", len(PG), "Portcullis presets,", len(KL), "Kiln presets,", len(SD), "Spindle presets,", len(FI), "Fissure presets,", len(MO), "Mote,", len(DU), "Duet,", len(SPK), "Speck")
+print(len(P), "Spectra EQ presets,", sum(1 for p in P if not p[1]), "basic;", len(T), "Torque Comp presets,", sum(1 for t in T if not t[1]), "basic;", len(S), "Summit presets,", len(AV), "Atrium presets,", len(MB), "MB2 presets,", len(SB), "Sibyl presets,", len(PG), "Portcullis presets,", len(KL), "Kiln presets,", len(SD), "Spindle presets,", len(FI), "Fissure presets,", len(MO), "Mote,", len(DU), "Duet,", len(SPK), "Speck,", len(MW), "Mirrorwing")

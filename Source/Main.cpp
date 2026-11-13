@@ -234,6 +234,7 @@ public:
         engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
         engine->getPluginManager().createBuiltInType<SqSpeckFilterPlugin>();
         engine->getPluginManager().createBuiltInType<SqMotePlugin>();
+        engine->getPluginManager().createBuiltInType<SqMirrorwingPlugin>();
         engine->getPluginManager().createBuiltInType<SqTremorPlugin>();
         engine->getPluginManager().createBuiltInType<SqOrbitPanPlugin>();
         engine->getPluginManager().createBuiltInType<SqMirrorShiftPlugin>();

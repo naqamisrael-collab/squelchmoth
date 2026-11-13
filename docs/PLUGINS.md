@@ -22,6 +22,7 @@ presets and full control from Claude.
 | **Sim Moth** | Simple 3-oscillator analogue synth (40 presets) |
 | **Mini Moth** | One-screen ultra-light synth (40 presets) |
 | **Mote** (new in 1.14) | The one-oscillator synth: a shape that sweeps sine, triangle, saw and square (width narrows it to a pulse, band-limited at every point), sub one or two octaves down, coloured noise, drive that keeps the level, a filter with six types and three slopes, filter and amp envelopes with exact times, an LFO with fade-in, poly / mono / legato, glide, unison to 8, HD (2x), an 8-slot matrix; L / R meters (29 presets) |
+| **Mirrorwing** (new in 1.14) | The flagship synth: four oscillators (morphing shape, width, wavefold, octave / semi / fine, level, pan, unison up to 8 each with detune and spread, FM from the oscillator before, hard sync to osc 1, phase, route to filter 1 / 2 / both), coloured noise, two filters (seven types, three slopes) in series or parallel, four DAHDSR envelopes, four LFOs (six shapes, synced or free, retrigger, fade-in), a 16-slot matrix you fill by dragging a source onto any knob (rings on the knob show the reach), four macros, chorus / delay / reverb, poly / mono / legato, glide, HD; L / R meters (29 presets) |
 | **Thump** | Kick drum synth: sweep, click, body, sub, oversampled drive (40 presets) |
 | **Dial 10** | Two-operator FM synth in sixteen knobs (42 presets) |
 | **Hive Pads** | 64-pad layered sampler with choke groups, Load Kit and slice-to-pads (41 presets) |
