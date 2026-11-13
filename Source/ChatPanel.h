@@ -1,11 +1,18 @@
 #pragma once
-// Squelchmoth 1.10 - Squelchmoth Chat: talk to Claude inside the app. Claude operates the open session directly with
+// Squelchmoth 1.10 - Squelchmoth Chat: talk to Claude (or, since 1.14, ChatGPT) inside the app. Claude operates the open session directly with
 // the same tools claude.ai uses over MCP, run in-process (edition locks, logging and undo behave exactly the same).
 //
 // Transport: the Anthropic Messages API (POST /v1/messages, anthropic-version 2026-10-21, Authorization: Bearer),
 // verified against platform.claude.com on Nov 7 2026. The user's own API key; usage is billed by Anthropic to that
 // account. The key is stored only in this computer's settings file (obfuscated), never logged, never readable by any
 // tool (Prefs::isPrivateKey). Network calls run on a worker thread; tool calls run on the message thread.
+//
+// 1.14: a second provider, ChatGPT, through the OpenAI Responses API (POST /v1/responses, Authorization: Bearer; function
+// tools {type, name, description, parameters, strict}; function_call -> function_call_output by call_id; stateless with
+// store=false and include ["reasoning.encrypted_content"], replaying every output item), verified against
+// developers.openai.com on Nov 13 2026. Both providers get exactly the same tool list and run tools the same way, so
+// ChatGPT has the same full control. One conversation history (Messages-API shaped) is shared: switching provider
+// mid-chat keeps the whole context; ChatGPT's raw output items ride along in "oa_output" so they replay byte-exact.
 
 #include "McpTools.h"
 #include "Console.h"
@@ -14,6 +21,14 @@ namespace Chat
 {
     constexpr const char* apiVersion = "2026-10-21";
     constexpr const char* defaultModel = "claude-opus-5-5";   // the docs' recommended starting point (Nov 2026)
+    constexpr const char* defaultOpenAIModel = "gpt-6-astra";  // the model in OpenAI's Responses function-calling guide (Nov 2026)
+
+    enum class Provider { claude, chatgpt };
+    inline Provider currentProvider()   { return Prefs::getString ("chat_provider") == "chatgpt" ? Provider::chatgpt : Provider::claude; }
+    inline juce::String providerName (Provider p)   { return p == Provider::chatgpt ? "ChatGPT" : "Claude"; }
+    inline juce::String vendorName (Provider p)     { return p == Provider::chatgpt ? "OpenAI" : "Anthropic"; }
+    inline const char* modelPref (Provider p)      { return p == Provider::chatgpt ? "chat_model_openai" : "chat_model"; }
+    inline juce::String defaultModelFor (Provider p) { return p == Provider::chatgpt ? defaultOpenAIModel : defaultModel; }
     constexpr int maxToolRounds = 40;
     constexpr int maxOutputTokens = 8192;
 
@@ -30,9 +45,10 @@ namespace Chat
             out.setSize (n);
             return out;
         }
-        inline juce::String get()
+        inline const char* prefFor (Provider p)   { return p == Provider::chatgpt ? "cl_openaiKey" : "cl_anthropicKey"; }
+        inline juce::String get (Provider prov = currentProvider())
         {
-            auto v = Prefs::getString ("cl_anthropicKey");
+            auto v = Prefs::getString (prefFor (prov));
             if (! v.startsWith ("obf1:")) return {};
             juce::MemoryBlock mb;
             if (! mb.fromBase64Encoding (v.substring (5))) return {};
@@ -40,50 +56,51 @@ namespace Chat
             for (size_t i = 0; i < mb.getSize(); ++i) mb[i] = (char) (mb[i] ^ p[i]);
             return mb.toString();
         }
-        inline void set (const juce::String& key)
+        inline void set (const juce::String& key, Provider prov = currentProvider())
         {
             auto utf = key.trim().toStdString();
             juce::MemoryBlock mb (utf.data(), utf.size());
             auto p = pad (mb.getSize());
             for (size_t i = 0; i < mb.getSize(); ++i) mb[i] = (char) (mb[i] ^ p[i]);
-            Prefs::set ("cl_anthropicKey", "obf1:" + mb.toBase64Encoding());
+            Prefs::set (prefFor (prov), "obf1:" + mb.toBase64Encoding());
         }
-        inline void forget()   { if (auto f = Prefs::file()) { f->removeValue ("cl_anthropicKey"); f->saveIfNeeded(); } }
-        inline bool has()      { return get().isNotEmpty(); }
+        inline void forget (Provider prov = currentProvider())   { if (auto f = Prefs::file()) { f->removeValue (prefFor (prov)); f->saveIfNeeded(); } }
+        inline bool has (Provider prov = currentProvider())      { return get (prov).isNotEmpty(); }
         /** "sk-ant-...wxyz": enough to recognise, never enough to use. */
         inline juce::String masked (const juce::String& k)   { return k.length() < 12 ? juce::String ("(set)") : k.substring (0, 7) + juce::String::repeatedString (juce::String::fromUTF8 ("\xe2\x80\xa2"), 6) + k.getLastCharacters (4); }
     }
 
-    inline juce::String apiBase()
+    inline juce::String apiBase (Provider p = currentProvider())
     {
         auto b = Prefs::getString ("chat_apiBase");   // tests only (a local mock); private, so no tool can change it
-        return b.isNotEmpty() ? b.trimCharactersAtEnd ("/") : juce::String ("https://api.anthropic.com");
+        return b.isNotEmpty() ? b.trimCharactersAtEnd ("/") : juce::String (p == Provider::chatgpt ? "https://api.openai.com" : "https://api.anthropic.com");
     }
 
     //==========================================================================
     struct HttpResult { int status = 0; juce::var json; juce::String error; bool ok() const { return error.isEmpty() && status >= 200 && status < 300; } };
 
     /** Blocking request (worker threads only). The key goes in the Authorization header and nowhere else. */
-    inline HttpResult request (const juce::String& path, const juce::String& key, const juce::String* postBody, int timeoutMs = 300000)
+    inline HttpResult request (const juce::String& path, const juce::String& key, const juce::String* postBody, int timeoutMs = 300000, Provider prov = currentProvider())
     {
         HttpResult r;
-        juce::URL url (apiBase() + path);
+        juce::URL url (apiBase (prov) + path);
         if (postBody != nullptr) url = url.withPOSTData (*postBody);
         juce::StringPairArray headers;
         const auto opts = juce::URL::InputStreamOptions (postBody != nullptr ? juce::URL::ParameterHandling::inPostData : juce::URL::ParameterHandling::inAddress)
-                              .withExtraHeaders ("Authorization: Bearer " + key + "\r\nanthropic-version: " + apiVersion + "\r\ncontent-type: application/json\r\naccept: application/json")
+                              .withExtraHeaders ("Authorization: Bearer " + key + (prov == Provider::claude ? "\r\nanthropic-version: " + juce::String (apiVersion) : juce::String())
+                                                 + "\r\ncontent-type: application/json\r\naccept: application/json")
                               .withConnectionTimeoutMs (timeoutMs)
                               .withStatusCode (&r.status)
                               .withResponseHeaders (&headers)
                               .withHttpRequestCmd (postBody != nullptr ? "POST" : "GET");
         auto stream = url.createInputStream (opts);
-        if (stream == nullptr) { r.error = "Could not reach " + apiBase() + " (check the internet connection)."; return r; }
+        if (stream == nullptr) { r.error = "Could not reach " + apiBase (prov) + " (check the internet connection)."; return r; }
         auto text = stream->readEntireStreamAsString();
         r.json = juce::JSON::parse (text);
         if (r.status < 200 || r.status >= 300)
         {
             auto msg = r.json["error"]["message"].toString();
-            if (r.status == 401) r.error = "The API key was refused (401). Check it at console.anthropic.com.";
+            if (r.status == 401) r.error = juce::String ("The API key was refused (401). Check it at ") + (prov == Provider::chatgpt ? "platform.openai.com" : "console.anthropic.com") + ".";
             else if (r.status == 429) r.error = "Rate limited by the API (429). Wait a moment and try again." + (msg.isNotEmpty() ? " " + msg : juce::String());
             else if (r.status == 529 || r.status == 503) r.error = "The API is overloaded right now (" + juce::String (r.status) + "). Try again shortly.";
             else r.error = "API error " + juce::String (r.status) + (msg.isNotEmpty() ? ": " + msg : (text.isNotEmpty() ? ": " + text.substring (0, 300) : juce::String()));
@@ -125,6 +142,7 @@ namespace Chat
 
         std::function<void (const Event&)> onEvent;
         juce::String model { defaultModel };
+        Provider provider = Provider::claude;   // set by the panel's Claude / ChatGPT switch (never mid-turn)
 
         bool isBusy() const   { return isThreadRunning(); }
 
@@ -132,14 +150,15 @@ namespace Chat
         bool send (const juce::String& userText)
         {
             if (isThreadRunning() || userText.trim().isEmpty()) return false;
-            key = KeyStore::get();
-            if (key.isEmpty()) { post ({ Event::error, "Add your Anthropic API key first (the gear button)." }); return false; }
+            key = KeyStore::get (provider);
+            if (key.isEmpty()) { post ({ Event::error, "Add your " + vendorName (provider) + " API key first (the gear button)." }); return false; }
             {
                 const juce::ScopedLock sl (lock);
                 messages.add (textMessage ("user", userText.trim()));
             }
             systemPrompt = buildSystemPrompt();
             if (toolsJson.isVoid()) toolsJson = buildTools();
+            if (openAITools.isVoid()) openAITools = buildOpenAITools();
             startThread();
             return true;
         }
@@ -179,6 +198,98 @@ namespace Chat
             return juce::var (arr);
         }
 
+        /** The same tools in the Responses API's function-tool shape. strict stays off: several Squelchmoth schemas use
+            open objects and optional fields, which strict mode would reject. */
+        juce::var buildOpenAITools()
+        {
+            juce::Array<juce::var> arr;
+            for (auto& t : tools.getTools())
+            {
+                auto o = new juce::DynamicObject();
+                o->setProperty ("type", "function");
+                o->setProperty ("name", t.name);
+                o->setProperty ("description", t.description);
+                auto schema = t.schema;
+                if (! schema.isObject()) { schema = juce::var (new juce::DynamicObject()); schema.getDynamicObject()->setProperty ("type", "object"); }
+                o->setProperty ("parameters", schema);
+                o->setProperty ("strict", false);
+                arr.add (juce::var (o));
+            }
+            return juce::var (arr);
+        }
+
+        /** The shared history as the Messages API wants it: only role + content, ChatGPT-only items left out. */
+        static juce::Array<juce::var> forClaude (const juce::Array<juce::var>& msgs)
+        {
+            juce::Array<juce::var> out;
+            for (auto& m : msgs)
+            {
+                juce::Array<juce::var> content;
+                if (auto arr = m["content"].getArray()) for (auto& b : *arr) { auto t = b["type"].toString(); if (t == "text" || t == "tool_use" || t == "tool_result" || t == "image") content.add (b); }
+                if (content.isEmpty()) continue;
+                auto o = new juce::DynamicObject(); o->setProperty ("role", m["role"]); o->setProperty ("content", content);
+                out.add (juce::var (o));
+            }
+            return out;
+        }
+
+        /** The shared history as Responses API input items. ChatGPT's own turns replay their raw output items (reasoning,
+            messages, function calls) exactly; Claude's turns become messages and function_call items; tool results
+            become function_call_output items with the screenshot (if any) as an input_image. */
+        static juce::Array<juce::var> forOpenAI (const juce::Array<juce::var>& msgs)
+        {
+            juce::Array<juce::var> out;
+            auto obj = [] { return new juce::DynamicObject(); };
+            for (auto& m : msgs)
+            {
+                const auto role = m["role"].toString();
+                if (auto raw = m["oa_output"].getArray()) { for (auto& it : *raw) out.add (it); continue; }
+                if (auto arr = m["content"].getArray())
+                    for (auto& b : *arr)
+                    {
+                        const auto type = b["type"].toString();
+                        if (type == "text")
+                        {
+                            auto o = obj(); o->setProperty ("role", role == "assistant" ? "assistant" : "user"); o->setProperty ("content", b["text"].toString());
+                            out.add (juce::var (o));
+                        }
+                        else if (type == "tool_use")
+                        {
+                            auto o = obj(); o->setProperty ("type", "function_call"); o->setProperty ("call_id", b["id"].toString());
+                            o->setProperty ("name", b["name"].toString()); o->setProperty ("arguments", juce::JSON::toString (b["input"].isObject() ? b["input"] : juce::var (new juce::DynamicObject()), true));
+                            out.add (juce::var (o));
+                        }
+                        else if (type == "tool_result")
+                        {
+                            juce::String text; juce::Array<juce::var> images;
+                            if (auto parts = b["content"].getArray())
+                                for (auto& pt : *parts)
+                                {
+                                    if (pt["type"].toString() == "text") text << pt["text"].toString();
+                                    else if (pt["type"].toString() == "image")
+                                    {
+                                        auto im = obj(); im->setProperty ("type", "input_image");
+                                        im->setProperty ("image_url", "data:" + pt["source"]["media_type"].toString() + ";base64," + pt["source"]["data"].toString());
+                                        images.add (juce::var (im));
+                                    }
+                                }
+                            if ((bool) b["is_error"]) text = "ERROR: " + text;
+                            auto o = obj(); o->setProperty ("type", "function_call_output"); o->setProperty ("call_id", b["tool_use_id"].toString());
+                            if (images.isEmpty()) o->setProperty ("output", text.isNotEmpty() ? text : juce::String ("OK"));
+                            else
+                            {
+                                juce::Array<juce::var> parts;
+                                auto t = obj(); t->setProperty ("type", "input_text"); t->setProperty ("text", text.isNotEmpty() ? text : juce::String ("OK")); parts.add (juce::var (t));
+                                parts.addArray (images);
+                                o->setProperty ("output", parts);
+                            }
+                            out.add (juce::var (o));
+                        }
+                    }
+            }
+            return out;
+        }
+
         juce::File chatFile;
 
         static juce::File chatsDir (Session& s)   { auto d = s.sessionsDir.getChildFile ("Chats"); d.createDirectory(); return d; }
@@ -193,6 +304,7 @@ namespace Chat
             auto o = new juce::DynamicObject();
             o->setProperty ("title", titleOf (msgs));
             o->setProperty ("model", model);
+            o->setProperty ("provider", providerName (provider));
             o->setProperty ("session", session.getFile().getFileNameWithoutExtension());
             o->setProperty ("saved", juce::Time::getCurrentTime().toISO8601 (true));
             o->setProperty ("messages", juce::var (stripImages (msgs)));
@@ -235,7 +347,8 @@ namespace Chat
         juce::CriticalSection lock;
         juce::Array<juce::var> messages;
         juce::String key, systemPrompt;
-        juce::var toolsJson;
+        juce::var toolsJson, openAITools;
+        bool sendEncryptedReasoning = true;   // turned off for a model that rejects include: ["reasoning.encrypted_content"]
 
         static juce::var textMessage (const juce::String& role, const juce::String& text)
         {
@@ -256,7 +369,7 @@ namespace Chat
         juce::String buildSystemPrompt()
         {
             juce::String s;
-            s << "You are Claude, working inside Squelchmoth, a complete digital audio workstation created by Jamar Stewart. "
+            s << "You are " << (provider == Provider::chatgpt ? "ChatGPT" : "Claude") << ", working inside Squelchmoth, a complete digital audio workstation created by Jamar Stewart. "
               << "The user is typing to you in Squelchmoth Chat, a panel inside the app. You operate the open session directly with the tools provided: "
               << "tracks, clips, MIDI, plug-ins, the mixer console (COMP / LIMIT slots, strip widths, meters), automation, LFO modulation, bounces, stems and mastering.\n\n"
               << "How to work:\n"
@@ -301,83 +414,167 @@ namespace Chat
             return pending->result;
         }
 
+        /** Runs one assistant turn's tool calls (canonical tool_use blocks) and returns the tool_result user message. */
+        juce::var runToolUses (const juce::Array<juce::var>& toolUses)
+        {
+            juce::Array<juce::var> results;
+            for (auto& tu : toolUses)
+            {
+                const auto name = tu["name"].toString(), id = tu["id"].toString();
+                auto input = tu["input"];
+                Event call { Event::toolCall, summariseInput (input), name, id };
+                post (call);
+                ToolResult r = threadShouldExit() ? ToolResult::error ("Stopped by the user before this ran.") : runTool (name, input);
+
+                auto block = new juce::DynamicObject();
+                block->setProperty ("type", "tool_result");
+                block->setProperty ("tool_use_id", id);
+                if (r.isError) block->setProperty ("is_error", true);
+                juce::Array<juce::var> parts;
+                { auto t = new juce::DynamicObject(); t->setProperty ("type", "text"); t->setProperty ("text", r.text.isNotEmpty() ? r.text : juce::String ("OK")); parts.add (juce::var (t)); }
+                if (r.imageBase64.isNotEmpty())
+                {
+                    auto src = new juce::DynamicObject(); src->setProperty ("type", "base64"); src->setProperty ("media_type", r.imageMime.isNotEmpty() ? r.imageMime : juce::String ("image/png")); src->setProperty ("data", r.imageBase64);
+                    auto img = new juce::DynamicObject(); img->setProperty ("type", "image"); img->setProperty ("source", juce::var (src));
+                    parts.add (juce::var (img));
+                }
+                block->setProperty ("content", parts);
+                results.add (juce::var (block));
+                Event done { Event::toolResult, r.text.substring (0, 2000), name, id };
+                done.ok = ! r.isError;
+                post (done);
+            }
+            auto m = new juce::DynamicObject(); m->setProperty ("role", "user"); m->setProperty ("content", results);
+            return juce::var (m);
+        }
+
+        /** One Messages API round. Returns the tool calls to run (empty = the turn is over); false on an error. */
+        bool claudeRound (juce::Array<juce::var>& toolUses, bool& finished)
+        {
+            auto body = new juce::DynamicObject();
+            body->setProperty ("model", model);
+            body->setProperty ("max_tokens", maxOutputTokens);
+            {
+                auto sys = new juce::DynamicObject(); sys->setProperty ("type", "text"); sys->setProperty ("text", systemPrompt);
+                body->setProperty ("system", juce::Array<juce::var> { juce::var (sys) });
+            }
+            body->setProperty ("tools", toolsJson);
+            body->setProperty ("messages", juce::var (forClaude (getMessages())));
+            const auto json = juce::JSON::toString (juce::var (body), true);
+
+            auto res = request ("/v1/messages", key, &json, 300000, Provider::claude);
+            if (threadShouldExit()) return false;
+            if (! res.ok()) { post ({ Event::error, res.error }); return false; }
+
+            auto content = res.json["content"];
+            {
+                auto m = new juce::DynamicObject(); m->setProperty ("role", "assistant"); m->setProperty ("content", content);
+                const juce::ScopedLock sl (lock);
+                messages.add (juce::var (m));
+            }
+            if (auto arr = content.getArray())
+                for (auto& b : *arr)
+                {
+                    auto type = b["type"].toString();
+                    if (type == "text" && b["text"].toString().trim().isNotEmpty()) post ({ Event::assistantText, b["text"].toString().trim() });
+                    else if (type == "tool_use") toolUses.add (b);
+                }
+            const auto stopReason = res.json["stop_reason"].toString();
+            if (stopReason != "tool_use" || toolUses.isEmpty())
+            {
+                if (stopReason == "max_tokens") post ({ Event::notice, "Claude's reply reached the length limit. Say \"continue\" for the rest." });
+                else if (stopReason == "refusal") post ({ Event::notice, "Claude declined this request." });
+                toolUses.clear();
+                finished = true;
+            }
+            return true;
+        }
+
+        /** One Responses API round (stateless: the whole history goes up, every output item is kept for replay). */
+        bool openAIRound (juce::Array<juce::var>& toolUses, bool& finished)
+        {
+            HttpResult res;
+            for (int attempt = 0; attempt < 2; ++attempt)
+            {
+                auto body = new juce::DynamicObject();
+                body->setProperty ("model", model);
+                body->setProperty ("instructions", systemPrompt);
+                body->setProperty ("input", juce::var (forOpenAI (getMessages())));
+                body->setProperty ("tools", openAITools);
+                body->setProperty ("max_output_tokens", maxOutputTokens);
+                body->setProperty ("parallel_tool_calls", true);
+                body->setProperty ("store", false);
+                if (sendEncryptedReasoning) body->setProperty ("include", juce::Array<juce::var> { "reasoning.encrypted_content" });
+                const auto json = juce::JSON::toString (juce::var (body), true);
+                res = request ("/v1/responses", key, &json, 300000, Provider::chatgpt);
+                if (threadShouldExit()) return false;
+                // a model without reasoning refuses the encrypted-reasoning include: drop it once and retry
+                if (! res.ok() && res.status == 400 && sendEncryptedReasoning && (res.error.containsIgnoreCase ("encrypted") || res.error.containsIgnoreCase ("reasoning")))
+                { sendEncryptedReasoning = false; continue; }
+                break;
+            }
+            if (! res.ok()) { post ({ Event::error, res.error }); return false; }
+
+            juce::Array<juce::var> content;
+            auto output = res.json["output"];
+            if (auto arr = output.getArray())
+                for (auto& it : *arr)
+                {
+                    const auto type = it["type"].toString();
+                    if (type == "message")
+                    {
+                        if (auto parts = it["content"].getArray())
+                            for (auto& pt : *parts)
+                            {
+                                const auto pType = pt["type"].toString();
+                                const auto text = (pType == "refusal" ? pt["refusal"] : pt["text"]).toString().trim();
+                                if (text.isEmpty()) continue;
+                                auto b = new juce::DynamicObject(); b->setProperty ("type", "text"); b->setProperty ("text", text);
+                                content.add (juce::var (b));
+                                post ({ pType == "refusal" ? Event::notice : Event::assistantText, text });
+                            }
+                    }
+                    else if (type == "function_call")
+                    {
+                        auto args = juce::JSON::parse (it["arguments"].toString());
+                        if (! args.isObject()) args = juce::var (new juce::DynamicObject());
+                        auto b = new juce::DynamicObject();
+                        b->setProperty ("type", "tool_use"); b->setProperty ("id", it["call_id"].toString());
+                        b->setProperty ("name", it["name"].toString()); b->setProperty ("input", args);
+                        content.add (juce::var (b));
+                        toolUses.add (juce::var (b));
+                    }
+                }
+            {
+                auto m = new juce::DynamicObject(); m->setProperty ("role", "assistant"); m->setProperty ("content", content);
+                m->setProperty ("oa_output", output);
+                const juce::ScopedLock sl (lock);
+                messages.add (juce::var (m));
+            }
+            if (toolUses.isEmpty())
+            {
+                if (res.json["status"].toString() == "incomplete")
+                    post ({ Event::notice, res.json["incomplete_details"]["reason"].toString() == "max_output_tokens"
+                                              ? juce::String ("ChatGPT's reply reached the length limit. Say \"continue\" for the rest.")
+                                              : juce::String ("ChatGPT stopped early (") + res.json["incomplete_details"]["reason"].toString() + ")." });
+                finished = true;
+            }
+            return true;
+        }
+
         void run() override
         {
             int rounds = 0;
             bool finishedNormally = false;
             while (! threadShouldExit())
             {
-                if (++rounds > maxToolRounds) { post ({ Event::error, "Stopped after " + juce::String (maxToolRounds) + " tool rounds. Say \"continue\" to let Claude carry on." }); break; }
-
-                auto body = new juce::DynamicObject();
-                body->setProperty ("model", model);
-                body->setProperty ("max_tokens", maxOutputTokens);
-                {
-                    auto sys = new juce::DynamicObject(); sys->setProperty ("type", "text"); sys->setProperty ("text", systemPrompt);
-                    body->setProperty ("system", juce::Array<juce::var> { juce::var (sys) });
-                }
-                body->setProperty ("tools", toolsJson);
-                body->setProperty ("messages", juce::var (getMessages()));
-                const auto json = juce::JSON::toString (juce::var (body), true);
-
-                auto res = request ("/v1/messages", key, &json);
-                if (threadShouldExit()) break;
-                if (! res.ok()) { post ({ Event::error, res.error }); break; }
-
-                auto content = res.json["content"];
-                {
-                    auto m = new juce::DynamicObject(); m->setProperty ("role", "assistant"); m->setProperty ("content", content);
-                    const juce::ScopedLock sl (lock);
-                    messages.add (juce::var (m));
-                }
+                if (++rounds > maxToolRounds) { post ({ Event::error, "Stopped after " + juce::String (maxToolRounds) + " tool rounds. Say \"continue\" to let " + providerName (provider) + " carry on." }); break; }
                 juce::Array<juce::var> toolUses;
-                if (auto arr = content.getArray())
-                    for (auto& b : *arr)
-                    {
-                        auto type = b["type"].toString();
-                        if (type == "text" && b["text"].toString().trim().isNotEmpty()) post ({ Event::assistantText, b["text"].toString().trim() });
-                        else if (type == "tool_use") toolUses.add (b);
-                    }
-
-                const auto stopReason = res.json["stop_reason"].toString();
-                if (stopReason != "tool_use" || toolUses.isEmpty())
-                {
-                    if (stopReason == "max_tokens") post ({ Event::notice, "Claude's reply reached the length limit. Say \"continue\" for the rest." });
-                    else if (stopReason == "refusal") post ({ Event::notice, "Claude declined this request." });
-                    finishedNormally = true;
-                    break;
-                }
-
-                juce::Array<juce::var> results;
-                for (auto& tu : toolUses)
-                {
-                    const auto name = tu["name"].toString(), id = tu["id"].toString();
-                    auto input = tu["input"];
-                    Event call { Event::toolCall, summariseInput (input), name, id };
-                    post (call);
-                    ToolResult r = threadShouldExit() ? ToolResult::error ("Stopped by the user before this ran.") : runTool (name, input);
-
-                    auto block = new juce::DynamicObject();
-                    block->setProperty ("type", "tool_result");
-                    block->setProperty ("tool_use_id", id);
-                    if (r.isError) block->setProperty ("is_error", true);
-                    juce::Array<juce::var> parts;
-                    { auto t = new juce::DynamicObject(); t->setProperty ("type", "text"); t->setProperty ("text", r.text.isNotEmpty() ? r.text : juce::String ("OK")); parts.add (juce::var (t)); }
-                    if (r.imageBase64.isNotEmpty())
-                    {
-                        auto src = new juce::DynamicObject(); src->setProperty ("type", "base64"); src->setProperty ("media_type", r.imageMime.isNotEmpty() ? r.imageMime : juce::String ("image/png")); src->setProperty ("data", r.imageBase64);
-                        auto img = new juce::DynamicObject(); img->setProperty ("type", "image"); img->setProperty ("source", juce::var (src));
-                        parts.add (juce::var (img));
-                    }
-                    block->setProperty ("content", parts);
-                    results.add (juce::var (block));
-                    Event done { Event::toolResult, r.text.substring (0, 2000), name, id };
-                    done.ok = ! r.isError;
-                    post (done);
-                }
-                auto m = new juce::DynamicObject(); m->setProperty ("role", "user"); m->setProperty ("content", results);
+                const bool ok = provider == Provider::chatgpt ? openAIRound (toolUses, finishedNormally) : claudeRound (toolUses, finishedNormally);
+                if (! ok || finishedNormally) break;
+                auto results = runToolUses (toolUses);
                 const juce::ScopedLock sl (lock);
-                messages.add (juce::var (m));
+                messages.add (results);
             }
 
             {   // images only travel with the turn that took them; keep later requests small
@@ -567,13 +764,67 @@ namespace Chat
     };
 
     //==========================================================================
+    /** The Claude / ChatGPT switch in the chat header: two lit segments, the active one in its own colour. */
+    class ProviderSwitch : public juce::Component, public juce::SettableTooltipClient
+    {
+    public:
+        std::function<void (Provider)> onChange;
+        Provider value = Provider::claude;
+        bool locked = false;   // while a turn runs
+        void setValue (Provider p)   { value = p; repaint(); }
+        static juce::Colour colourOf (Provider p)   { return p == Provider::chatgpt ? juce::Colour (0xff3ee0a8) : juce::Colour (0xffff9a5c); }
+        void paint (juce::Graphics& g) override
+        {
+            namespace L = Console::Look;
+            auto r = getLocalBounds().toFloat().reduced (0.5f);
+            L::drawWell (g, r, r.getHeight() * 0.5f);
+            const float half = r.getWidth() * 0.5f;
+            for (int i = 0; i < 2; ++i)
+            {
+                const auto p = i == 0 ? Provider::claude : Provider::chatgpt;
+                auto seg = juce::Rectangle<float> (r.getX() + half * (float) i, r.getY(), half, r.getHeight()).reduced (2.0f);
+                const bool on = value == p, hot = hover == i && ! locked;
+                const auto c = colourOf (p);
+                if (on)
+                {
+                    g.setGradientFill (juce::ColourGradient (c.withAlpha (0.42f), seg.getX(), seg.getY(), c.withAlpha (0.18f), seg.getX(), seg.getBottom(), false));
+                    g.fillRoundedRectangle (seg, seg.getHeight() * 0.5f);
+                    g.setColour (c); g.drawRoundedRectangle (seg.reduced (0.5f), seg.getHeight() * 0.5f, 1.2f);
+                    g.setColour (c.withAlpha (0.25f)); g.drawRoundedRectangle (seg.expanded (1.5f), seg.getHeight() * 0.5f + 1.5f, 2.0f);
+                }
+                else if (hot) { g.setColour (c.withAlpha (0.12f)); g.fillRoundedRectangle (seg, seg.getHeight() * 0.5f); }
+                // status lamp + name
+                auto lamp = seg.removeFromLeft (seg.getHeight()).withSizeKeepingCentre (6.0f, 6.0f).translated (4.0f, 0.0f);
+                g.setColour (on ? c : c.withAlpha (0.3f)); g.fillEllipse (lamp);
+                g.setColour (on ? L::text() : L::dim().withAlpha (locked ? 0.5f : 1.0f));
+                g.setFont (L::caps (10.5f));
+                g.drawText (providerName (p).toUpperCase(), seg.withTrimmedRight (6.0f), juce::Justification::centred);
+            }
+        }
+        void mouseMove (const juce::MouseEvent& e) override   { const int h = e.x < getWidth() / 2 ? 0 : 1; if (h != hover) { hover = h; repaint(); } }
+        void mouseExit (const juce::MouseEvent&) override     { hover = -1; repaint(); }
+        void mouseUp (const juce::MouseEvent& e) override
+        {
+            if (locked || ! getLocalBounds().contains (e.getPosition())) return;
+            const auto p = e.x < getWidth() / 2 ? Provider::claude : Provider::chatgpt;
+            if (p != value) { value = p; repaint(); if (onChange) onChange (p); }
+        }
+    private:
+        int hover = -1;
+    };
+
     class Panel : public juce::Component, private juce::Timer
     {
     public:
         Panel (Session& s, McpTools& t) : session (s), engine (t, s)
         {
-            engine.model = Prefs::getString ("chat_model", defaultModel);
+            engine.provider = currentProvider();
+            engine.model = Prefs::getString (modelPref (engine.provider), defaultModelFor (engine.provider));
             engine.onEvent = [this] (const Event& e) { handle (e); };
+            providerSwitch.setValue (engine.provider);
+            providerSwitch.setTooltip ("Who runs Squelchmoth from this chat: Claude (Anthropic) or ChatGPT (OpenAI). Both get every tool; the conversation carries over when you switch.");
+            providerSwitch.onChange = [this] (Provider p) { switchProvider (p); };
+            addAndMakeVisible (providerSwitch);
 
             for (auto* b : { &newBtn, &historyBtn, &settingsBtn, &closeBtn })
             {
@@ -590,33 +841,30 @@ namespace Chat
             closeBtn.setTooltip ("Close Squelchmoth Chat");
             closeBtn.onClick = [this] { if (onClose) onClose(); };
 
-            modelBox.setTooltip ("The Claude model Squelchmoth Chat uses (the list comes from your API account)");
+            modelBox.setTooltip ("The model Squelchmoth Chat uses (the list comes from your API account)");
             modelBox.setColour (juce::ComboBox::backgroundColourId, Console::Look::well());
             modelBox.setColour (juce::ComboBox::outlineColourId, Console::Look::faint());
             modelBox.setColour (juce::ComboBox::textColourId, Console::Look::text());
             modelBox.setColour (juce::ComboBox::arrowColourId, Console::Look::cyan());
-            modelBox.onChange = [this] { auto id = modelIds[modelBox.getSelectedItemIndex()]; if (id.isNotEmpty()) { engine.model = id; Prefs::set ("chat_model", id); } };
+            modelBox.onChange = [this] { auto id = modelIds[modelBox.getSelectedItemIndex()]; if (id.isNotEmpty()) { engine.model = id; Prefs::set (modelPref (engine.provider), id); } };
             addAndMakeVisible (modelBox);
             setModels ({ engine.model }, { engine.model });
 
             keyEditor.setPasswordCharacter ((juce::juce_wchar) 0x2022);
-            keyEditor.setTextToShowWhenEmpty ("sk-ant-...  (paste your Anthropic API key)", Console::Look::faint());
+
             keyEditor.setFont (Theme::font (13.0f));
             styleEditor (keyEditor);
             keyEditor.onReturnKey = [this] { saveAndVerifyKey(); };
             addAndMakeVisible (keyEditor);
             verifyBtn.onClick = [this] { saveAndVerifyKey(); };
-            forgetBtn.onClick = [this] { KeyStore::forget(); keyEditor.clear(); setStatus ("No API key", Console::Look::faint()); refreshKeyRow(); };
-            getKeyBtn.onClick = [] { juce::URL ("https://console.anthropic.com/settings/keys").launchInDefaultBrowser(); };
+            forgetBtn.onClick = [this] { KeyStore::forget (engine.provider); keyEditor.clear(); setStatus ("No " + vendorName (engine.provider) + " API key", Console::Look::faint()); refreshKeyRow(); };
+            getKeyBtn.onClick = [this] { juce::URL (engine.provider == Provider::chatgpt ? "https://platform.openai.com/api-keys" : "https://console.anthropic.com/settings/keys").launchInDefaultBrowser(); };
             for (auto* b : { &verifyBtn, &forgetBtn, &getKeyBtn })
             {
                 b->setColour (juce::TextButton::buttonColourId, Console::Look::well());
                 b->setColour (juce::TextButton::textColourOffId, Console::Look::text());
                 addAndMakeVisible (*b);
             }
-            keyHelp.setText ("Squelchmoth Chat talks to Claude through your own Anthropic API account. Usage is billed by Anthropic to that account "
-                             "(a claude.ai Pro or Max plan does not cover API use). Your key is stored only on this computer, and no Squelchmoth tool can read it.",
-                             juce::dontSendNotification);
             keyHelp.setFont (Theme::font (11.5f));
             keyHelp.setColour (juce::Label::textColourId, Console::Look::dim());
             keyHelp.setJustificationType (juce::Justification::topLeft);
@@ -627,12 +875,10 @@ namespace Chat
             viewport.setScrollBarThickness (8);
             addAndMakeVisible (viewport);
 
-            emptyTitle.setText ("Ask Claude to work in your session", juce::dontSendNotification);
             emptyTitle.setFont (Console::Look::caps (15.0f));
             emptyTitle.setColour (juce::Label::textColourId, Console::Look::text());
             emptyTitle.setJustificationType (juce::Justification::centred);
             addAndMakeVisible (emptyTitle);
-            emptySub.setText ("Claude makes the changes itself - tracks, plug-ins, the mix, automation, bounces - and tells you what it did.", juce::dontSendNotification);
             emptySub.setFont (Theme::font (12.0f));
             emptySub.setColour (juce::Label::textColourId, Console::Look::dim());
             emptySub.setJustificationType (juce::Justification::centredTop);
@@ -653,7 +899,6 @@ namespace Chat
 
             input.setMultiLine (true, true);
             input.setReturnKeyStartsNewLine (false);
-            input.setTextToShowWhenEmpty ("Message Claude...", Console::Look::faint());
             input.setFont (Theme::font (14.0f));
             input.setScrollbarsShown (true);
             styleEditor (input);
@@ -671,9 +916,10 @@ namespace Chat
             hint.setColour (juce::Label::textColourId, Console::Look::faint());
             addAndMakeVisible (hint);
 
-            showSettings = ! KeyStore::has();
-            if (KeyStore::has()) { setStatus ("Ready", Console::Look::live()); verifyAsync (false); }
-            else setStatus ("No API key - add one to start", Console::Look::faint());
+            applyProviderTexts();
+            showSettings = ! KeyStore::has (engine.provider);
+            if (KeyStore::has (engine.provider)) { setStatus ("Ready", Console::Look::live()); verifyAsync (false); }
+            else setStatus ("No " + vendorName (engine.provider) + " API key - add one to start", Console::Look::faint());
             refreshKeyRow();
             updateEmptyState();
             startTimerHz (4);
@@ -710,12 +956,12 @@ namespace Chat
                 L::drawWell (g, drawer.toFloat().reduced (10.0f, 4.0f), 8.0f);
                 g.setColour (L::text());
                 g.setFont (L::caps (10.5f));
-                g.drawText ("ANTHROPIC API KEY", drawerTitle, juce::Justification::centredLeft);
-                if (KeyStore::has())
+                g.drawText (vendorName (engine.provider).toUpperCase() + " API KEY  (" + providerName (engine.provider).toUpperCase() + ")", drawerTitle, juce::Justification::centredLeft);
+                if (KeyStore::has (engine.provider))
                 {
                     g.setColour (L::dim());
                     g.setFont (Theme::font (11.0f));
-                    g.drawText ("Saved: " + KeyStore::masked (KeyStore::get()), drawerTitle, juce::Justification::centredRight);
+                    g.drawText ("Saved: " + KeyStore::masked (KeyStore::get (engine.provider)), drawerTitle, juce::Justification::centredRight);
                 }
             }
             // composer well (cyan rim while typing)
@@ -727,7 +973,7 @@ namespace Chat
         void resized() override
         {
             auto r = getLocalBounds();
-            header = r.removeFromTop (84);
+            header = r.removeFromTop (114);
             {
                 auto hh = header.reduced (18, 14);
                 auto row1 = hh.removeFromTop (28);
@@ -736,10 +982,13 @@ namespace Chat
                 historyBtn.setBounds (row1.removeFromRight (28)); row1.removeFromRight (6);
                 newBtn.setBounds (row1.removeFromRight (28)); row1.removeFromRight (10);
                 titleArea = row1;
+                hh.removeFromTop (5);
+                auto rowP = hh.removeFromTop (26);
+                modelBox.setBounds (rowP.removeFromRight (juce::jmin (196, rowP.getWidth() / 2)));
+                rowP.removeFromRight (10);
+                providerSwitch.setBounds (rowP.removeFromLeft (juce::jmin (196, rowP.getWidth())));
                 hh.removeFromTop (4);
-                auto row2 = hh.removeFromTop (24);
-                modelBox.setBounds (row2.removeFromRight (juce::jmin (176, row2.getWidth() / 2)));
-                row2.removeFromRight (10);
+                auto row2 = hh.removeFromTop (20);
                 statusDot = juce::Rectangle<int> (row2.getX() + 1, row2.getCentreY() - 4, 8, 8);
                 statusArea = row2.withTrimmedLeft (16);
             }
@@ -800,6 +1049,7 @@ namespace Chat
         juce::TextButton verifyBtn { "Verify" }, forgetBtn { "Forget" }, getKeyBtn { "Get a key" };
         juce::ComboBox modelBox;
         juce::StringArray modelIds;
+        ProviderSwitch providerSwitch;
         juce::TextEditor keyEditor, input;
         juce::Label keyHelp, emptyTitle, emptySub, hint;
         std::vector<std::unique_ptr<Chip>> chips;
@@ -842,7 +1092,7 @@ namespace Chat
 
         void refreshKeyRow()
         {
-            forgetBtn.setEnabled (KeyStore::has());
+            forgetBtn.setEnabled (KeyStore::has (engine.provider));
             repaint();
         }
 
@@ -859,8 +1109,8 @@ namespace Chat
         void saveAndVerifyKey()
         {
             auto k = keyEditor.getText().trim();
-            if (k.isNotEmpty()) { KeyStore::set (k); keyEditor.clear(); }
-            if (! KeyStore::has()) { setStatus ("No API key - add one to start", Console::Look::faint()); return; }
+            if (k.isNotEmpty()) { KeyStore::set (k, engine.provider); keyEditor.clear(); }
+            if (! KeyStore::has (engine.provider)) { setStatus ("No " + vendorName (engine.provider) + " API key - add one to start", Console::Look::faint()); return; }
             refreshKeyRow();
             verifyAsync (true);
         }
@@ -869,28 +1119,84 @@ namespace Chat
         void verifyAsync (bool closeDrawerOnSuccess)
         {
             setStatus ("Checking the key...", Console::Look::yellow());
-            auto key = KeyStore::get();
+            const auto prov = engine.provider;
+            auto key = KeyStore::get (prov);
             juce::Component::SafePointer<Panel> sp (this);
-            juce::Thread::launch ([sp, key, closeDrawerOnSuccess]
+            juce::Thread::launch ([sp, key, closeDrawerOnSuccess, prov]
             {
-                auto res = request ("/v1/models?limit=100", key, nullptr, 20000);
-                juce::MessageManager::callAsync ([sp, res, closeDrawerOnSuccess]
+                auto res = request (prov == Provider::chatgpt ? "/v1/models" : "/v1/models?limit=100", key, nullptr, 20000, prov);
+                juce::MessageManager::callAsync ([sp, res, closeDrawerOnSuccess, prov]
                 {
-                    if (sp == nullptr) return;
+                    if (sp == nullptr || sp->engine.provider != prov) return;   // switched provider while checking
                     if (! res.ok()) { sp->setStatus (res.error, Console::Look::red()); sp->showSettings = true; sp->resized(); return; }
                     juce::StringArray ids, names;
-                    if (auto arr = res.json["data"].getArray())
+                    if (prov == Provider::chatgpt) chatModels (res.json, ids, names);
+                    else if (auto arr = res.json["data"].getArray())
                         for (auto& m : *arr)
                         {
                             if (m["lifecycle"].toString() == "retired") continue;
                             ids.add (m["id"].toString());
                             names.add (m["display_name"].toString().isNotEmpty() ? m["display_name"].toString() : m["id"].toString());
                         }
+                    if (prov == Provider::chatgpt && ! ids.isEmpty() && ! ids.contains (sp->engine.model) && Prefs::getString (modelPref (prov)).isEmpty())
+                        sp->engine.model = ids[0];   // the default isn't on this account: take its newest chat model
                     if (! ids.isEmpty()) sp->setModels (ids, names);
                     sp->setStatus ("Connected  " + juce::String::fromUTF8 ("\xc2\xb7") + "  " + sp->modelBox.getText(), Console::Look::live());
                     if (closeDrawerOnSuccess) { sp->showSettings = false; sp->resized(); sp->input.grabKeyboardFocus(); }
                 });
             });
+        }
+
+    public:
+        /** OpenAI's model list mixes chat models with audio, image, embedding and moderation models: keep the ones that
+            can drive tools in the Responses API (GPT and o-series text models), newest first. */
+        static void chatModels (const juce::var& json, juce::StringArray& ids, juce::StringArray& names)
+        {
+            struct M { juce::String id; juce::int64 created; };
+            std::vector<M> list;
+            if (auto arr = json["data"].getArray())
+                for (auto& m : *arr)
+                {
+                    const auto id = m["id"].toString();
+                    const bool family = id.startsWith ("gpt-") || id.startsWith ("o1") || id.startsWith ("o3") || id.startsWith ("o4") || id.startsWith ("chatgpt-");
+                    bool other = false;
+                    for (auto* bad : { "audio", "realtime", "tts", "transcribe", "image", "embedding", "search", "moderation", "instruct", "whisper", "dall-e", "davinci", "babbage" })
+                        if (id.containsIgnoreCase (bad)) other = true;
+                    if (family && ! other) list.push_back ({ id, (juce::int64) m["created"] });
+                }
+            std::sort (list.begin(), list.end(), [] (const M& a, const M& b) { return a.created != b.created ? a.created > b.created : a.id < b.id; });
+            for (auto& m : list) { ids.add (m.id); names.add (m.id); }
+        }
+    private:
+        void applyProviderTexts()
+        {
+            const auto p = engine.provider;
+            const auto who = providerName (p), vendor = vendorName (p);
+            keyEditor.setTextToShowWhenEmpty (p == Provider::chatgpt ? "sk-...  (paste your OpenAI API key)" : "sk-ant-...  (paste your Anthropic API key)", Console::Look::faint());
+            keyHelp.setText ("Squelchmoth Chat talks to " + who + " through your own " + vendor + " API account. Usage is billed by " + vendor + " to that account "
+                             + (p == Provider::chatgpt ? "(a ChatGPT Plus or Pro plan does not cover API use). " : "(a claude.ai Pro or Max plan does not cover API use). ")
+                             + "Each key is stored only on this computer, and no Squelchmoth tool can read it.", juce::dontSendNotification);
+            emptyTitle.setText ("Ask " + who + " to work in your session", juce::dontSendNotification);
+            emptySub.setText (who + " makes the changes itself - tracks, plug-ins, the mix, automation, bounces - and tells you what it did.", juce::dontSendNotification);
+            input.setTextToShowWhenEmpty ("Message " + who + "...", Console::Look::faint());
+            getKeyBtn.setTooltip (p == Provider::chatgpt ? "platform.openai.com/api-keys" : "console.anthropic.com/settings/keys");
+        }
+
+        /** Claude <-> ChatGPT. The conversation stays; the next message goes to the other provider with the whole history. */
+        void switchProvider (Provider p)
+        {
+            if (engine.isBusy()) { providerSwitch.setValue (engine.provider); return; }
+            Prefs::set ("chat_provider", p == Provider::chatgpt ? "chatgpt" : "claude");
+            engine.provider = p;
+            engine.model = Prefs::getString (modelPref (p), defaultModelFor (p));
+            setModels ({ engine.model }, { engine.model });
+            applyProviderTexts();
+            keyEditor.clear();
+            refreshKeyRow();
+            if (KeyStore::has (p)) { showSettings = false; setStatus ("Switching to " + providerName (p) + "...", Console::Look::yellow()); verifyAsync (false); }
+            else { showSettings = true; setStatus ("No " + vendorName (p) + " API key - add one to use " + providerName (p), Console::Look::faint()); }
+            if (! transcript.items.empty()) addItem (Item::notice, "Now talking to " + providerName (p) + " (" + engine.model + "). The conversation so far carries over.");
+            resized(); repaint();
         }
 
         void updateEmptyState()
@@ -926,10 +1232,10 @@ namespace Chat
         {
             auto text = input.getText().trim();
             if (text.isEmpty() || engine.isBusy()) return;
-            if (! KeyStore::has()) { showSettings = true; resized(); setStatus ("Add your Anthropic API key first", Console::Look::yellow()); keyEditor.grabKeyboardFocus(); return; }
+            if (! KeyStore::has (engine.provider)) { showSettings = true; resized(); setStatus ("Add your " + vendorName (engine.provider) + " API key first", Console::Look::yellow()); keyEditor.grabKeyboardFocus(); return; }
             addItem (Item::user, text);
             input.clear();
-            if (engine.send (text)) { sendBtn.busy = true; sendBtn.repaint(); setStatus ("Claude is working...", Console::Look::cyan()); session.log.add ("You", "Chat: " + text.substring (0, 80)); }
+            if (engine.send (text)) { sendBtn.busy = true; sendBtn.repaint(); providerSwitch.locked = true; providerSwitch.repaint(); setStatus (providerName (engine.provider) + " is working...", Console::Look::cyan()); session.log.add ("You", "Chat: " + text.substring (0, 80)); }
         }
 
         void handle (const Event& e)
@@ -951,6 +1257,7 @@ namespace Chat
                 case Event::notice: addItem (Item::notice, e.text); break;
                 case Event::finished:
                     sendBtn.busy = false; sendBtn.repaint();
+                    providerSwitch.locked = false; providerSwitch.repaint();
                     if (statusColour != Console::Look::red()) setStatus ("Ready  " + juce::String::fromUTF8 ("\xc2\xb7") + "  " + modelBox.getText(), Console::Look::live());
                     engine.save();
                     actionById.clear();
@@ -1025,8 +1332,8 @@ namespace Chat
             if (const bool f = input.hasKeyboardFocus (false); f != inputFocused) { inputFocused = f; repaint (composer); }
             if (engine.isBusy())
             {
-                static const char* dots[] = { "Claude is working", "Claude is working.", "Claude is working..", "Claude is working..." };
-                setStatus (dots[(++tickCount) % 4], Console::Look::cyan());
+                static const char* dots[] = { "", ".", "..", "..." };
+                setStatus (providerName (engine.provider) + " is working" + dots[(++tickCount) % 4], Console::Look::cyan());
             }
         }
         int tickCount = 0;

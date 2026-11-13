@@ -954,6 +954,7 @@
                 }
                 g.setColour (accent.withAlpha (0.15f)); juce::Path f (env); f.lineTo (in.getRight(), in.getBottom()); f.lineTo (in.getX(), in.getBottom()); f.closeSubPath(); g.fillPath (f);
                 g.setColour (accent); g.strokePath (p, juce::PathStrokeType (1.4f));
+                drawTimeAxis (g, in.withHeight (in.getHeight() + 12.0f), span);   // phase Z: real time under the hit
             }
             box (g, r, "KEY TRACK  " + juce::String (juce::roundToInt (nv ("Key Track", 1.0f) * 100)) + "%   C3 plays the set pitch");
             {

@@ -20,11 +20,21 @@ built-in control server so Claude can run the whole session.
    and click **Activate**. Owner keys count as Squelchmoth Complete. (Customers start on the free Demo and buy
    keys from the Payhip store; see `docs/internal/PAYHIP-SETUP.md`.)
 
-## B. Squelchmoth Chat (Claude inside the app)
+## B. Squelchmoth Chat (Claude or ChatGPT inside the app)
 
-Click **CHAT** (or Cmd/Ctrl+Shift+C), paste your Anthropic API key once, and type. Claude operates the open
-session with every Squelchmoth tool and lists each step in the chat. Uses the Anthropic Messages API
-(version 2026-10-21) with your own key; the key stays on this computer.
+Click **CHAT** (or Cmd/Ctrl+Shift+C) and type. The **CLAUDE / CHATGPT** switch at the top of the chat picks who
+runs the session; both get every Squelchmoth tool (full control) and list each step in the chat.
+
+1. Click **CLAUDE** or **CHATGPT** in the switch.
+2. Click the gear button. Paste that provider's API key (Anthropic key for Claude, OpenAI key for ChatGPT) and
+   click **Verify**. The model menu fills with the models on your account. Each key is kept separately and stays on
+   this computer.
+3. Type what you want and press Enter.
+
+You can switch in the middle of a chat: the next message goes to the other assistant with the whole conversation so
+far. Claude uses the Anthropic Messages API (version 2026-10-21); ChatGPT uses the OpenAI Responses API with
+function calling. API use is billed by each company to your own API account (a claude.ai or ChatGPT subscription
+does not cover API use).
 
 ## B2. Connect Claude from claude.ai (about one minute)
 
@@ -40,6 +50,16 @@ session with every Squelchmoth tool and lists each step in the chat. Uses the An
 The link changes every time you press **CONNECT CLAUDE**. After restarting Squelchmoth, edit the
 Squelchmoth connector on claude.ai and paste the new link, or tick **Connect automatically** in the
 CLAUDE panel so the link is ready when the app opens.
+
+## B3. Connect ChatGPT from chatgpt.com (same link, same full control)
+
+1. Do steps 1-3 of B2 (connect, copy the link).
+2. In the CLAUDE panel click **OPEN CHATGPT GUIDE** (OpenAI's page on adding your own MCP server; it needs
+   Developer mode on a paid ChatGPT plan, on the web).
+3. Following that page, turn on Developer mode and create a new app: name `Squelchmoth`, MCP server URL = the link,
+   no authentication. Save it.
+4. In a new ChatGPT chat open **+**, choose Developer mode, select Squelchmoth and ask for anything. ChatGPT asks you
+   to approve actions that change the session before it runs them.
 
 If the status never reaches *Connected*, your network is blocking Cloudflare tunnels (outbound port 7844).
 Try another network or turn off a VPN. Claude Desktop and Claude Code on the same Mac can use the

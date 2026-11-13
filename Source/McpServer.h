@@ -163,7 +163,7 @@ private:
                 return;
             }
             res.set_content ("<html><body style='font-family:sans-serif;background:#0d0714;color:#ece6ff;padding:40px'><h2>Squelchmoth control link is working</h2>"
-                             "<p>This address is for claude.ai, not for a browser. Paste it into claude.ai &gt; Settings &gt; Connectors &gt; Add custom connector.</p></body></html>", "text/html");
+                             "<p>This address is for claude.ai or ChatGPT, not for a browser. Paste it into claude.ai &gt; Settings &gt; Connectors &gt; Add custom connector, or into a ChatGPT Developer mode app as its MCP server URL.</p></body></html>", "text/html");
         });
 
         server->Get (path + "/health", [] (const httplib::Request&, httplib::Response& res)

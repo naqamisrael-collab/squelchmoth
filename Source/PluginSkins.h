@@ -1519,6 +1519,14 @@ namespace Skins
                 g.setColour (black ? juce::Colours::black.withAlpha (0.8f) : Theme::text().withAlpha (0.8f));
                 g.fillRect (kb.getX() + kw * (float) (n - lo), kb.getY(), kw - 0.5f, black ? kb.getHeight() * 0.6f : kb.getHeight());
             }
+            r.removeFromBottom (12.0f);
+            g.setFont (Theme::font (8.5f));
+            for (int n = lo; n <= hi; n += 12)   // phase Z: octave ruler (C1..C8) above the keys and up the zone map
+            {
+                const float x = kb.getX() + kw * (float) (n - lo);
+                g.setColour (Theme::text().withAlpha (0.08f)); g.drawVerticalLine ((int) x, r.getY(), kb.getY());
+                if (x < kb.getRight() - 20.0f) { g.setColour (Theme::dim()); g.drawText (juce::MidiMessage::getMidiNoteName (n, true, true, 4), (int) x + 2, (int) kb.getY() - 11, 30, 10, juce::Justification::left); }
+            }
             auto n = sp->getNumSounds();
             if (n == 0) { g.setColour (Theme::dim()); g.setFont (Theme::font (11.0f)); g.drawText ("No samples yet - click ADD SAMPLE (or drop WAVs on the window) and set the root / range", r.toNearestInt(), juce::Justification::centred); return; }
             auto rowH = juce::jmin (18.0f, r.getHeight() / (float) n);

@@ -2091,6 +2091,106 @@ inline int runSelfTest()
             check (! Chat::KeyStore::has(), "chat: Forget removes the key");
         }
 
+        //======================================================================
+        // 1.14: Squelchmoth Chat with ChatGPT, against a local mock of the OpenAI Responses API
+        {
+            httplib::Server mock;
+            std::atomic<int> posts { 0 };
+            std::atomic<bool> sawAnthropicHeader { false }, sawAuth { true }, toolsShapeOk { true }, storeOff { true }, replayOk { false }, outputMatched { false }, errorMarked { false };
+            std::atomic<int> toolCount { 0 };
+            const juce::String testKey = "sk-proj-selftest-0123456789abcdefQRS";
+            mock.Get ("/v1/models", [&] (const httplib::Request& req, httplib::Response& res)
+            {
+                if (req.get_header_value ("Authorization") != ("Bearer " + testKey).toStdString()) { res.status = 401; res.set_content (R"({"error":{"message":"Incorrect API key provided","type":"invalid_request_error","code":"invalid_api_key"}})", "application/json"); return; }
+                res.set_content (R"({"object":"list","data":[{"id":"gpt-6-astra","object":"model","created":1790000000,"owned_by":"system"},{"id":"gpt-6-astra-audio","object":"model","created":1790000001,"owned_by":"system"},{"id":"text-embedding-3-large","object":"model","created":1700000000,"owned_by":"system"},{"id":"gpt-5.6-terra","object":"model","created":1780000000,"owned_by":"system"}]})", "application/json");
+            });
+            mock.Post ("/v1/responses", [&] (const httplib::Request& req, httplib::Response& res)
+            {
+                ++posts;
+                if (req.has_header ("anthropic-version")) sawAnthropicHeader = true;
+                if (req.get_header_value ("Authorization") != ("Bearer " + testKey).toStdString()) sawAuth = false;
+                auto body = juce::JSON::parse (juce::String::fromUTF8 (req.body.data(), (int) req.body.size()));
+                toolCount = body["tools"].size();
+                if (auto tl = body["tools"].getArray())
+                    for (auto& t : *tl) if (t["type"].toString() != "function" || t["name"].toString().isEmpty() || ! t["parameters"].isObject() || t.hasProperty ("input_schema")) toolsShapeOk = false;
+                if (! (body.hasProperty ("store") && ! (bool) body["store"]) || body["instructions"].toString().isEmpty() || ! body["instructions"].toString().contains ("ChatGPT")) storeOff = false;
+                auto input = body["input"];
+                bool hasOutput = false;
+                if (auto arr = input.getArray())
+                    for (auto& it : *arr)
+                    {
+                        if (it["type"].toString() == "reasoning" && it["encrypted_content"].toString() == "enc-1") replayOk = true;
+                        if (it["type"].toString() == "function_call_output")
+                        {
+                            hasOutput = true;
+                            if (it["call_id"].toString() == "call_a" || it["call_id"].toString() == "call_b") outputMatched = true;
+                            if (it["call_id"].toString() == "call_b" && it["output"].toString().startsWith ("ERROR")) errorMarked = true;
+                        }
+                    }
+                if (! hasOutput)
+                    res.set_content (R"({"id":"resp_1","object":"response","status":"completed","output":[
+                        {"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"enc-1"},
+                        {"id":"msg_1","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Putting a compressor on the guitar.","annotations":[]}]},
+                        {"id":"fc_1","type":"function_call","call_id":"call_a","name":"channel_dynamics","arguments":"{\"action\":\"set\",\"track\":\"Gtr\",\"comp\":\"Opto Leveler\"}","status":"completed"},
+                        {"id":"fc_2","type":"function_call","call_id":"call_b","name":"channel_dynamics","arguments":"{\"action\":\"set\",\"track\":\"Nobody\",\"comp\":\"Opto Leveler\"}","status":"completed"}]})", "application/json");
+                else
+                    res.set_content (R"({"id":"resp_2","object":"response","status":"completed","output":[{"id":"msg_2","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Done: Opto Leveler is on Gtr.","annotations":[]}]}]})", "application/json");
+            });
+            const int port = mock.bind_to_any_port ("127.0.0.1");
+            std::thread mockThread ([&] { mock.listen_after_bind(); });
+            Prefs::set ("chat_apiBase", "http://127.0.0.1:" + juce::String (port));
+            Chat::KeyStore::set (testKey, Chat::Provider::chatgpt);
+            check (Chat::KeyStore::get (Chat::Provider::chatgpt) == testKey && ! Chat::KeyStore::has (Chat::Provider::claude)
+                   && ! props.getValue ("cl_openaiKey").contains ("sk-proj"), "chatgpt: its key is stored apart from Claude's, not in plain text");
+            check (call ("set_preference", R"({"key":"cl_openaiKey","value":"x"})", false).contains ("private"), "chatgpt: set_preference refuses the OpenAI key");
+
+            auto models = Chat::request ("/v1/models", testKey, nullptr, 5000, Chat::Provider::chatgpt);
+            juce::StringArray ids, names; Chat::Panel::chatModels (models.json, ids, names);
+            check (models.ok() && ids.size() == 2 && ids[0] == "gpt-6-astra" && ids[1] == "gpt-5.6-terra", "chatgpt: the model menu keeps chat models only, newest first (" + ids.joinIntoString (", ") + ")");
+            auto bad = Chat::request ("/v1/models", "sk-wrong", nullptr, 5000, Chat::Provider::chatgpt);
+            check (! bad.ok() && bad.status == 401 && bad.error.contains ("platform.openai.com"), "chatgpt: a wrong key gives a clear 401 message");
+
+            Chat::Engine engineGpt (tools, *session);
+            engineGpt.provider = Chat::Provider::chatgpt; engineGpt.model = "gpt-6-astra";
+            juce::StringArray texts; int calls = 0, okResults = 0, errResults = 0; bool finished = false;
+            engineGpt.onEvent = [&] (const Chat::Event& e)
+            {
+                if (e.kind == Chat::Event::assistantText) texts.add (e.text);
+                else if (e.kind == Chat::Event::toolCall) ++calls;
+                else if (e.kind == Chat::Event::toolResult) (e.ok ? okResults : errResults)++;
+                else if (e.kind == Chat::Event::error) texts.add ("ERROR " + e.text);
+                else if (e.kind == Chat::Event::finished) finished = true;
+            };
+            call ("channel_dynamics", R"({"action":"set","track":"Gtr","comp":"none"})");
+            check (engineGpt.send ("Put a compressor on the guitar"), "chatgpt: a message starts a turn");
+            for (int i = 0; i < 300 && ! finished; ++i) juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+            auto* g3 = session->findTrack ("Gtr");
+            auto comp3 = g3 != nullptr ? Console::Model::findDynamics (g3->pluginList, g3, false) : nullptr;
+            check (finished && comp3 != nullptr && comp3->getPluginType() == "sqmOpto", "chatgpt: ChatGPT's function_call ran in the session (Opto Leveler is on Gtr) - same full control as Claude");
+            check (calls == 2 && okResults == 1 && errResults == 1, "chatgpt: both function calls reported, the failing one as an error");
+            check (posts == 2 && texts.size() == 2 && texts[1].contains ("Opto"), "chatgpt: function_call_output went back and the final answer arrived (" + texts.joinIntoString (" | ") + ")");
+            check (! sawAnthropicHeader && sawAuth, "chatgpt: Bearer key, no anthropic-version header");
+            check (toolsShapeOk && toolCount == (int) tools.getTools().size(), "chatgpt: every Squelchmoth tool is offered as a Responses function tool (" + juce::String (toolCount.load()) + ")");
+            check (storeOff && replayOk && outputMatched && errorMarked, "chatgpt: stateless (store false), reasoning replayed, outputs matched by call_id, failures marked");
+            // switching provider mid-chat: the same history goes to Claude cleanly
+            auto forC = Chat::Engine::forClaude (engineGpt.getMessages());
+            bool clean = forC.size() == 4;
+            for (auto& m : forC) if (m.hasProperty ("oa_output")) clean = false;
+            check (clean && forC[1]["content"][1]["type"].toString() == "tool_use" && forC[1]["content"][1]["id"].toString() == "call_a" && forC[2]["content"][0]["type"].toString() == "tool_result",
+                   "chatgpt: switching to Claude mid-chat carries the conversation over in Messages-API shape");
+            auto forO = Chat::Engine::forOpenAI (forC);
+            check (forO.size() == 7 && forO[2]["type"].toString() == "function_call" && forO[4]["type"].toString() == "function_call_output", "chatgpt: and a Claude conversation converts to Responses input items");
+            engineGpt.save();
+            check (engineGpt.chatFile.existsAsFile() && ! engineGpt.chatFile.loadFileAsString().contains (testKey), "chatgpt: the conversation is saved without the key");
+            engineGpt.chatFile.deleteFile();
+
+            mock.stop();
+            mockThread.join();
+            Chat::KeyStore::forget (Chat::Provider::chatgpt);
+            if (auto f = Prefs::file()) f->removeValue ("chat_apiBase");
+            check (! Chat::KeyStore::has (Chat::Provider::chatgpt), "chatgpt: Forget removes the OpenAI key");
+        }
+
         std::cout << "  (1.10 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)\n";
     }
 
@@ -4275,6 +4375,15 @@ inline int runSelfTest()
         TimelineView tl (*session); MixerView mx (*session, &tl.state); BeatPage bp (*session); MasteringProject mp (*session); MasteringContent mc (mp);
         const bool ok = shoot (tl, 1600, 900, "edit") && shoot (mx, 1600, 900, "mix") && shoot (bp, 1600, 900, "beat") && shoot (mc, 1600, 900, "mastering");
         check (ok, "Edit, Mix, Beat page and Mastering windows render offscreen at 1600 x 900");
+        // Squelchmoth Chat in both providers (the CLAUDE / CHATGPT switch)
+        const auto savedProvider = Prefs::getString ("chat_provider");
+        Prefs::set ("chat_provider", "claude");
+        bool chatOk;
+        { Chat::Panel cp (*session, tools); chatOk = shoot (cp, 460, 900, "chat_claude"); }
+        Prefs::set ("chat_provider", "chatgpt");
+        { Chat::Panel cp (*session, tools); chatOk = shoot (cp, 460, 900, "chat_chatgpt") && chatOk && cp.getEngine().provider == Chat::Provider::chatgpt; }
+        Prefs::set ("chat_provider", savedProvider.isNotEmpty() ? savedProvider : juce::String ("claude"));
+        check (chatOk, "Squelchmoth Chat renders with Claude and with ChatGPT selected (the panel follows the saved switch)");
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));

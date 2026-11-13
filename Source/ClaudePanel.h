@@ -17,12 +17,12 @@ public:
     ClaudePanel (Session& s, McpServer& srv, Tunnel& t, juce::PropertiesFile& p)
         : session (s), server (srv), tunnel (t), props (p)
     {
-        heading.setText ("Let Claude drive Squelchmoth", juce::dontSendNotification);
+        heading.setText ("Let Claude or ChatGPT drive Squelchmoth", juce::dontSendNotification);
         heading.setFont (Theme::font (24.0f, true));
         heading.setColour (juce::Label::textColourId, Theme::acid());
         addAndMakeVisible (heading);
 
-        sub.setText ("Claude (claude.ai) controls every track, clip, plugin and transport function through a private link that only this Mac can open.", juce::dontSendNotification);
+        sub.setText ("Claude (claude.ai) or ChatGPT (chatgpt.com) controls every track, clip, plugin and transport function through a private link only this computer answers.", juce::dontSendNotification);
         sub.setFont (Theme::font (13.0f));
         sub.setColour (juce::Label::textColourId, Theme::dim());
         addAndMakeVisible (sub);
@@ -48,7 +48,16 @@ public:
             "    \"Use Squelchmoth: make a 92 BPM lo-fi beat with keys, bass and drums, then bounce it.\"\n\n"
             "Keep Squelchmoth open while Claude works. With Cloudflare or Pinggy the link address changes each time you\n"
             "connect, so after a restart edit the connector on claude.ai and paste the new link (ngrok keeps a fixed address).\n"
-            "Custom connectors need a Claude Pro, Max, Team or Enterprise plan.");
+            "Custom connectors need a Claude Pro, Max, Team or Enterprise plan.\n\n"
+            "CHATGPT INSTEAD (same link, same full control)\n"
+            "1. Do steps 1 and 2 above (connect, copy the link).\n"
+            "2. Press  OPEN CHATGPT GUIDE  - OpenAI's page on adding your own MCP server to ChatGPT (it needs Developer mode,\n"
+            "    on a paid ChatGPT plan, on the web).\n"
+            "3. Following that page, turn Developer mode on and create a new app / connector: Name: Squelchmoth, MCP server URL: the\n"
+            "    link you copied, authentication: none. Save it.\n"
+            "4. In a new ChatGPT chat, open the  +  menu, choose Developer mode and select Squelchmoth, then ask what you want.\n"
+            "    ChatGPT asks you to approve actions that change the session before it runs them.\n"
+            "Inside the app, Squelchmoth Chat (the chat panel) has a CLAUDE / CHATGPT switch: same tools, your own API key for each.");
         addAndMakeVisible (steps);
 
         connectBtn.setColour (juce::TextButton::buttonColourId, Theme::violet());
@@ -71,6 +80,10 @@ public:
             juce::Timer::callAfterDelay (2500, [sp = juce::Component::SafePointer<juce::TextButton> (&diagBtn)] { if (sp) sp->setButtonText ("COPY DIAGNOSTICS"); });
         };
         addAndMakeVisible (diagBtn);
+
+        gptBtn.setTooltip ("help.openai.com: connecting your own MCP server in ChatGPT (Developer mode)");
+        gptBtn.onClick = [] { juce::URL ("https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt").launchInDefaultBrowser(); };
+        addAndMakeVisible (gptBtn);
 
         provider.addItem ("Cloudflare quick tunnel (default, no account)", 1);
         provider.addItem ("ngrok (free account, fixed address, strict networks)", 2);
@@ -237,7 +250,8 @@ public:
         left.removeFromTop (6);
         auto brow = left.removeFromTop (26);
         newSecretBtn.setBounds (brow.removeFromLeft (220)); brow.removeFromLeft (8);
-        diagBtn.setBounds (brow.removeFromLeft (220));
+        diagBtn.setBounds (brow.removeFromLeft (220)); brow.removeFromLeft (8);
+        gptBtn.setBounds (brow.removeFromLeft (200));
 
         logTitle.setBounds (r.removeFromTop (22));
         log.setBounds (r);
@@ -286,7 +300,7 @@ private:
     juce::Label heading, sub, localLabel, logTitle, providerLabel, stepLabels[5];
     int lights[5] = { 0, 0, 0, 0, 0 };
     juce::TextEditor steps, urlBox, localUrl, log;
-    juce::TextButton connectBtn { "CONNECT CLAUDE" }, copyBtn { "COPY LINK" }, openBtn { "OPEN CLAUDE CONNECTORS" }, testBtn { "SELF-TEST" }, diagBtn { "COPY DIAGNOSTICS" }, newSecretBtn { "New secret (revoke old links)" };
+    juce::TextButton connectBtn { "CONNECT CLAUDE" }, copyBtn { "COPY LINK" }, openBtn { "OPEN CLAUDE CONNECTORS" }, testBtn { "SELF-TEST" }, diagBtn { "COPY DIAGNOSTICS" }, gptBtn { "OPEN CHATGPT GUIDE" }, newSecretBtn { "New secret (revoke old links)" };
     juce::ComboBox provider;
     juce::ToggleButton autoConnect { "Connect automatically at launch" };
     size_t lastLogCount = 0;

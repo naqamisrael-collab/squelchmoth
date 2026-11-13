@@ -151,7 +151,14 @@
                 if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y);
             }
             g.setColour (c); g.strokePath (p, juce::PathStrokeType (1.5f));
+            g.setColour (Theme::text().withAlpha (0.1f)); g.drawHorizontalLine ((int) in.getCentreY(), in.getX(), in.getRight());
             g.setColour (Theme::dim()); g.setFont (Theme::font (8.5f));
+            if (in.getHeight() > 30.0f)   // phase Z: full-scale marks and the window length (512 samples)
+            {
+                g.drawText ("+1", in.toNearestInt().withHeight (10), juce::Justification::topRight);
+                g.drawText ("0", (int) in.getRight() - 20, (int) in.getCentreY() - 10, 18, 10, juce::Justification::right);
+                g.drawText ("512 samples (~11 ms)", in.toNearestInt(), juce::Justification::bottomLeft);
+            }
             const int n = synth->lastNote();
             g.drawText (juce::String (synth->activeVoiceCount()) + " / " + juce::String (synth->maxPolyValue().get()) + " voices" + (n >= 0 && synth->displayLevel() > 0.01f ? "   " + juce::MidiMessage::getMidiNoteName (n, true, true, 4) : juce::String()),
                         in.toNearestInt(), juce::Justification::bottomRight);
@@ -168,6 +175,19 @@
             x += wr / total * in.getWidth(); p.lineTo (x, in.getBottom());
             g.setColour (c.withAlpha (0.18f)); juce::Path f (p); f.closeSubPath(); g.fillPath (f);
             g.setColour (c); g.strokePath (p, juce::PathStrokeType (1.8f));
+            // phase Z: each stage's real time and the sustain level, written on the segment it belongs to
+            if (in.getHeight() < 26.0f) return;
+            auto t = [] (float sec) { return sec < 1.0f ? juce::String (juce::roundToInt (sec * 1000.0f)) + " ms" : juce::String (sec, 2) + " s"; };
+            const float x1 = in.getX() + wa / total * in.getWidth(), x2 = x1 + wd / total * in.getWidth(), x3 = x2 + 0.5f / total * in.getWidth(), x4 = x3 + wr / total * in.getWidth();
+            g.setFont (Theme::font (7.5f)); g.setColour (Theme::text().withAlpha (0.7f));
+            auto lab = [&] (float l, float r, const juce::String& txt)
+            {
+                if (r - l < 24.0f) return;
+                g.drawText (txt, (int) l, (int) in.getBottom() - 10, (int) (r - l), 9, juce::Justification::centred);
+            };
+            lab (in.getX(), x1, "A " + t (a)); lab (x1, x2, "D " + t (d)); lab (x2, x3, "S " + juce::String (juce::roundToInt (s * 100.0f)) + "%"); lab (x3, x4, "R " + t (rl));
+            g.setColour (Theme::text().withAlpha (0.12f));
+            for (float xx : { x1, x2, x3 }) g.drawVerticalLine ((int) xx, in.getY(), in.getBottom());
         }
         /** Approximate magnitude response of the voice filter for the display (dB). */
         static float filterDb (int type, float cut, float res, float hz)
@@ -525,7 +545,14 @@
                     amp = juce::jlimit (0.0f, 1.0f, amp);
                     auto bar = juce::Rectangle<float> (in.getX() + bw * (float) k, in.getBottom() - amp * in.getHeight(), bw - 2.0f, amp * in.getHeight());
                     g.setColour (accent.withAlpha (0.35f + 0.6f * amp)); g.fillRoundedRectangle (bar, 2.0f);
+                    if (k == 0 || ((k + 1) % 4 == 0 && k < bands - 4))   // phase Z: harmonic number under the bars (the last slot holds the unit)
+                    {
+                        g.setColour (Theme::dim()); g.setFont (Theme::font (7.5f));
+                        g.drawText (juce::String (k + 1) + (k == 0 ? "f" : ""), (int) (in.getX() + bw * (float) k) - 4, (int) in.getBottom() + 1, (int) bw + 8, 9, juce::Justification::centred);
+                    }
                 }
+                g.setColour (Theme::dim()); g.setFont (Theme::font (7.5f));
+                g.drawText ("x fundamental", in.toNearestInt().withHeight (9).withY ((int) in.getBottom() + 1), juce::Justification::right);
             }
             auto a1 = r.removeFromLeft (r.getWidth() * 0.5f).reduced (2.0f, 0.0f), a2 = r.reduced (2.0f, 0.0f);
             box (g, a1, "MOD ENV"); envelope (g, a1.reduced (6.0f, 14.0f), bv ("mA"), bv ("mD"), bv ("mS"), bv ("mR"), accent);
