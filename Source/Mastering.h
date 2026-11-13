@@ -869,6 +869,20 @@ public:
         g.drawText ("INSERTS", 8, 24, 100, 12, juce::Justification::centredLeft);
         if (isMaster && project.edit != nullptr) { g.setFont (Theme::font (9.0f)); g.drawText ("Analyzer tap runs after the fader", 8, getHeight() - 14, getWidth() - 16, 12, juce::Justification::centredLeft); }
         if (! isMaster && track == nullptr) { g.setFont (Theme::font (10.0f)); g.drawText ("Select a track in the list to see its rack", 8, getHeight() - 16, getWidth() - 16, 14, juce::Justification::centredLeft); }
+        // phase Z: a dB scale beside the fader (ticks on both sides, numbers on the left, 0 dB brighter)
+        if (fader.isVisible() && fader.getHeight() > 60)
+        {
+            g.setFont (Theme::font (8.0f, true));
+            for (double db : { 12.0, 6.0, 0.0, -6.0, -12.0, -24.0, -36.0, -48.0, -70.0 })
+            {
+                const float y = (float) fader.getY() + (float) fader.getPositionOfValue (db);
+                const bool zero = std::abs (db) < 0.01;
+                g.setColour (zero ? Theme::acid() : Theme::dim().withAlpha (0.8f));
+                g.drawHorizontalLine ((int) y, (float) fader.getX() + 10.0f, (float) fader.getX() + 20.0f);
+                g.drawHorizontalLine ((int) y, (float) fader.getRight() - 20.0f, (float) fader.getRight() - 10.0f);
+                g.drawText (db <= -69.0 ? juce::String ("-inf") : (db > 0 ? "+" : "") + juce::String ((int) db), fader.getX() - 30, (int) y - 6, 38, 12, juce::Justification::centredRight);
+            }
+        }
     }
 
     void resized() override
@@ -1015,7 +1029,16 @@ public:
         for (float hz : { 50.0f, 100.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f }) g.drawVerticalLine ((int) xFor (hz), plot.getY(), plot.getBottom());
         for (float db : { -72.0f, -54.0f, -36.0f, -18.0f, 0.0f }) g.drawHorizontalLine ((int) yFor (db), plot.getX(), plot.getRight());
         g.setFont (Theme::font (8.0f)); g.setColour (Theme::dim());
-        for (float hz : { 100.0f, 1000.0f, 10000.0f }) g.drawText (hz >= 1000 ? juce::String (juce::roundToInt (hz / 1000)) + "k" : juce::String ((int) hz), (int) xFor (hz) + 2, (int) plot.getBottom(), 30, 12, juce::Justification::left);
+        for (float hz : { 50.0f, 100.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f }) g.drawText (hz >= 1000 ? juce::String (juce::roundToInt (hz / 1000)) + "k" : juce::String ((int) hz), (int) xFor (hz) - 14, (int) plot.getBottom(), 28, 12, juce::Justification::centred);
+        g.drawText ("Hz", (int) plot.getRight() - 20, (int) plot.getBottom(), 20, 12, juce::Justification::right);
+        {   // phase Z: the dB scale is always printed (the bar modes, the curve modes)
+            const int mode0 = spectrumMode.getSelectedId();
+            if (mode0 <= 5 && ! segmentsBtn.getToggleState())
+            {
+                for (float db : { -72.0f, -54.0f, -36.0f, -18.0f, 0.0f }) g.drawText (juce::String ((int) db), (int) plot.getRight() - 22, (int) yFor (db) - 6, 20, 12, juce::Justification::centredRight);
+                g.drawText ("dB", (int) plot.getRight() - 22, (int) plot.getY(), 20, 10, juce::Justification::centredRight);
+            }
+        }
         auto& sp = hub.spectrum;
         if (! freezeBtn.getToggleState()) { history.maxRows = SpectrumHistory::rowsFor (historyLen.getSelectedId() == 2 ? 20.0 : 5.0, hub.sr); history.update (sp, hub.sr); }
         if (! sp.ready) return;

@@ -4259,6 +4259,24 @@ inline int runSelfTest()
         check (faces == 4 && scaled == 4 && metered == 4, "Generic faces: " + juce::String (scaled) + " of " + juce::String (faces) + " print knob ranges, " + juce::String (metered) + " carry the L / R meter column");
     }
 
+    // ===================================================================== Phase Z: the main windows, drawn offscreen for inspection (/tmp/main_*.png)
+    {
+        std::cout << "\n-- Phase Z: main windows offscreen --\n";
+        call ("new_session", R"({"name":"Selftest Windows"})");
+        for (auto t : { "Kick", "Bass", "Keys", "Vocal" }) call ("add_track", juce::String (R"({"kind":"audio","name":")") + t + "\"}");
+        auto shoot = [&] (juce::Component& c, int w, int h, const juce::String& file)
+        {
+            c.setSize (w, h); juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
+            auto snap = c.createComponentSnapshot (c.getLocalBounds(), true, 1.0f);
+            juce::File f ("/tmp/main_" + file + ".png"); f.deleteFile();
+            { juce::FileOutputStream os (f); juce::PNGImageFormat().writeImageToStream (snap, os); }
+            return snap.isValid() && snap.getWidth() == w;
+        };
+        TimelineView tl (*session); MixerView mx (*session, &tl.state); BeatPage bp (*session); MasteringProject mp (*session); MasteringContent mc (mp);
+        const bool ok = shoot (tl, 1600, 900, "edit") && shoot (mx, 1600, 900, "mix") && shoot (bp, 1600, 900, "beat") && shoot (mc, 1600, 900, "mastering");
+        check (ok, "Edit, Mix, Beat page and Mastering windows render offscreen at 1600 x 900");
+    }
+
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));
     check ((bool) unknown["result"]["isError"], "unknown tool reports isError");
     auto badMethod = rpc ("foo/bar", juce::var());

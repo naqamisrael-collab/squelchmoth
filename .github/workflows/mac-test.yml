@@ -30,7 +30,7 @@ jobs:
             zip: Squelchmoth-Mac-AppleSilicon.zip
             dir: Squelchmoth-AppleSilicon
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 150   # the Intel runner needs ~70 min for the full self-test since the Studio Line
     steps:
       - uses: actions/checkout@v4
 

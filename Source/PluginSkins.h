@@ -307,22 +307,47 @@ namespace Skins
                 }
             }
 
+            // phase Z: a tick ring (majors at 0, 25, 50, 75, 100 %) on every style that doesn't draw its own, and a hover / drag halo
+            if (style != KnobStyle::vintage)
+                for (int i = 0; i <= 20; ++i)
+                {
+                    const float a = a0 + (a1 - a0) * (float) i / 20.0f; const bool major = i % 5 == 0;
+                    const auto p1 = c.getPointOnCircumference (radius + 1.5f, a), p2 = c.getPointOnCircumference (radius + (major ? 5.0f : 3.5f), a);
+                    const bool lit = bipolar ? std::abs (a - (a0 + a1) * 0.5f) <= std::abs (angle - (a0 + a1) * 0.5f) + 0.01f && (a - (a0 + a1) * 0.5f) * (angle - (a0 + a1) * 0.5f) >= 0.0f : a <= angle + 0.01f;
+                    g.setColour ((lit ? colour : Theme::dim()).withAlpha (major ? 0.85f : 0.45f));
+                    g.drawLine (p1.x, p1.y, p2.x, p2.y, major ? 1.3f : 0.8f);
+                }
+            if (hot || dragging)
+            {
+                g.setColour (colour.withAlpha (dragging ? 0.55f : 0.3f));
+                g.drawEllipse (k.expanded (style == KnobStyle::vintage ? 6.0f : 7.0f), dragging ? 1.6f : 1.0f);
+            }
             // the range's two ends at the ends of the arc
             if (handle.endText && handle.choices.isEmpty() && ! handle.toggle)
             {
                 g.setFont (Theme::font (large ? 8.0f : 7.5f, true));
                 g.setColour (Theme::dim().withAlpha (0.9f));
                 const auto lo = handle.endText (false), hi = handle.endText (true);
-                const auto pL = c.getPointOnCircumference (radius + 3.0f, a0), pH = c.getPointOnCircumference (radius + 3.0f, a1);
+                const auto pL = c.getPointOnCircumference (radius + 6.0f, a0), pH = c.getPointOnCircumference (radius + 6.0f, a1);
                 const float wL = juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), lo) + 2.0f, wH = juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), hi) + 2.0f;
                 auto bL = juce::Rectangle<float> (pL.x - wL + 6.0f, pL.y + 1.0f, wL, 9.0f), bH = juce::Rectangle<float> (pH.x - 6.0f, pH.y + 1.0f, wH, 9.0f);
                 const auto bounds = getLocalBounds().toFloat();
                 bL = bL.withX (juce::jmax (bounds.getX(), bL.getX())); bH = bH.withX (juce::jmin (bounds.getRight() - bH.getWidth(), bH.getX()));
+                // keep the scale clear of the value readout below the dial
+                const float maxY = valueArea.getY() - 9.0f;
+                bL = bL.withY (juce::jmin (bL.getY(), maxY)); bH = bH.withY (juce::jmin (bH.getY(), maxY));
                 g.drawText (lo, bL, juce::Justification::centredLeft); g.drawText (hi, bH, juce::Justification::centredRight);
             }
             g.setFont (Theme::font (large ? 11.0f : 9.5f, true));
-            g.setColour (Theme::text());
-            g.drawText (handle.text(), valueArea, juce::Justification::centred);
+            {   // a recessed readout: dark well, an accent edge while it is being moved
+                const auto txt = handle.text();
+                const float tw = juce::jmin (valueArea.getWidth() - 2.0f, juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), txt) + 14.0f);
+                auto well = valueArea.withSizeKeepingCentre (tw, valueArea.getHeight() + 1.0f);
+                g.setColour (juce::Colours::black.withAlpha (0.5f)); g.fillRoundedRectangle (well, well.getHeight() * 0.5f);
+                g.setColour (dragging ? colour : juce::Colours::white.withAlpha (hot ? 0.18f : 0.08f)); g.drawRoundedRectangle (well, well.getHeight() * 0.5f, 1.0f);
+                g.setColour (dragging ? colour.brighter (0.3f) : Theme::text());
+                g.drawText (txt, valueArea, juce::Justification::centred);
+            }
             g.setFont (Theme::font (large ? 10.0f : 9.0f));
             g.setColour (Theme::dim());
             g.drawText (handle.label.toUpperCase(), labelArea, juce::Justification::centred);
@@ -332,19 +357,21 @@ namespace Skins
         void mouseDown (const juce::MouseEvent& e) override
         {
             if (e.mods.isPopupMenu()) { showMenu(); return; }
-            dragStart = handle.get();
+            dragStart = handle.get(); dragging = true; repaint();
             if (handle.gestureBegin) handle.gestureBegin();
         }
+        void mouseEnter (const juce::MouseEvent&) override { hot = true; repaint(); }
+        void mouseExit (const juce::MouseEvent&) override  { hot = false; repaint(); }
         void mouseDrag (const juce::MouseEvent& e) override
         {
-            auto sens = (e.mods.isCommandDown() || e.mods.isCtrlDown()) ? 1200.0f : 200.0f;
+            auto sens = (e.mods.isCommandDown() || e.mods.isCtrlDown() || e.mods.isShiftDown()) ? 1200.0f : 200.0f;   // Cmd, Ctrl or Shift = fine
             handle.set (dragStart - (float) e.getDistanceFromDragStartY() / sens);
             repaint();
             if (onChange) onChange();
         }
-        void mouseUp (const juce::MouseEvent&) override            { if (handle.gestureEnd) handle.gestureEnd(); }
+        void mouseUp (const juce::MouseEvent&) override            { dragging = false; repaint(); if (handle.gestureEnd) handle.gestureEnd(); }
         void mouseDoubleClick (const juce::MouseEvent&) override   { handle.set (handle.defaultNorm); repaint(); if (onChange) onChange(); }
-        void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w) override { handle.set (handle.get() + w.deltaY * 0.08f); repaint(); if (onChange) onChange(); }
+        void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w) override { handle.set (handle.get() + w.deltaY * (e.mods.isShiftDown() ? 0.015f : 0.08f)); repaint(); if (onChange) onChange(); }
 
         void showMenu()
         {
@@ -372,6 +399,7 @@ namespace Skins
         juce::Colour colour;
         KnobStyle style;
         bool large;
+        bool hot = false, dragging = false;
     private:
         float dragStart = 0.0f;
     };
