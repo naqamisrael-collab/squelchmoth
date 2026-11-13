@@ -487,10 +487,23 @@
             const float act = juce::jlimit (0.0f, 1.0f, bb->activity.load() * 3.0f);
             float amp = 1.0f;
             const int n = 12;
+            const float stepMs = bb->bank[SqBucketPlugin::time];
+            g.setFont (Theme::font (8.0f));
+            for (float db : { -6.0f, -12.0f, -24.0f })   // phase Z: level ruler for the repeats
+            {
+                const float y = plot.getBottom() - plot.getHeight() * juce::Decibels::decibelsToGain (db);
+                g.setColour (juce::Colours::white.withAlpha (0.07f)); g.drawHorizontalLine ((int) y, plot.getX(), plot.getRight());
+                g.setColour (juce::Colours::white.withAlpha (0.5f)); g.drawText (juce::String ((int) db) + " dB", (int) plot.getRight() - 40, (int) y - 10, 40, 10, juce::Justification::right);
+            }
             for (int k = 0; k < n && amp > 0.02f; ++k)
             {
                 const float x = plot.getX() + plot.getWidth() * ((float) k + 0.5f) / (float) n;
                 const float h = plot.getHeight() * amp;
+                if (bb->sync.get() == 0)   // time of each repeat
+                {
+                    g.setColour (juce::Colours::white.withAlpha (0.55f)); g.setFont (Theme::font (8.0f));
+                    g.drawText (k == 0 ? juce::String ("0 ms") : juce::String (juce::roundToInt (stepMs * (float) k)), (int) x - 24, (int) plot.getBottom() + 1, 48, 9, juce::Justification::centred);
+                }
                 const float dark = (float) k / (float) n;
                 const auto col = acc.interpolatedWith (juce::Colour (0xff6a2aff), dark).withMultipliedBrightness (1.0f - 0.45f * dark);
                 g.setGradientFill (juce::ColourGradient (col.withAlpha (0.95f), x, plot.getBottom() - h, col.withAlpha (0.15f), x, plot.getBottom(), false));

@@ -65,6 +65,14 @@
             g.setColour (juce::Colours::white.withAlpha (0.07f));
             for (float d = -54; d < 0; d += 6) { g.drawVerticalLine ((int) px (d), curveR.getY(), curveR.getBottom()); g.drawHorizontalLine ((int) py (d), curveR.getX(), curveR.getRight()); }
             g.setColour (juce::Colours::white.withAlpha (0.18f)); g.drawLine (px (lo), py (lo), px (0), py (0), 1.0f);
+            g.setFont (Theme::font (8.0f)); g.setColour (juce::Colours::white.withAlpha (0.5f));   // phase Z: dB on both axes
+            for (float d = -48; d < 0; d += 12)
+            {
+                g.drawText (juce::String ((int) d), (int) px (d) + 2, (int) curveR.getBottom() - 24, 26, 9, juce::Justification::left);
+                g.drawText (juce::String ((int) d), (int) curveR.getX() + 3, (int) py (d) - 9, 26, 9, juce::Justification::left);
+            }
+            g.drawText ("IN dB", curveR.reduced (6.0f, 14.0f).toNearestInt(), juce::Justification::bottomLeft);
+            g.drawText ("OUT dB", curveR.reduced (6.0f, 16.0f).toNearestInt(), juce::Justification::topRight);
             const int md = dyn->mode.get();
             const float thr = dyn->bank[SqApexDynamicsPlugin::threshold], rat = dyn->bank[SqApexDynamicsPlugin::ratio], kn = dyn->bank[SqApexDynamicsPlugin::knee], dep = dyn->bank[SqApexDynamicsPlugin::depth];
             juce::Path pth;
@@ -319,6 +327,20 @@
                 if (i == 0) fr.startNewSubPath (r.getX() + (float) i, y); else fr.lineTo (r.getX() + (float) i, y);
             }
             glowStroke (g, fr, acc, 2.0f);
+            // phase Z: Hz along the bottom, dB up the right (the curve spans -36..+6 dB)
+            g.setFont (Theme::font (8.5f));
+            for (float f : { 20.0f, 30.0f, 50.0f, 100.0f, 200.0f, 300.0f, 500.0f })
+            {
+                g.setColour (juce::Colours::white.withAlpha (0.06f)); g.drawVerticalLine ((int) xf (f), r.getY(), r.getBottom());
+                g.setColour (juce::Colours::white.withAlpha (0.5f)); g.drawText (juce::String ((int) f), (int) xf (f) + 2, (int) r.getBottom() - 12, 30, 10, juce::Justification::left);
+            }
+            g.drawText ("Hz", (int) r.getRight() - 24, (int) r.getBottom() - 12, 20, 10, juce::Justification::right);
+            for (float db : { 0.0f, -12.0f, -24.0f })
+            {
+                const float y = r.getBottom() - 8.0f - (db + 36.0f) / 42.0f * (r.getHeight() - 20.0f);
+                g.setColour (juce::Colours::white.withAlpha (0.06f)); g.drawHorizontalLine ((int) y, r.getX(), r.getRight());
+                g.setColour (juce::Colours::white.withAlpha (0.5f)); g.drawText ((db < 0 ? juce::String ((int) db) : juce::String ("0")) + " dB", (int) r.getRight() - 46, (int) y - 10, 42, 10, juce::Justification::right);
+            }
             // sub waves (lower and upper), animated with the level
             const float lvl = juce::jlimit (0.0f, 1.0f, sub->subLevel.load() * 2.0f + 0.15f);
             auto wv = r.reduced (20.0f, r.getHeight() * 0.3f);

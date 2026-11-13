@@ -108,6 +108,26 @@
             juce::Path fill (env); fill.lineTo (plot.getRight(), plot.getBottom()); fill.lineTo (plot.getX(), plot.getBottom()); fill.closeSubPath();
             g.setGradientFill (juce::ColourGradient (acc.withAlpha (0.3f), plot.getX(), plot.getY(), acc.withAlpha (0.02f), plot.getX(), plot.getBottom(), false)); g.fillPath (fill);
             glowStroke (g, env, acc, 2.0f);
+            {   // phase Z: the cloud's time ruler (0 .. Time) and a level scale
+                const double tmR = mu->proc.timeMsNow();
+                g.setFont (Theme::font (8.0f));
+                for (int k = 0; k <= 4; ++k)
+                {
+                    const float x = plot.getX() + plot.getWidth() * k / 4.0f;
+                    const double ms = tmR * k / 4.0;
+                    g.setColour (juce::Colours::white.withAlpha (0.06f)); g.drawVerticalLine ((int) x, plot.getY(), plot.getBottom());
+                    g.setColour (juce::Colours::white.withAlpha (0.5f));
+                    const auto lab = ms >= 1000.0 ? juce::String (ms / 1000.0, 2) + " s" : juce::String (juce::roundToInt ((float) ms)) + " ms";
+                    if (k < 4) g.drawText (lab, (int) x + 2, (int) plot.getBottom() - 10, 60, 9, juce::Justification::left);
+                    else       g.drawText (lab, (int) x - 62, (int) plot.getBottom() - 10, 60, 9, juce::Justification::right);
+                }
+                for (float db : { 0.0f, -6.0f, -12.0f })
+                {
+                    const float y = plot.getBottom() - juce::Decibels::decibelsToGain (db) * plot.getHeight() * 0.9f;
+                    g.setColour (juce::Colours::white.withAlpha (0.06f)); g.drawHorizontalLine ((int) y, plot.getX(), plot.getRight());
+                    g.setColour (juce::Colours::white.withAlpha (0.5f)); g.drawText (juce::String ((int) db) + " dB", (int) plot.getX() + 2, (int) y - 10, 40, 9, juce::Justification::left);
+                }
+            }
             // taps (the processor's real layout once it has run; otherwise drawn from the knobs)
             const int nt = mu->proc.numTaps();
             float mx = 1e-6f; for (int k = 0; k < nt; ++k) mx = juce::jmax (mx, mu->proc.tapGain (0)[k]);

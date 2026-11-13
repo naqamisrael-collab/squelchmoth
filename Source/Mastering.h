@@ -873,13 +873,16 @@ public:
         if (fader.isVisible() && fader.getHeight() > 60)
         {
             g.setFont (Theme::font (8.0f, true));
-            for (double db : { 12.0, 6.0, 0.0, -6.0, -12.0, -24.0, -36.0, -48.0, -70.0 })
+            float lastLabelY = -1.0e6f;
+            for (double db : { -70.0, -48.0, -36.0, -24.0, -12.0, -6.0, 0.0, 6.0, 12.0 })   // bottom up, so -inf always keeps its label
             {
                 const float y = (float) fader.getY() + (float) fader.getPositionOfValue (db);
                 const bool zero = std::abs (db) < 0.01;
                 g.setColour (zero ? Theme::acid() : Theme::dim().withAlpha (0.8f));
                 g.drawHorizontalLine ((int) y, (float) fader.getX() + 10.0f, (float) fader.getX() + 20.0f);
                 g.drawHorizontalLine ((int) y, (float) fader.getRight() - 20.0f, (float) fader.getRight() - 10.0f);
+                if (std::abs (y - lastLabelY) < 9.0f && db > -69.0) continue;   // the scale bunches up at the bottom: keep numbers legible
+                lastLabelY = y;
                 g.drawText (db <= -69.0 ? juce::String ("-inf") : (db > 0 ? "+" : "") + juce::String ((int) db), fader.getX() - 30, (int) y - 6, 38, 12, juce::Justification::centredRight);
             }
         }
@@ -1036,7 +1039,7 @@ public:
             if (mode0 <= 5 && ! segmentsBtn.getToggleState())
             {
                 for (float db : { -72.0f, -54.0f, -36.0f, -18.0f, 0.0f }) g.drawText (juce::String ((int) db), (int) plot.getRight() - 22, (int) yFor (db) - 6, 20, 12, juce::Justification::centredRight);
-                g.drawText ("dB", (int) plot.getRight() - 22, (int) plot.getY(), 20, 10, juce::Justification::centredRight);
+                g.drawText ("dB", (int) plot.getRight() - 46, (int) plot.getY(), 20, 10, juce::Justification::centredRight);
             }
         }
         auto& sp = hub.spectrum;
@@ -1200,8 +1203,8 @@ public:
         g.setFont (Theme::font (8.0f)); g.setColour (Theme::dim());
         auto sc = inner.removeFromTop (12.0f);
         for (float db = bottomDb; db <= topDb + 0.01f; db += (topDb - bottomDb) / 6.0f)
-            g.drawText (juce::String ((int) db), (int) (sc.getX() + 20.0f + (db - bottomDb) / (topDb - bottomDb) * (sc.getWidth() - 20.0f)) - 12, (int) sc.getY(), 24, 11, juce::Justification::centred);
-        g.drawText (scaleName, sc.toNearestInt(), juce::Justification::centredRight);
+            g.drawText (juce::String ((int) db), (int) (sc.getX() + 20.0f + (db - bottomDb) / (topDb - bottomDb) * (sc.getWidth() - 56.0f)) - 12, (int) sc.getY(), 24, 11, juce::Justification::centred);
+        g.drawText (scaleName, sc.toNearestInt(), juce::Justification::centredRight);   // the unit sits clear of the last number
         // clip LED
         auto led = juce::Rectangle<float> (r.getRight() - 48.0f, r.getY() + 6.0f, 40.0f, 12.0f);
         g.setColour (hub.clipped ? Theme::red() : Theme::panel2()); g.fillRoundedRectangle (led, 2.0f);

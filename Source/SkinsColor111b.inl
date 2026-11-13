@@ -88,6 +88,22 @@
             ColourBits::caption (g, plot.removeFromTop (14.0f), kp.mode == Tremor::rhythm ? "RHYTHM  (bar height = step depth)" : "GAIN OVER TWO CYCLES");
             plot.removeFromTop (4.0f);
             g.setColour (juce::Colours::white.withAlpha (0.08f)); for (int k = 1; k < 4; ++k) g.drawHorizontalLine ((int) (plot.getY() + plot.getHeight() * k / 4.0f), plot.getX(), plot.getRight());
+            {   // phase Z: gain scale (linear 0..100 %, with the dB beside it) and a cycle / step ruler
+                g.setFont (Theme::font (8.0f)); g.setColour (juce::Colours::white.withAlpha (0.5f));
+                for (int k = 0; k < 4; ++k)
+                {
+                    const float gv = 1.0f - k / 4.0f, y = plot.getY() + plot.getHeight() * k / 4.0f;
+                    g.drawText (juce::String (juce::roundToInt (gv * 100)) + "%  " + juce::String (Eng::gainToDb (gv), 1) + " dB", (int) plot.getRight() - 84, (int) y + 1, 82, 9, juce::Justification::right);
+                }
+                if (kp.mode != Tremor::rhythm)
+                    for (int c = 0; c <= 4; ++c)
+                    {
+                        const float x = plot.getX() + plot.getWidth() * c / 4.0f;
+                        g.setColour (juce::Colours::white.withAlpha (0.06f)); g.drawVerticalLine ((int) x, plot.getY(), plot.getBottom());
+                        g.setColour (juce::Colours::white.withAlpha (0.5f));
+                        if (c < 4) g.drawText (juce::String (c * 180) + " deg" + (c == 0 ? "  (" + juce::String (juce::roundToInt (2000.0f / juce::jmax (0.01f, (float) tr->proc.cycleHz()))) + " ms shown)" : juce::String()), (int) x + 2, (int) plot.getBottom() - 10, 160, 9, juce::Justification::left);
+                    }
+            }
             auto gainAt = [&] (float pos, float stepDepth)
             {
                 long long idx = 0; const float lp = ModShapes::feel (ModShapes::swing (pos, kp.groove, idx), kp.feel);

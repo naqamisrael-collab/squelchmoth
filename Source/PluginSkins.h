@@ -535,9 +535,78 @@ namespace Skins
             for (float db = -dbRange; db <= dbRange; db += dbRange / 3.0f)
                 g.drawHorizontalLine ((int) (r.getCentreY() - db / dbRange * r.getHeight() * 0.5f), r.getX(), r.getRight());
             g.setFont (Theme::font (8.5f));
-            g.setColour (Theme::dim().withAlpha (0.8f));
-            for (float hz : { 100.0f, 1000.0f, 10000.0f })
-                g.drawText (hz >= 1000 ? juce::String (juce::roundToInt (hz / 1000.0f)) + "k" : juce::String ((int) hz), (int) xForHz (hz, r) + 2, (int) r.getBottom() - 12, 30, 11, juce::Justification::left);
+            g.setColour (Theme::dim().withAlpha (0.85f));
+            // phase Z: every gridline numbered - Hz along the bottom, dB up the right edge, units printed
+            for (float hz : { 50.0f, 100.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f })
+                if (r.getWidth() > 260.0f || hz == 100.0f || hz == 1000.0f || hz == 10000.0f)
+                    g.drawText (hz >= 1000 ? juce::String (juce::roundToInt (hz / 1000.0f)) + "k" : juce::String ((int) hz), (int) xForHz (hz, r) + 2, (int) r.getBottom() - 12, 30, 11, juce::Justification::left);
+            g.drawText ("Hz", (int) r.getRight() - 22, (int) r.getBottom() - 12, 20, 11, juce::Justification::right);
+            if (r.getHeight() > 70.0f)
+            {
+                for (float db = -dbRange; db <= dbRange + 0.01f; db += dbRange / 3.0f)
+                {
+                    if (std::abs (db + dbRange) < 0.01f) continue;   // the bottom line sits on the Hz row
+                    const float y = r.getCentreY() - db / dbRange * r.getHeight() * 0.5f;
+                    g.drawText ((db > 0.05f ? "+" : "") + juce::String (juce::roundToInt (db)), (int) r.getRight() - 30, (int) y - 1, 28, 10, juce::Justification::right);
+                }
+                g.drawText ("dB", (int) r.getRight() - 52, (int) r.getY() + 1, 20, 10, juce::Justification::right);
+            }
+        }
+
+        // phase Z pass 3: shared axis helpers so every graph carries numbers and units
+        static juce::String timeLabel (float sec)
+        {
+            if (sec <= 0.0f) return "0";
+            if (sec < 1.0f) return juce::String (juce::roundToInt (sec * 1000.0f));
+            return std::abs (sec - std::round (sec)) < 0.01f ? juce::String ((int) std::round (sec)) : juce::String (sec, 1);
+        }
+        static float niceStep (float span, int maxTicks)
+        {
+            const float raw = span / (float) juce::jmax (1, maxTicks);
+            const float mag = std::pow (10.0f, std::floor (std::log10 (juce::jmax (1.0e-6f, raw))));
+            for (float m : { 1.0f, 2.0f, 2.5f, 5.0f, 10.0f })
+                if (raw <= m * mag) return m * mag;
+            return 10.0f * mag;
+        }
+        /** Time ruler along the bottom of r: 0 .. spanSec, ticks + numbers + the unit (ms below 1 s, s above). */
+        void drawTimeAxis (juce::Graphics& g, juce::Rectangle<float> r, float spanSec, int maxTicks = 8)
+        {
+            if (spanSec <= 0.0f) return;
+            maxTicks = juce::jmax (2, juce::jmin (maxTicks, (int) (r.getWidth() / 55.0f)));
+            const float step = niceStep (spanSec, maxTicks);
+            const bool ms = spanSec < 1.5f;
+            g.setFont (Theme::font (8.5f));
+            for (float t = 0.0f; t <= spanSec + step * 0.01f; t += step)
+            {
+                const float x = r.getX() + t / spanSec * r.getWidth();
+                g.setColour (Theme::text().withAlpha (0.07f));
+                g.drawVerticalLine ((int) x, r.getY(), r.getBottom());
+                g.setColour (Theme::text().withAlpha (0.35f));
+                g.drawVerticalLine ((int) x, r.getBottom() - 4.0f, r.getBottom());
+                if (x > r.getRight() - 30.0f) continue;
+                g.setColour (Theme::dim().withAlpha (0.9f));
+                g.drawText (ms ? juce::String (juce::roundToInt (t * 1000.0f)) : timeLabel (t), (int) x + 2, (int) r.getBottom() - 13, 40, 10, juce::Justification::left);
+            }
+            g.setColour (Theme::dim().withAlpha (0.9f));
+            g.drawText (ms ? "ms" : "s", (int) r.getRight() - 22, (int) r.getBottom() - 13, 20, 10, juce::Justification::right);
+        }
+        /** Level ruler up the left edge of r: lo..hi dB mapped bottom..top, every stepDb, with "dB". */
+        void drawDbAxis (juce::Graphics& g, juce::Rectangle<float> r, float lo, float hi, float stepDb, bool grid = true, bool rightSide = false)
+        {
+            g.setFont (Theme::font (8.5f));
+            for (float db = lo; db <= hi + 0.01f; db += stepDb)
+            {
+                const float y = r.getBottom() - (db - lo) / (hi - lo) * r.getHeight();
+                if (grid) { g.setColour (Theme::text().withAlpha (0.07f)); g.drawHorizontalLine ((int) y, r.getX(), r.getRight()); }
+                if (y > r.getBottom() - 12.0f) continue;   // keep clear of the bottom ruler
+                g.setColour (Theme::dim().withAlpha (0.9f));
+                const auto txt = (db > 0.05f ? "+" : "") + juce::String (juce::roundToInt (db));
+                if (rightSide) g.drawText (txt, (int) r.getRight() - 32, (int) y - 1, 30, 10, juce::Justification::right);
+                else           g.drawText (txt, (int) r.getX() + 2, (int) y - 1, 30, 10, juce::Justification::left);
+            }
+            g.setColour (Theme::dim().withAlpha (0.9f));
+            if (rightSide) g.drawText ("dB", (int) r.getRight() - 62, (int) r.getY() - 1, 28, 10, juce::Justification::right);
+            else           g.drawText ("dB", (int) r.getX() + 34, (int) r.getY() - 1, 28, 10, juce::Justification::left);
         }
 
         void drawCurve (juce::Graphics& g, juce::Rectangle<float> r, std::function<float (float hz)> dbAt, float dbRange, juce::Colour c, bool fill = true)
@@ -780,8 +849,19 @@ namespace Skins
             g.drawVerticalLine ((int) tx, r.getY(), r.getBottom());
             g.setFont (Theme::font (8.5f));
             g.setColour (Theme::dim());
-            g.drawText ("IN", r.withTrimmedTop (r.getHeight() - 12.0f).toNearestInt(), juce::Justification::centredRight);
-            g.drawText ("OUT", r.withWidth (30.0f).toNearestInt(), juce::Justification::topLeft);
+            // phase Z: dB numbers on both axes (grid lines are every 10 dB), plus threshold and ratio
+            for (int i = 1; i < 6; ++i)
+            {
+                const auto lab = juce::String (-60 + i * 10);
+                g.drawText (lab, (int) (r.getX() + r.getWidth() * (float) i / 6.0f) + 2, (int) r.getBottom() - 12, 28, 10, juce::Justification::left);
+                g.drawText (lab, (int) r.getX() + 2, (int) (r.getBottom() - r.getHeight() * (float) i / 6.0f) - 1, 28, 10, juce::Justification::left);
+            }
+            g.drawText ("IN dB", r.withTrimmedTop (r.getHeight() - 12.0f).toNearestInt(), juce::Justification::centredRight);
+            g.drawText ("OUT dB", r.withWidth (50.0f).toNearestInt(), juce::Justification::topLeft);
+            g.setColour (Theme::amber());
+            g.drawText ("thr " + juce::String (threshDb, 1) + " dB   " + (ratio < 1.0f ? juce::String ("1:") + juce::String (1.0f / ratio, 1) : juce::String (ratio, 1) + ":1"),
+                        (int) juce::jmin (tx + 4.0f, r.getRight() - 120.0f), (int) r.getY() + 14, 116, 11, juce::Justification::left);
+            g.setColour (Theme::dim());
             // activity + estimated gain reduction meter
             auto in = activityDb();
             inSmooth = in > inSmooth ? in : inSmooth - 1.5f;
@@ -803,6 +883,19 @@ namespace Skins
             g.setFont (Theme::font (8.0f));
             g.drawText ("IN", inBar.toNearestInt().withHeight (10).translated (0, (int) inBar.getHeight() - 10), juce::Justification::centred);
             g.drawText ("GR", grBar.toNearestInt().withHeight (10).translated (0, (int) grBar.getHeight() - 10), juce::Justification::centred);
+            g.setFont (Theme::font (7.5f));
+            for (int db : { 6, 12, 18 })   // GR scale: 0 at the top, 24 dB at the bottom
+            {
+                const float y = grBar.getY() + grBar.getHeight() * (float) db / 24.0f;
+                g.setColour (Theme::text().withAlpha (0.3f)); g.drawHorizontalLine ((int) y, grBar.getX(), grBar.getRight());
+                g.setColour (Theme::dim()); g.drawText (juce::String (db), (int) grBar.getX(), (int) y, (int) grBar.getWidth(), 9, juce::Justification::centred);
+            }
+            for (int db : { -48, -36, -24, -12 })   // IN scale: -60 at the bottom, 0 at the top
+            {
+                const float y = inBar.getBottom() - inBar.getHeight() * (float) (db + 60) / 60.0f;
+                g.setColour (Theme::text().withAlpha (0.3f)); g.drawHorizontalLine ((int) y, inBar.getX(), inBar.getRight());
+                g.setColour (Theme::dim()); g.drawText (juce::String (db), (int) inBar.getX(), (int) y, (int) inBar.getWidth(), 9, juce::Justification::centred);
+            }
             g.setColour (Theme::text());
             g.setFont (Theme::font (9.0f, true));
             g.drawText ("-" + juce::String (grSmooth, 1), grBar.toNearestInt().withHeight (12), juce::Justification::centred);
@@ -831,7 +924,15 @@ namespace Skins
             g.fillRoundedRectangle (r.withWidth (r.getWidth() * prop).reduced (3.0f), 2.0f);
             auto tx = r.getX() + (thresh + 60.0f) / 60.0f * r.getWidth();
             g.setColour (Theme::amber()); g.drawVerticalLine ((int) tx, r.getY(), r.getBottom());
-            g.setFont (Theme::font (8.5f)); g.setColour (Theme::dim());
+            g.setFont (Theme::font (8.5f));
+            for (int db = -60; db <= 0; db += 6)   // phase Z: input level ruler
+            {
+                const float x = r.getX() + (float) (db + 60) / 60.0f * r.getWidth();
+                g.setColour (Theme::text().withAlpha (0.3f)); g.drawVerticalLine ((int) x, r.getBottom() - 5.0f, r.getBottom());
+                if (db % 12 == 0 && x < r.getRight() - 24.0f) { g.setColour (Theme::dim()); g.drawText (juce::String (db), (int) x + 2, (int) r.getBottom() - 14, 28, 10, juce::Justification::left); }
+            }
+            g.setColour (Theme::dim()); g.drawText ("dB", (int) r.getRight() - 22, (int) r.getBottom() - 14, 20, 10, juce::Justification::right);
+            g.drawText ("in " + (env > -99.0f ? juce::String (env, 1) : juce::String ("-inf")) + " dB", (int) r.getRight() - 90, (int) r.getY() + 4, 86, 10, juce::Justification::right);
             g.drawText ("threshold " + juce::String (juce::roundToInt (thresh)) + " dB   release tone: treble " + juce::String ((int) (v ("TrebSus") * 100)) + "%  bass " + juce::String ((int) (v ("BassSus") * 100)) + "%", r.toNearestInt().reduced (6, 0), juce::Justification::centredLeft);
         }
     };
@@ -867,8 +968,9 @@ namespace Skins
                 auto attack = t < 0.05f ? (t / 0.05f) : std::exp (-(t - 0.05f) * 40.0f);
                 return juce::jlimit (-1.0f, 1.0f, base * 0.7f + point * attack * 0.6f) * std::sin (t * 90.0f);
             }, accent, 1.5f);
+            drawTimeAxis (g, r, 0.25f);
             g.setFont (Theme::font (9.0f)); g.setColour (Theme::dim());
-            g.drawText (point > 0.05f ? "attack sharpened" : point < -0.05f ? "attack softened" : "neutral", r.toNearestInt().reduced (6, 4), juce::Justification::topLeft);
+            g.drawText (point > 0.05f ? "attack sharpened" : point < -0.05f ? "attack softened" : "neutral",  r.toNearestInt().reduced (6, 4), juce::Justification::topLeft);
         }
     };
 
@@ -881,6 +983,7 @@ namespace Skins
             auto r = getLocalBounds().toFloat().reduced (6.0f);
             auto curve = r.removeFromLeft (r.getHeight()).reduced (4.0f);
             r.removeFromLeft (10.0f);
+            auto caption = r.removeFromTop (16.0f);   // phase Z: the readout gets its own row above the waves
             auto drive = v ("Drive", v ("Density", v ("Triode", v ("Overdrive", v ("Louder", v ("Input", 0.5f)))))) ;
             if (h ("Density")) drive = juce::jmax (0.0f, (v ("Density") - 0.2f) / 0.8f);
             if (h ("Input")) drive = juce::jlimit (0.0f, 1.0f, (v ("Input") - 0.5f) * 2.0f);
@@ -897,11 +1000,28 @@ namespace Skins
                 if (i == 0) p.startNewSubPath (px, py); else p.lineTo (px, py);
             }
             g.setColour (accent); g.strokePath (p, juce::PathStrokeType (2.2f));
+            g.setFont (Theme::font (8.0f)); g.setColour (Theme::dim());   // phase Z: full-scale numbers on the transfer box
+            g.setColour (Theme::text().withAlpha (0.12f));
+            g.drawHorizontalLine ((int) curve.getCentreY(), curve.getX(), curve.getRight()); g.drawVerticalLine ((int) curve.getCentreX(), curve.getY(), curve.getBottom());
+            g.setColour (Theme::dim());
+            g.drawText ("+1", curve.toNearestInt().reduced (3, 2), juce::Justification::topLeft);
+            g.drawText ("-1", curve.toNearestInt().reduced (3, 2), juce::Justification::bottomLeft);
+            g.drawText ("IN", curve.toNearestInt().reduced (3, 2), juce::Justification::bottomRight);
+            g.drawText ("OUT", curve.toNearestInt().reduced (3, 2).translated (14, 0), juce::Justification::topLeft);
+            g.drawText ("x" + juce::String (k, 1), curve.toNearestInt().reduced (3, 2), juce::Justification::topRight);
             // the wave before/after
             drawWave (g, r, [] (float t) { return std::sin (t * 12.56f) * 0.9f; }, Theme::dim().withAlpha (0.5f), 1.2f);
             drawWave (g, r, [=] (float t) { return std::tanh (std::sin (t * 12.56f) * 0.9f * k) / std::tanh (k); }, accent, 2.0f);
             g.setFont (Theme::font (9.0f)); g.setColour (Theme::dim());
-            g.drawText ("harmonic drive " + juce::String ((int) (drive * 100)) + "%", r.toNearestInt().reduced (6, 4), juce::Justification::topLeft);
+            g.drawText ("harmonic drive " + juce::String ((int) (drive * 100)) + "%   test sine -0.9 dBFS -> out " + juce::String (juce::Decibels::gainToDecibels (std::tanh (0.9f * k) / std::tanh (k)), 1) + " dBFS", caption.toNearestInt().reduced (6, 0), juce::Justification::centredLeft);
+            g.setFont (Theme::font (8.5f));
+            for (int c = 0; c <= 2; ++c)   // two cycles of a test sine
+            {
+                const float x = r.getX() + r.getWidth() * (float) c / 2.0f;
+                g.setColour (Theme::text().withAlpha (0.25f)); g.drawVerticalLine ((int) x, r.getBottom() - 5.0f, r.getBottom());
+                g.setColour (Theme::dim()); if (c < 2) g.drawText (juce::String (c * 360) + " deg", (int) x + 2, (int) r.getBottom() - 13, 50, 10, juce::Justification::left);
+            }
+            g.drawText ("2 cycles", (int) r.getRight() - 52, (int) r.getBottom() - 13, 50, 10, juce::Justification::right);
         }
     };
 
@@ -963,7 +1083,14 @@ namespace Skins
                 g.setColour (on ? c.brighter (0.4f) : c.withAlpha (0.35f));
                 g.drawRoundedRectangle (cell, 3.0f, 1.0f);
                 if (on) { g.setColour (c.withAlpha (0.3f)); g.fillRoundedRectangle (cell.expanded (3.0f), 5.0f); }
+                if (i % 2 == 1 || i == n - 1)   // phase Z: each lamp's level in dB
+                {
+                    g.setFont (Theme::font (8.0f)); g.setColour (Theme::dim());
+                    g.drawText (juce::String (juce::roundToInt (-54.0f + 54.0f * (float) (i + 1) / (float) n)), (int) (r.getX() + w * (float) i), (int) r.getBottom() - 9, (int) w, 9, juce::Justification::centred);
+                }
             }
+            g.setFont (Theme::font (8.0f)); g.setColour (Theme::dim());
+            g.drawText ("dBFS", r.toNearestInt().withHeight (10), juce::Justification::topRight);
         }
     };
 
@@ -1009,6 +1136,15 @@ namespace Skins
                 p.lineTo (r.getX() + t1 * r.getWidth(), py);
             }
             g.setColour (accent); g.strokePath (p, juce::PathStrokeType (2.0f));
+            g.setFont (Theme::font (8.5f));   // phase Z: full-scale ruler and the real resolution
+            for (float lv : { 1.0f, 0.5f, 0.0f, -0.5f, -1.0f })
+            {
+                const float y = r.getCentreY() - lv * 0.9f * r.getHeight() * 0.45f;
+                g.setColour (Theme::text().withAlpha (0.08f)); g.drawHorizontalLine ((int) y, r.getX(), r.getRight());
+                g.setColour (Theme::dim()); g.drawText ((lv > 0 ? "+" : "") + juce::String (lv, 1), (int) r.getX() + 2, (int) y - 5, 30, 10, juce::Justification::left);
+            }
+            g.drawText (juce::String (steps) + " samples / 2 cycles   " + juce::String (levels * 2) + " levels (~" + juce::String (std::log2 ((float) levels * 2.0f), 1) + " bit)",
+                        r.toNearestInt().reduced (6, 4), juce::Justification::topRight);
         }
     };
 
@@ -1031,11 +1167,19 @@ namespace Skins
                 auto d = 2.0f + amp * 4.0f;
                 g.fillEllipse (x - d * 0.5f, y - d * 0.5f, d, d);
             }
+            // phase Z: the tail drawn in dB against real time - a straight RT60 line from 0 dB to -60 dB at "decay"
+            const float span = juce::jmax (1.0f, std::ceil (decay * 1.4f));
+            drawTimeAxis (g, r, span);
+            drawDbAxis (g, r.withTrimmedBottom (12.0f), -60.0f, 0.0f, 12.0f, true, true);
             juce::Path env;
-            for (int i = 0; i <= (int) r.getWidth(); i += 3) { auto t = (float) i / r.getWidth(); auto a = std::exp (-t * 3.0f / decay); auto y = r.getBottom() - a * r.getHeight() * 0.9f; if (i == 0) env.startNewSubPath (r.getX(), y); else env.lineTo (r.getX() + (float) i, y); }
-            g.setColour (accent.withAlpha (0.7f)); g.strokePath (env, juce::PathStrokeType (1.5f));
+            auto top = r.withTrimmedBottom (12.0f);
+            env.startNewSubPath (r.getX(), top.getY());
+            const float xEnd = r.getX() + juce::jmin (1.0f, decay / span) * r.getWidth();
+            env.lineTo (xEnd, top.getBottom());
+            g.setColour (accent.withAlpha (0.8f)); g.strokePath (env, juce::PathStrokeType (1.8f));
+            g.setColour (Theme::amber().withAlpha (0.6f)); g.drawVerticalLine ((int) xEnd, top.getY(), top.getBottom());
             g.setFont (Theme::font (9.0f)); g.setColour (Theme::dim());
-            g.drawText ("decay ~" + juce::String (decay, 1) + " s", r.toNearestInt().reduced (6, 4), juce::Justification::topLeft);
+            g.drawText ("RT60 ~" + juce::String (decay, 1) + " s", r.toNearestInt().reduced (6, 4), juce::Justification::topLeft);
         }
     };
 
@@ -1061,8 +1205,11 @@ namespace Skins
                 g.fillRoundedRectangle (x - 3.0f, r.getBottom() - hgt, 6.0f, hgt, 2.0f);
                 amp *= juce::jlimit (0.0f, 0.98f, fbNorm);
             }
+            drawTimeAxis (g, r, span / 1000.0f);
             g.setFont (Theme::font (9.0f)); g.setColour (Theme::dim());
-            g.drawText (juce::String ((int) ms) + " ms", r.toNearestInt().reduced (6, 4), juce::Justification::topRight);
+            g.drawText (juce::String ((int) ms) + " ms   feedback " + juce::String (juce::roundToInt (juce::jlimit (0.0f, 0.98f, fbNorm) * 100.0f)) + " %  ("
+                        + (fbNorm > 0.001f ? juce::String (juce::Decibels::gainToDecibels (juce::jlimit (0.0f, 0.98f, fbNorm)), 1) : juce::String ("-inf")) + " dB / repeat)",
+                        r.toNearestInt().reduced (6, 4), juce::Justification::topRight);
         }
     };
 
@@ -1134,11 +1281,16 @@ namespace Skins
                 drawWave (g, r, [=] (float t) { return std::sin (t * 60.0f) * (1.0f - depth * 0.5f * (1.0f + std::sin ((t * cycles + phase * 0.5f) * 6.283f))); }, accent, 1.5f);
             else
                 drawWave (g, r, [=] (float t) { return std::sin ((t * cycles + phase * 0.5f) * 6.283f) * depth; }, accent, 2.2f);
+            drawTimeAxis (g, r, 2.0f);   // cycles = rate * 2 across the strip, i.e. 2 seconds
+            g.setFont (Theme::font (8.5f)); g.setColour (Theme::dim());
+            g.drawText ("+" + juce::String (juce::roundToInt (depth * 100.0f)) + "%", (int) r.getX() + 2, (int) (r.getCentreY() - depth * r.getHeight() * 0.45f) - 10, 40, 10, juce::Justification::left);
+            g.drawText ("0", (int) r.getX() + 2, (int) r.getCentreY() - 10, 20, 10, juce::Justification::left);
+            g.drawText ("depth", (int) r.getX() + 2, (int) r.getY() + 14, 40, 10, juce::Justification::left);
             // playhead dot
             auto t = std::fmod (phase * 0.5f, 1.0f);
             g.setColour (Theme::text()); g.fillEllipse (r.getX() + t * r.getWidth() - 3.0f, r.getY() + 4.0f, 6.0f, 6.0f);
             g.setFont (Theme::font (9.0f)); g.setColour (Theme::dim());
-            g.drawText (juce::String (rate, 2) + " Hz", r.toNearestInt().reduced (6, 4), juce::Justification::topRight);
+            g.drawText (juce::String (rate, 2) + " Hz   period " + juce::String (juce::roundToInt (1000.0f / juce::jmax (0.01f, rate))) + " ms", r.toNearestInt().reduced (6, 4), juce::Justification::topRight);
         }
     };
 
@@ -1208,7 +1360,29 @@ namespace Skins
                 g.fillRect (x, y, 1.5f, 1.5f);
             }
             g.setFont (Theme::font (11.0f)); g.setColour (Theme::text());
-            g.drawText ("Noise-shaped dither - put this LAST on the master before a 16/24-bit bounce", r.toNearestInt(), juce::Justification::centred);
+            g.drawText ("Noise-shaped dither - put this LAST on the master before a 16/24-bit bounce", r.toNearestInt().withTrimmedBottom ((int) (r.getHeight() * 0.45f)), juce::Justification::centred);
+            // phase Z: a dBFS ruler with the 16-bit and 24-bit noise floors and the live track level
+            auto ruler = r.withTrimmedTop (r.getHeight() * 0.58f).reduced (20.0f, 0.0f).withHeight (14.0f);
+            auto xOf = [ruler] (float db) { return ruler.getX() + (1.0f - (-db) / 150.0f) * ruler.getWidth(); };
+            g.setColour (juce::Colours::black.withAlpha (0.45f)); g.fillRoundedRectangle (ruler, 3.0f);
+            const float lvl = activityDb();
+            if (lvl > -99.0f) { g.setColour (accent.withAlpha (0.8f)); g.fillRoundedRectangle (ruler.withRight (xOf (juce::jmin (0.0f, lvl))).reduced (2.0f), 2.0f); }
+            g.setFont (Theme::font (8.5f));
+            for (int db = -150; db <= 0; db += 10)
+            {
+                const float x = xOf ((float) db);
+                g.setColour (Theme::text().withAlpha (0.35f)); g.drawVerticalLine ((int) x, ruler.getBottom(), ruler.getBottom() + (db % 30 == 0 ? 6.0f : 3.0f));
+                if (db % 30 == 0) { g.setColour (Theme::dim()); g.drawText (juce::String (db), (int) x - 20, (int) ruler.getBottom() + 6, 40, 10, juce::Justification::centred); }
+            }
+            g.drawText ("dBFS", (int) ruler.getRight() + 2, (int) ruler.getY() + 2, 30, 10, juce::Justification::left);
+            for (auto fl : { std::pair<float, const char*> { -96.3f, "16-bit floor -96 dB" }, { -144.5f, "24-bit floor -144 dB" } })
+            {
+                const float x = xOf (fl.first);
+                g.setColour (Theme::amber()); g.drawVerticalLine ((int) x, ruler.getY() - 14.0f, ruler.getBottom());
+                g.drawText (fl.second, (int) x + 3, (int) ruler.getY() - 14, 140, 10, juce::Justification::left);
+            }
+            g.setColour (Theme::text());
+            g.drawText ("track " + (lvl > -99.0f ? juce::String (lvl, 1) + " dBFS" : juce::String ("silent")), (int) ruler.getRight() - 140, (int) ruler.getY() - 14, 140, 10, juce::Justification::right);
         }
     };
 
