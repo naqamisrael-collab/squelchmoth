@@ -37,6 +37,8 @@
 #include "SqKiln.h"
 #include "SqSpindle.h"
 #include "SqFissure.h"
+#include "SqDuet.h"
+#include "SqMote.h"
 
 namespace te = tracktion;
 
@@ -67,6 +69,7 @@ namespace Signature
             { "Venom",            "sqmVenom",        "Instruments", "Modern subtractive lead and bass synth: morphing oscillators, two filters in series or parallel, trance gate, drive, mod matrix, 4 macros, chorus / delay / reverb", 0xff58ff3a, "venom" },
             { "Sim Moth",         "sqmSimMoth",      "Instruments", "The simple three-oscillator synth: levels, pitches, pulse width, one filter, two envelopes and an LFO - classic sounds in seconds", 0xffffd23a, "simmoth" },
             { "Mini Moth",        "sqmMiniMoth",     "Instruments", "One-screen, ultra-light synth: oscillator + sub, filter, envelope, vibrato, chorus - stacks by the dozen", 0xff3ad6ff, "minimoth" },
+            { "Mote",             "sqmMote",         "Instruments", "The one-oscillator synth done properly: a shape that sweeps sine, triangle, saw and square (width to a pulse), sub, coloured noise, drive, a filter with six types and three slopes, two envelopes with honest times, an LFO with fade-in, poly / mono / legato, glide, unison to 8, HD and an 8-slot matrix", 0xffffa35a, "mote" },
             { "Thump",            "sqmThump",        "Instruments", "Kick drum synth: pitch sweep with curve, body harmonic, click, sub layer, drive and tone - every kick from 808 to hardstyle", 0xffff5a3a, "thump" },
             { "Hive Pads",        "sqmHivePads",     "Instruments", "The pad sampler: 64 pads in 4 banks, 8 layers per pad (velocity / round-robin / random / crossfade), choke groups, per-pad tune / envelope / filter, the 27 kits in one click, slice a loop to pads", 0xffffc23a, "hivepads" },
             { "Dial 10",          "sqmDial10",       "Instruments", "Two-operator FM in sixteen knobs: ratio, index, feedback, two envelopes, vibrato - bells, basses, keys and plucks", 0xffff9a3a, "dial10" },
@@ -125,6 +128,8 @@ namespace Signature
             { "Kiln",             "sqmKiln",         "Saturation",  "Multiband saturation on the Cinder engine: up to six bands that sum back flat, each with its own model of the ten, drive, bias, dynamics, mix and output; oversampling to 16x (minimum or linear phase); an LFO and an envelope follower routed by a four-slot matrix to any band's drive or mix; the furnace view shows the heat each band is adding", 0xffff7a2e, "kiln" },
             { "Spindle Delay",    "sqmSpindle",      "Delay",       "The delay flagship: digital, tape, analog and diffuse characters; normal, ping-pong and cross routing; times free or synced (dotted and triplet too), left and right linked or apart; filters, drive, wow, flutter and diffusion inside the loop; tape-style gliding or clean cross-faded time changes; ducking, freeze and width; the echo trail shows where every repeat will land", 0xff3fe0d0, "spindle" },
             { "Fissure Filter",   "sqmFissure",      "Filter",      "The filter flagship: four filters (low-pass, high-pass, band-pass, notch, peak, comb, vowel) at 12 / 24 / 48 dB/oct with resonance, drive, pan and mix, routed serial, parallel, two pairs or mid / side; two LFOs (free or synced) and an envelope follower through an eight-slot matrix; every curve drawn as it really responds, with the swept range lit", 0xff3ee8ff, "fissure" },
+            { "Duet Filter",      "sqmDuetFilter",   "Filter",      "Two filters (low-pass, high-pass, band-pass, notch, peak, comb, vowel) at 12 / 24 / 48 dB/oct, routed serial, parallel, stereo (one per side) or mid / side; link them at an interval so one knob moves both; an LFO with its own depth per filter and a stereo phase that pulls left and right apart; an envelope follower from the input or a sidechain; both real curves drawn, left and right", 0xff35e6c8, "duet" },
+            { "Speck Filter",     "sqmSpeckFilter",  "Filter",      "The quick filter: one filter (seven types, 12 / 24 / 48 dB/oct) with resonance, drive and gain, an envelope follower (input or sidechain) and an LFO with stereo phase; the real curve, the swept range and the envelope level in dB", 0xff9dff4a, "speck" },
             { "Torque Comp",      "sqmTorqueComp",   "Dynamics",    "The flagship compressor: 14 styles (Clean, Punch, Glue, Opto, Variable Mu, FET, Bus, Vocal, Mastering, Leveler, Upward, Pump, Smash, Transparent Peak), knee to 72 dB, lookahead, hold, auto release / threshold / gain, a 6-band key EQ, MIDI and tempo keys, Mid / Side routing, oversampled colour to 32x and mix to 200 %", 0xffe0763a, "torquecomp" },
             { "Apex Dynamics",    "sqmApexDyn",      "Dynamics",    "Compressor, expander, gate, ducker and upward compressor in one: lookahead, negative ratios, Smart detection, key filter", 0xffffc21a, "apexdyn" },
             { "Apex Limiter",     "sqmApexLim",      "Dynamics",    "True-peak limiter with lookahead, Character and a full BS.1770-4 loudness meter with one-click loudness targets", 0xffff4a2a, "apexlim" },

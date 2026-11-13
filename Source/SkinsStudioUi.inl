@@ -41,6 +41,7 @@
         /** IN / OUT (and optionally GR) meters with numbers. Call update() once per repaint, then draw(). */
         struct StudioMeter
         {
+            juce::String labIn { "IN" }, labOut { "OUT" };   // a synth shows L / R
             float inDb = -100, outDb = -100, grDb = 0, inHold = -100, outHold = -100, grHold = 0; double inHoldT = 0, outHoldT = 0, grHoldT = 0;
             static float toDb (float lin) { return juce::Decibels::gainToDecibels (lin, -100.0f); }
             void update (float inLin, float outLin, float gr)
@@ -103,7 +104,7 @@
                     g.setColour (juce::Colours::white.withAlpha (0.5f)); g.drawText (lab, box.removeFromTop (12.0f), juce::Justification::centred);
                     g.setColour (c); g.drawText (hold > -99.0f ? juce::String (hold, 1) : juce::String ("-inf"), box, juce::Justification::centred);
                 };
-                num (colIn, "IN", inHold, juce::Colours::white); num (colOut, "OUT", outHold, outHold > -0.1f ? juce::Colour (0xffff4040) : juce::Colours::white);
+                num (colIn, labIn, inHold, inHold > -0.1f ? juce::Colour (0xffff4040) : juce::Colours::white); num (colOut, labOut, outHold, outHold > -0.1f ? juce::Colour (0xffff4040) : juce::Colours::white);
                 if (withGr) num (colGr, "GR", grHold, grColour);
             }
         };

@@ -457,6 +457,30 @@ ties, rests, dotted notes and triplets.
 8. When you bounce to 16 bit, choose **DITHER 16 BIT** with **STRONG** shaping (or load *Export | 16-bit with Shaped
    Dither*).
 
+## F2n. Mote, Duet Filter and Speck Filter (core)
+
+**Mote** (an instrument)
+1. Add an instrument track and choose **Instruments > Mote** (or ask Claude: "add Mote with the acid bass").
+2. Drag the dot on the **shape rail** (SINE - TRI - SAW - SQUARE); the cycle above it is exactly what the oscillator plays.
+   Past SAW, the **WIDTH** knob narrows the square into a pulse.
+3. Drag the filter's node: sideways for the cutoff, up for resonance. **ENV** sets how far the filter envelope sweeps it
+   (the lit band shows the range; the NOW line follows the note you are playing).
+4. The **AMP** and **FILTER** envelopes are drawn to their real times; set them with the knobs in the bottom row.
+5. Top bar: **POLY / MONO / LEGATO**, glide mode, **UNISON** (click to step 1-8), **HD 2X** for the cleanest top end.
+6. **MATRIX**: click a source (e.g. MOD WHEEL), pick a target (e.g. cutoff) and drag the amount.
+
+**Duet Filter** (an effect)
+1. Insert **Filter > Duet Filter**. Two filters: 1 is teal, 2 is coral. Drag either node.
+2. Pick how they connect: **SERIAL**, **PARALLEL**, **STEREO** (1 on the left, 2 on the right) or **MID / SIDE**.
+3. Click **LINK** to make filter 2 follow filter 1 at the **LINK** interval (in octaves) - drag either node, both move.
+4. **LFO DEPTH** and **ENV DEPTH** are per filter (octaves, up or down). **STEREO PHASE** pulls left and right apart.
+5. **ENV: INPUT / SIDECHAIN** chooses what drives the envelope (route a kick to the sidechain to open the filter on it).
+
+**Speck Filter** (an effect)
+1. Insert **Filter > Speck Filter**, pick a **TYPE** at the top, drag the node.
+2. **ENVELOPE FOLLOWER > DEPTH** opens (or closes, below zero) the filter with the input's level - an auto-wah.
+3. **LFO > DEPTH / RATE** sweeps it; click the rate chip to lock it to the tempo.
+
 ## F2m. Fissure Filter (Color & Space)
 
 1. Insert **Filter > Fissure Filter**. It opens with one warm low-pass (filter 1); filters 2-4 are off.

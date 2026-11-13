@@ -61,6 +61,9 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqKilnPlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
+    engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSpeckFilterPlugin>();
+    engine->getPluginManager().createBuiltInType<SqMotePlugin>();
     engine->getPluginManager().createBuiltInType<SqTremorPlugin>();
     engine->getPluginManager().createBuiltInType<SqOrbitPanPlugin>();
     engine->getPluginManager().createBuiltInType<SqMirrorShiftPlugin>();
@@ -4041,6 +4044,130 @@ inline int runSelfTest()
             }
         }
         std::cout << "  (1.14 Fissure section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
+    }
+
+    // ===================================================================== 1.14 "Studio Line": phase K small tools - Mote, Duet Filter, Speck Filter
+    {
+        std::cout << "\n-- 1.14 Studio Line: Mote, Duet Filter, Speck Filter --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest Small Tools"})");
+        call ("add_track", R"({"kind":"instrument","name":"MoteTrack"})");
+        auto added = call ("mote", R"({"track":"MoteTrack","action":"add"})");
+        SqMotePlugin* mo = nullptr;
+        if (auto tt = session->findTrack ("MoteTrack")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqMotePlugin*> (pl)) mo = c;
+        check (mo != nullptr && added.contains ("\"Mote\""), "Mote inserted by mote add");
+        if (mo != nullptr)
+        {
+            call ("mote", R"({"track":"MoteTrack","action":"set","params":{"shape":0,"cutoff":20000,"res":0,"fEnvDepth":0,"keyTrack":0,"aA":1,"aS":100,"level":0},"filter_type":"low-pass","slope":12,"voice":"mono","quality":"eco"})");
+            auto md = call ("mote", R"({"track":"MoteTrack","action":"mod","slot":1,"source":"mod wheel","target":"cutoff","amount":0.5})");
+            check (mo->polyModeValue().get() == 1 && mo->qualityValue().get() == 0 && mo->modDestValue (0).get() == "cutoff" && mo->modSourceValue (0).get() == (int) SqSynth::ModSource::modWheel && md.contains ("Mod Wheel"),
+                   "mote set / mod: mono, Eco, a sine, mod wheel to cutoff - by name");
+            call ("mote", R"({"track":"MoteTrack","action":"mod","slot":1,"source":"off","target":"none","amount":0})");
+            // rendered: A4 is 440 Hz, and the attack is what it says
+            auto pp = engine->getPluginManager().createNewPlugin (*session->edit, SqMotePlugin::xmlTypeName, {});
+            if (auto* tw = dynamic_cast<SqMotePlugin*> (pp.get()))
+            {
+                tw->restorePluginStateFromValueTree (mo->state);
+                const double SRm = 48000.0; const int block = 256; pp->baseClassInitialise ({ te::TimePosition(), SRm, block });
+                juce::AudioBuffer<float> buf (2, block); te::MidiMessageArray midi; std::vector<float> out;
+                for (int q = 0; q < (int) SRm; q += block)
+                {
+                    midi.clear(); if (q == 0) midi.addMidiMessage (juce::MidiMessage::noteOn (1, 69, (juce::uint8) 127), 0.0, 0);
+                    te::PluginRenderContext fc (&buf, 0, block, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / SRm), te::TimePosition::fromSeconds ((q + block) / SRm)), true, false, true, false);
+                    pp->applyToBuffer (fc);
+                    for (int i = 0; i < block; ++i) out.push_back (buf.getSample (0, i));
+                }
+                pp->baseClassDeinitialise();
+                double fa = 0, fb = 0; int nc = 0;
+                for (size_t i = 4800; i < out.size(); ++i) if (out[i - 1] < 0 && out[i] >= 0) { const double t = (double) i - 1 + out[i - 1] / (out[i - 1] - out[i]); if (nc == 0) fa = t; fb = t; ++nc; }
+                const double hz = nc > 1 ? (nc - 1) / ((fb - fa) / SRm) : 0;
+                double pk = 0; for (size_t i = 4800; i < out.size(); ++i) pk = std::max (pk, (double) std::abs (out[i]));
+                check (std::abs (1200 * std::log2 (std::max (1.0, hz) / 440.0)) < 0.5 && pk > 0.05 && pk < 1.0, "Mote rendered: A4 plays " + juce::String (hz, 3) + " Hz, peak " + juce::String (juce::Decibels::gainToDecibels (pk), 1) + " dBFS");
+            }
+            int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmMote") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+            auto pl = call ("mote", R"({"track":"MoteTrack","action":"preset","preset":"Squelch Acid"})");
+            check (nPre >= 24 && nAdv >= 8 && pl.contains ("Loaded") && mo->polyModeValue().get() == 2, "Mote: " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " Advanced); the acid bass plays legato");
+            check (Edition::packOf ("sqmMote") == Edition::Pack::none, "Mote is part of the core program");
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = mo->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*mo);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (600);
+                auto snap = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                check (snap.isValid() && snap.getWidth() >= 1000, "Mote window renders offscreen (" + juce::String (snap.getWidth()) + " x " + juce::String (snap.getHeight()) + ")");
+            }
+        }
+
+        call ("add_track", R"({"kind":"audio","name":"Fx"})");
+        auto renderLevel = [&] (te::Plugin& p, double f)
+        {
+            p.baseClassInitialise ({ te::TimePosition(), 44100.0, 512 }); p.reset();
+            const int N = 44100 / 2; juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi; double eo = 0, ei = 0;
+            for (int q = 0; q + 512 <= N; q += 512)
+            {
+                for (int i = 0; i < 512; ++i) { const float v = (float) (0.25 * std::sin (juce::MathConstants<double>::twoPi * f * (q + i) / 44100.0)); buf.setSample (0, i, v); buf.setSample (1, i, v); }
+                te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / 44100.0), te::TimePosition::fromSeconds ((q + 512) / 44100.0)), true, false, true, false);
+                p.applyToBuffer (fc);
+                if (q > N / 2) for (int i = 0; i < 512; ++i) { eo += (double) buf.getSample (0, i) * buf.getSample (0, i); ei += 0.25 * 0.25 * 0.5; }
+            }
+            p.baseClassDeinitialise();
+            return 10 * std::log10 (eo / ei + 1e-30);
+        };
+        auto dAdd = call ("duet_filter", R"({"track":"Fx","action":"add"})");
+        SqDuetFilterPlugin* du = nullptr;
+        if (auto tt = session->findTrack ("Fx")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqDuetFilterPlugin*> (pl)) du = c;
+        check (du != nullptr && dAdd.contains ("Duet Filter"), "Duet Filter inserted by duet_filter add");
+        if (du != nullptr)
+        {
+            call ("duet_filter", R"({"track":"Fx","action":"filter","filter":1,"type":"low-pass","slope":24,"cutoff":1000,"resonance":0})");
+            call ("duet_filter", R"({"track":"Fx","action":"filter","filter":2,"type":"high-pass","slope":24,"resonance":0})");
+            auto st = call ("duet_filter", R"({"track":"Fx","action":"set","routing":"serial","link_interval":0,"lfo_sync":"1/8"})");
+            check (du->link.get() && du->type[1].get() == SqFissure::highPass && std::abs (du->snapshot().baseCut (1) - 1000.0) < 0.5 && du->lfoSync.get() == 6 && st.contains ("Serial"),
+                   "duet_filter: low-pass 1k into a high-pass linked at 0 octaves, LFO synced to 1/8 - by name");
+            auto pp = engine->getPluginManager().createNewPlugin (*session->edit, SqDuetFilterPlugin::xmlTypeName, {});
+            if (auto* tw = dynamic_cast<SqDuetFilterPlugin*> (pp.get()))
+            {
+                tw->restorePluginStateFromValueTree (du->state);
+                const double at1k = renderLevel (*tw, 1000), at100 = renderLevel (*tw, 100);
+                check (std::abs (at1k + 6.0) < 0.4 && at100 < -45, "Duet rendered: LP 1k -> HP 1k reads " + juce::String (at1k, 2) + " dB at 1 kHz, " + juce::String (at100, 1) + " dB at 100 Hz");
+            }
+            int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmDuetFilter") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+            auto pl = call ("duet_filter", R"({"track":"Fx","action":"preset","preset":"Stereo Swirl"})");
+            check (nPre >= 24 && nAdv >= 6 && pl.contains ("Loaded") && du->routing.get() == 2, "Duet Filter: " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " Advanced); Stereo Swirl splits left and right");
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = du->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*du);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (500);
+                auto snap = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                check (snap.isValid() && snap.getWidth() >= 1000, "Duet Filter window renders offscreen (" + juce::String (snap.getWidth()) + " x " + juce::String (snap.getHeight()) + ")");
+            }
+        }
+        auto sAdd = call ("speck_filter", R"({"track":"Fx","action":"add"})");
+        SqSpeckFilterPlugin* sk = nullptr;
+        if (auto tt = session->findTrack ("Fx")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqSpeckFilterPlugin*> (pl)) sk = c;
+        check (sk != nullptr && sAdd.contains ("Speck Filter"), "Speck Filter inserted by speck_filter add");
+        if (sk != nullptr)
+        {
+            auto st = call ("speck_filter", R"({"track":"Fx","action":"set","type":"band-pass","slope":12,"cutoff":2000,"resonance":30,"env_source":"sidechain","lfo_shape":"square"})");
+            check (sk->type.get() == SqFissure::bandPass && sk->envKey.get() && sk->lfoShape.get() == 3 && st.contains ("sidechain"), "speck_filter set: a band-pass at 2 kHz, envelope from the sidechain, square LFO - by name");
+            auto pp = engine->getPluginManager().createNewPlugin (*session->edit, SqSpeckFilterPlugin::xmlTypeName, {});
+            if (auto* tw = dynamic_cast<SqSpeckFilterPlugin*> (pp.get()))
+            {
+                tw->restorePluginStateFromValueTree (sk->state);
+                const double atC = renderLevel (*tw, 2000), off = renderLevel (*tw, 200);
+                check (std::abs (atC) < 0.3 && off < -10, "Speck rendered: band-pass centre " + juce::String (atC, 2) + " dB (unity), " + juce::String (off, 1) + " dB at 200 Hz");
+            }
+            int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmSpeckFilter") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+            auto pl = call ("speck_filter", R"({"track":"Fx","action":"preset","preset":"Auto-Wah"})");
+            check (nPre >= 24 && nAdv >= 5 && pl.contains ("Loaded") && sk->bank[SqSpeckFilterPlugin::envDepth] > 2.0f, "Speck Filter: " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " Advanced); the auto-wah opens on the envelope");
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = sk->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*sk);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (500);
+                auto snap = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                check (snap.isValid() && snap.getWidth() >= 900, "Speck Filter window renders offscreen (" + juce::String (snap.getWidth()) + " x " + juce::String (snap.getHeight()) + ")");
+            }
+        }
+        std::cout << "  (1.14 small tools section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));

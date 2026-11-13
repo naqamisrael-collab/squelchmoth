@@ -472,6 +472,143 @@ def fissure_cpp():
         rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
     return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_fissure()   // Fissure Filter\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
 
+# ---------------------------------------------------------------- Mote (one-oscillator synth)
+# shape: 0 sine, 1 triangle, 2 saw, 3 square. Times in ms. mods: (source, dest, depth) with sources 1 Env 1, 2 Env 2, 4 LFO 1,
+# 6 Velocity, 7 Key, 8 Mod Wheel, 9 Aftertouch.
+MO = []
+def madd(name, v, props=None, mods=(), adv=False): MO.append((name, adv, v, props or {}, mods))
+madd("Init | Warm Saw", dict(shape=2.0, cutoff=2400, res=18, fEnvDepth=1.5))
+madd("Bass | Round Sub Bass", dict(shape=0.6, subLevel=60, cutoff=600, res=10, fEnvDepth=1.0, aA=2, aD=300, aS=90, aR=120, level=-4), dict(polyMode=1, subOct=1))
+madd("Bass | Squelch Acid", dict(shape=2.0, cutoff=320, res=78, fEnvDepth=3.6, fA=1, fD=180, fS=0, fR=120, drive=9, aS=100, aR=60, glide=70), dict(polyMode=2, glideMode=2, slope=24))
+madd("Bass | Punchy Square", dict(shape=3.0, width=42, cutoff=700, res=25, fEnvDepth=2.8, fD=140, fS=5, subLevel=40, aD=250, aS=70, aR=90), dict(polyMode=1))
+madd("Bass | Reese Unison", dict(shape=2.0, cutoff=900, res=20, fEnvDepth=0.5, uniDetune=18, uniSpread=40, drive=6), dict(polyMode=1, unison=4))
+madd("Bass | Pluck Bass", dict(shape=2.4, cutoff=260, res=30, fEnvDepth=4.0, fD=160, fS=0, aD=380, aS=0, aR=120))
+madd("Lead | Bright Saw Lead", dict(shape=2.0, cutoff=4200, res=22, fEnvDepth=1.2, lfoRate=5.5, lfoPitch=0.25, lfoDelay=350, glide=40), dict(polyMode=2, glideMode=2))
+madd("Lead | Hollow Pulse", dict(shape=3.0, width=18, cutoff=3000, res=15, lfoRate=0.6, lfoWidth=0.6), dict(polyMode=1))
+madd("Lead | Soft Triangle Whistle", dict(shape=1.0, cutoff=8000, res=0, fEnvDepth=0, lfoRate=5.0, lfoPitch=0.3, lfoDelay=500, aA=40, aR=300), dict(polyMode=2, glideMode=2))
+madd("Lead | Screaming Drive", dict(shape=2.6, cutoff=2600, res=55, drive=20, fEnvDepth=1.4, uniDetune=10), dict(polyMode=1, unison=2, slope=24))
+madd("Keys | Mellow Keys", dict(shape=1.3, cutoff=1800, res=8, fEnvDepth=2.0, fD=500, fS=10, aD=900, aS=20, aR=400, ampVel=80))
+madd("Keys | Glassy Pluck", dict(shape=0.4, cutoff=6000, res=35, fEnvDepth=2.5, fD=120, fS=0, aD=600, aS=0, aR=350), dict(slope=12))
+madd("Pad | Slow Bloom", dict(shape=2.0, cutoff=900, res=20, fEnvDepth=2.2, fA=1800, fD=2500, fS=40, aA=1200, aD=2000, aS=80, aR=2200, uniDetune=12, uniSpread=90), dict(unison=3))
+madd("Pad | Breathing Pulse", dict(shape=3.0, width=30, cutoff=1500, res=15, lfoRate=0.25, lfoWidth=0.7, lfoCut=0.6, aA=900, aR=1800, aS=85, uniDetune=9), dict(unison=2))
+madd("Pluck | Tight Arp", dict(shape=2.2, cutoff=500, res=40, fEnvDepth=3.4, fD=110, fS=0, aD=220, aS=0, aR=80))
+madd("Perc | Tom Drop", dict(shape=0.0, cutoff=8000, res=0, fEnvDepth=0, aD=280, aS=0, aR=200, oscLevel=100), mods=((2, "pitch", 0.5),))
+madd("Perc | Noise Snap", dict(shape=0.0, oscLevel=30, noise=90, noiseColour=20, cutoff=3500, res=30, filterType=0, fEnvDepth=2.0, fD=90, fS=0, aD=140, aS=0, aR=90), dict(filterType=2, slope=12))
+madd("FX | Wind Sweep", dict(oscLevel=0, noise=100, noiseColour=40, cutoff=700, res=70, lfoRate=0.12, lfoCut=2.0, aA=800, aR=1500), dict(filterType=2, slope=12))
+madd("Sub | 808-ish Glide", dict(shape=0.1, cutoff=8000, res=0, fEnvDepth=0, aD=1400, aS=0, aR=500, drive=6, glide=120, level=-3), dict(polyMode=1, glideMode=1))
+madd("Chip | Square Arcade", dict(shape=3.0, width=25, cutoff=12000, res=0, fEnvDepth=0, aD=200, aS=60, aR=60), dict(slope=12), mods=((4, "width", 0.3),))
+# Advanced
+madd("Mod | Wheel Opens the Filter", dict(shape=2.0, cutoff=400, res=45, fEnvDepth=1.0), mods=((8, "cutoff", 0.9),), adv=True)
+madd("Mod | Velocity Brightens", dict(shape=2.0, cutoff=700, res=25, fEnvDepth=2.0, velDepth=2.0, ampVel=90), adv=True)
+madd("Mod | Shape Morph on LFO", dict(shape=1.5, cutoff=3000, res=20, lfoRate=0.4, lfoShapeAmt=1.4), adv=True)
+madd("Mod | Aftertouch Vibrato", dict(shape=2.0, cutoff=3200, lfoRate=6.0), mods=((9, "pitch", 0.02),), adv=True)
+madd("Filter | Comb Pluck (Karplus-ish)", dict(oscLevel=0, noise=100, cutoff=220, res=92, keyTrack=100, fEnvDepth=0, aD=900, aS=0, aR=500), dict(filterType=4), adv=True)
+madd("Filter | Talking Vowel", dict(shape=2.0, cutoff=300, res=60, fEnvDepth=2.5, fA=200, fD=900, fS=30, lfoRate=0.3, lfoCut=0.8), dict(filterType=5), adv=True)
+madd("Filter | Self-Oscillating Sine", dict(oscLevel=5, cutoff=440, res=100, keyTrack=100, fEnvDepth=0, level=-12), dict(slope=24), adv=True)
+madd("Unison | Supersaw Wall", dict(shape=2.0, cutoff=5000, res=10, uniDetune=25, uniSpread=100, aA=10, aR=500, level=-9), dict(unison=8), adv=True)
+madd("HD | Hard Square Lead (2x)", dict(shape=3.0, width=50, cutoff=9000, res=10, drive=12, fEnvDepth=0.6), dict(polyMode=1, quality=1), adv=True)
+
+def mote_cpp():
+    rows = []
+    for name, adv, v, props, mods in MO:
+        pr = {"polyMode": 0, "glideMode": 0, "unison": 1, "quality": 1, "filterType": 0, "slope": 24, "subOct": 1, "subWave": 0, "lfoWave": 0, "lfoSync": 0}
+        pr.update(props); v = {k: x for k, x in v.items() if k != "filterType"}
+        vs = ", ".join(f'N ("{k}", {float(x)}f)' for k, x in v.items())
+        ps = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in pr.items())
+        ms = ", ".join(f'{{ {src}, "{d}", {float(dep)}f }}' for src, d, dep in mods)
+        rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }}, {{ {ms} }})')
+    return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_mote()   // Mote\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
+
+# ---------------------------------------------------------------- Duet Filter / Speck Filter
+DR = {"serial": 0, "parallel": 1, "stereo": 2, "ms": 3}
+DU = []
+def df(t="lp", cut=1000, res=25, drive=0, gain=6, mix=100, lfo=0.0, env=0.0, slope=24, on=1): return dict(t=FT[t], cut=cut, res=res, drive=drive, gain=gain, mix=mix, lfo=lfo, env=env, slope=slope, on=on)
+def dadd(name, f1, f2, adv=False, routing="serial", link=None, lfo=(0, 0.5, 0, 0), env=(5, 150, 0, 0), mix=100, out=0):
+    DU.append((name, adv, DR[routing], f1, f2, link, lfo, env, mix, out))
+dadd("Start | Low-Pass into Band", df("lp", 2500, 20), df("bp", 1200, 30, slope=12))
+dadd("Classic | Band-Pass Pair (Linked)", df("bp", 600, 55, slope=12), df("bp", 1800, 55, slope=12), routing="parallel", link=1.585)
+dadd("Classic | Low + High Notch Hole", df("lp", 500, 15), df("hp", 2500, 15), routing="parallel")
+dadd("Sweep | Twin Wah (Envelope)", df("bp", 450, 65, slope=12, env=3.0), df("bp", 1300, 55, slope=12, env=2.5), routing="parallel", env=(3, 140, 6, 0))
+dadd("Sweep | Stereo Swirl", df("lp", 1200, 50, lfo=1.5), df("lp", 1200, 50, lfo=1.5), routing="stereo", lfo=(0, 0.3, 0, 180))
+dadd("Sweep | Tempo Chop (1/8)", df("lp", 700, 40, lfo=2.0), df("hp", 120, 10, on=1), lfo=(3, 1, 6, 0))
+dadd("Sweep | Random Stereo Steps", df("bp", 1000, 60, slope=12, lfo=1.8), df("bp", 1000, 60, slope=12, lfo=1.8), routing="stereo", lfo=(4, 4, 7, 120))
+dadd("Vocal | Telephone Duet", df("hp", 450, 20), df("lp", 3200, 25))
+dadd("Vocal | Formant Pair", df("vowel", 350, 55), df("peak", 2600, 30, gain=5), lfo=(0, 0.25, 0, 0))
+dadd("Drums | Crunch Band", df("bp", 1800, 35, drive=14, slope=12), df("lp", 7000, 10))
+dadd("Drums | Mid Thump, Side Air", df("lp", 4000, 15), df("hp", 2500, 15), routing="ms")
+dadd("Bass | Double Squelch", df("lp", 350, 72, drive=6, env=3.0), df("bp", 700, 60, slope=12, env=2.0), env=(2, 120, 6, 0), out=-3)
+dadd("Synth | Vowel Morph", df("vowel", 300, 60, lfo=1.2), df("lp", 6000, 15), lfo=(1, 0.2, 0, 0))
+dadd("Synth | Comb + Low-Pass", df("comb", 300, 80, mix=60), df("lp", 3000, 30))
+dadd("Pad | Wide Drift", df("lp", 1800, 35, lfo=0.8), df("lp", 1800, 35, lfo=0.8), routing="stereo", lfo=(0, 0.11, 0, 90))
+dadd("Mix | Dark Side, Clean Middle", df("lp", 20000, 0, mix=0), df("lp", 4000, 10), routing="ms")
+dadd("Mix | Rumble + Fizz Cleanup", df("hp", 35, 0, slope=48), df("lp", 16000, 0, slope=24))
+dadd("FX | Underwater Pair", df("lp", 350, 60, slope=48, lfo=0.3), df("lp", 700, 50, lfo=0.3), lfo=(0, 0.3, 0, 60))
+dadd("FX | Build Riser (sweep up)", df("hp", 50, 45, lfo=3.5), df("hp", 50, 45, on=0), lfo=(2, 0.05, 2, 0))
+dadd("FX | Radio Between Stations", df("bp", 1500, 70, drive=10, slope=12, lfo=1.0), df("notch", 1000, 70, slope=12, lfo=-1.0), lfo=(4, 3, 0, 0))
+# Advanced
+dadd("Link | Octave Pair Sweep", df("lp", 500, 60, lfo=2.0), df("bp", 1000, 60, slope=12), adv=True, link=1.0, lfo=(0, 0.2, 0, 0))
+dadd("Link | Fifth Apart Resonators", df("bp", 400, 85, slope=12), df("bp", 600, 85, slope=12), adv=True, routing="parallel", link=0.585, out=-6)
+dadd("Stereo | Opposite Sweeps", df("lp", 1000, 55, lfo=2.0), df("lp", 1000, 55, lfo=-2.0), adv=True, routing="stereo", lfo=(1, 0.25, 0, 0))
+dadd("Sidechain | Key Opens Filters", df("lp", 250, 40, env=4.0), df("lp", 250, 40, env=4.0), adv=True, routing="stereo", env=(2, 200, 0, 1))
+dadd("Self-Osc | Twin Whistles", df("lp", 800, 98, lfo=0.5), df("lp", 1200, 98, lfo=-0.5), adv=True, routing="stereo", lfo=(0, 0.15, 0, 0), out=-12)
+dadd("Drive | Serial Scream 48 dB", df("lp", 900, 80, drive=24, slope=48, env=2.0), df("hp", 200, 30, drive=12), adv=True, env=(2, 90, 6, 0), out=-6)
+
+def duet_cpp():
+    rows = []
+    for name, adv, routing, f1, f2, link, lfo, env, mix, out in DU:
+        vals = [("linkOct", link if link is not None else 1.0), ("lfoRate", lfo[1]), ("lfoPhase", lfo[3]), ("envAttack", env[0]), ("envRelease", env[1]), ("envGain", env[2]), ("mix", mix), ("output", out)]
+        props = [("routing", routing), ("link", 1 if link is not None else 0), ("lfoShape", lfo[0]), ("lfoSync", lfo[2]), ("envKey", env[3])]
+        for i, f in enumerate((f1, f2)):
+            n = i + 1
+            vals += [(f"f{n}cut", f["cut"]), (f"f{n}res", f["res"]), (f"f{n}drive", f["drive"]), (f"f{n}gain", f["gain"]), (f"f{n}mix", f["mix"]), (f"f{n}lfo", f["lfo"]), (f"f{n}env", f["env"])]
+            props += [(f"on{n}", f["on"]), (f"type{n}", f["t"]), (f"slope{n}", f["slope"])]
+        vs = ", ".join(f'N ("{k}", {float(x)}f)' for k, x in vals)
+        ps = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in props)
+        rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
+    return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_duet()   // Duet Filter\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
+
+SPK = []
+def sadd(name, t="lp", cut=1200, res=30, drive=0, gain=6, slope=24, env=(0.0, 5, 150, 0, 0), lfo=(0.0, 1.0, 0, 0, 0), mix=100, out=0, adv=False):
+    SPK.append((name, adv, FT[t], cut, res, drive, gain, slope, env, lfo, mix, out))
+# env: (depth oct, attack, release, sensitivity dB, from key); lfo: (depth oct, rate, phase deg, shape, sync)
+sadd("Start | Warm Low-Pass", cut=3500, res=15)
+sadd("Envelope | Auto-Wah", "bp", 450, 65, slope=12, env=(3.2, 3, 130, 6, 0))
+sadd("Envelope | Opens on Hits", cut=300, res=35, env=(4.0, 2, 220, 0, 0))
+sadd("Envelope | Ducking Darkener", cut=6000, res=10, env=(-3.0, 5, 250, 0, 0))
+sadd("Envelope | Bass Quack", cut=280, res=70, drive=6, env=(3.0, 2, 90, 6, 0))
+sadd("LFO | Slow Sweep", cut=700, res=50, lfo=(1.8, 0.2, 0, 0, 0))
+sadd("LFO | Quarter-Note Wobble", cut=500, res=60, lfo=(2.2, 1, 0, 0, 5))
+sadd("LFO | Eighth Chop", cut=400, res=25, lfo=(2.5, 1, 0, 3, 6))
+sadd("LFO | Stereo Wander", cut=1500, res=40, lfo=(1.2, 0.15, 0, 0, 0)[:2] + (150, 0, 0))
+sadd("LFO | Random Steps", "bp", 1200, 60, slope=12, lfo=(1.8, 4, 0, 4, 7))
+sadd("Tone | High-Pass Tidy", "hp", 90, 10, slope=24)
+sadd("Tone | Telephone Band", "bp", 1500, 25, slope=12)
+sadd("Tone | Presence Peak", "peak", 3200, 25, gain=4)
+sadd("Tone | Notch the Whistle", "notch", 3150, 80, slope=12)
+sadd("Drums | Crunch Band-Pass", "bp", 1800, 40, drive=14, slope=12)
+sadd("Bass | Resonant Low-Pass", cut=380, res=72, drive=4)
+sadd("Vocal | Formant Talk", "vowel", 380, 55, lfo=(1.0, 0.4, 0, 1, 0))
+sadd("FX | Underwater", cut=380, res=55, slope=48, lfo=(0.4, 0.3, 0, 0, 0))
+sadd("FX | Sweep-Up Riser", "hp", 50, 45, lfo=(3.6, 0.05, 0, 2, 2))
+sadd("FX | Metallic Comb", "comb", 250, 85, mix=65)
+# Advanced
+sadd("Sidechain | Kick Opens It", cut=220, res=40, env=(4.0, 1, 180, 0, 1), adv=True)
+sadd("Self-Osc | Whistling Sweep", cut=900, res=98, lfo=(1.0, 0.15, 0, 0, 0), out=-12, adv=True)
+sadd("Drive | Screaming 48 dB", cut=700, res=85, drive=24, slope=48, env=(2.0, 2, 100, 6, 0), out=-6, adv=True)
+sadd("Stereo | Ping-Pong Filter", cut=900, res=55, lfo=(2.0, 1, 180, 0, 6), adv=True)
+sadd("Combo | Envelope + LFO Wah", "bp", 600, 70, slope=12, env=(2.0, 3, 120, 6, 0), lfo=(0.7, 5, 90, 0, 0), adv=True)
+
+def speck_cpp():
+    rows = []
+    for name, adv, t, cut, res, drive, gain, slope, env, lfo, mix, out in SPK:
+        vals = [("cutoff", cut), ("res", res), ("drive", drive), ("gain", gain), ("envDepth", env[0]), ("envAttack", env[1]), ("envRelease", env[2]), ("envGain", env[3]),
+                ("lfoDepth", lfo[0]), ("lfoRate", lfo[1]), ("lfoPhase", lfo[2]), ("mix", mix), ("output", out)]
+        props = [("type", t), ("slope", slope), ("lfoShape", lfo[3]), ("lfoSync", lfo[4]), ("envKey", env[4])]
+        vs = ", ".join(f'N ("{k}", {float(x)}f)' for k, x in vals)
+        ps = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in props)
+        rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
+    return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_speck()   // Speck Filter\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
+
 def cpp():
     out = ["// Generated by scripts/gen_presets_114.py - factory presets for the 1.14 Studio Line. Do not edit by hand.",
            "// Included in namespace SignaturePresets (SignaturePresets.h); bank() calls add114().", "",
@@ -492,9 +629,9 @@ def cpp():
         pr = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in props)
         rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {v} }},\n            {{ {pr} }})')
     out.append(",\n".join(rows))
-    out += ["    };", "}", "", torque_cpp(), summit_cpp(), atrium_cpp(), mb2_cpp(), sibyl_cpp(), portcullis_cpp(), kiln_cpp(), spindle_cpp(), fissure_cpp(), "inline void add114 (std::map<juce::String, std::vector<Preset>>& m)", "{", '    m["Spectra EQ"] = presets114_spectra();', '    m["Torque Comp"] = presets114_torque();', '    m["Summit Limiter"] = presets114_summit();', '    m["Atrium Verb"] = presets114_atrium();', '    m["Apex Multiband 2"] = presets114_mb2();', '    m["Sibyl De-Ess"] = presets114_sibyl();', '    m["Portcullis Gate"] = presets114_portcullis();', '    m["Kiln"] = presets114_kiln();', '    m["Spindle Delay"] = presets114_spindle();', '    m["Fissure Filter"] = presets114_fissure();', "}", ""]
+    out += ["    };", "}", "", torque_cpp(), summit_cpp(), atrium_cpp(), mb2_cpp(), sibyl_cpp(), portcullis_cpp(), kiln_cpp(), spindle_cpp(), fissure_cpp(), mote_cpp(), duet_cpp(), speck_cpp(), "inline void add114 (std::map<juce::String, std::vector<Preset>>& m)", "{", '    m["Spectra EQ"] = presets114_spectra();', '    m["Torque Comp"] = presets114_torque();', '    m["Summit Limiter"] = presets114_summit();', '    m["Atrium Verb"] = presets114_atrium();', '    m["Apex Multiband 2"] = presets114_mb2();', '    m["Sibyl De-Ess"] = presets114_sibyl();', '    m["Portcullis Gate"] = presets114_portcullis();', '    m["Kiln"] = presets114_kiln();', '    m["Spindle Delay"] = presets114_spindle();', '    m["Fissure Filter"] = presets114_fissure();', '    m["Mote"] = presets114_mote();', '    m["Duet Filter"] = presets114_duet();', '    m["Speck Filter"] = presets114_speck();', "}", ""]
     return "\n".join(out)
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 open(os.path.join(root, "Source", "SignaturePresets114.inl"), "w").write(cpp())
-print(len(P), "Spectra EQ presets,", sum(1 for p in P if not p[1]), "basic;", len(T), "Torque Comp presets,", sum(1 for t in T if not t[1]), "basic;", len(S), "Summit presets,", len(AV), "Atrium presets,", len(MB), "MB2 presets,", len(SB), "Sibyl presets,", len(PG), "Portcullis presets,", len(KL), "Kiln presets,", len(SD), "Spindle presets,", len(FI), "Fissure presets")
+print(len(P), "Spectra EQ presets,", sum(1 for p in P if not p[1]), "basic;", len(T), "Torque Comp presets,", sum(1 for t in T if not t[1]), "basic;", len(S), "Summit presets,", len(AV), "Atrium presets,", len(MB), "MB2 presets,", len(SB), "Sibyl presets,", len(PG), "Portcullis presets,", len(KL), "Kiln presets,", len(SD), "Spindle presets,", len(FI), "Fissure presets,", len(MO), "Mote,", len(DU), "Duet,", len(SPK), "Speck")

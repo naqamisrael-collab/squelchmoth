@@ -424,6 +424,7 @@ private:
         registerKilnTools();
         registerSpindleTools();
         registerFissureTools();
+        registerDuetTools();
     }
 
     #include "McpToolsParity.h"
@@ -448,6 +449,7 @@ private:
     #include "McpToolsKiln.h"
     #include "McpToolsSpindle.h"
     #include "McpToolsFissure.h"
+    #include "McpToolsDuet.h"
 
     //==============================================================================
     void registerSessionTools()
