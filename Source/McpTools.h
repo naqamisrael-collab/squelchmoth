@@ -418,6 +418,7 @@ private:
         registerTorqueTools();
         registerSummitTools();
         registerAtriumTools();
+        registerApexMB2Tools();
     }
 
     #include "McpToolsParity.h"
@@ -436,6 +437,7 @@ private:
     #include "McpToolsTorque.h"
     #include "McpToolsSummit.h"
     #include "McpToolsAtrium.h"
+    #include "McpToolsApexMB2.h"
 
     //==============================================================================
     void registerSessionTools()

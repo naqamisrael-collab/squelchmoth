@@ -457,6 +457,20 @@ ties, rests, dotted notes and triplets.
 8. When you bounce to 16 bit, choose **DITHER 16 BIT** with **STRONG** shaping (or load *Export | 16-bit with Shaped
    Dither*).
 
+## F2h. Apex Multiband 2 (multiband dynamics, Mastering Suite)
+
+1. Insert **Dynamics > Apex Multiband 2** on a bus or the master. It opens with four gentle bands.
+2. Click **BANDS 1-6** at the top to choose how many bands. Drag the lit seams in the spectrum to move the crossovers.
+3. Click a band (its tab or its region) to edit it. Its knobs appear in the deck in the band's colour.
+4. Pick what the band does: **COMPRESS** (loud parts down), **COMPRESS UP** (quiet parts up), **EXPAND** (quiet parts
+   down - rumble, room, hiss) or **EXPAND UP** (lifts hits).
+5. Set **THRESHOLD** and **RATIO**, then **RANGE** - the most the band is allowed to change. The curve on the right
+   and the moving region in the spectrum show exactly what it is doing.
+6. **PLACE** works on one part of the stereo picture only: SIDE for the edges, MID for the centre, LEFT or RIGHT.
+7. **KEY: SIDE-CHAIN** makes the band listen to the side-chain input (a kick ducking only the bass band).
+8. **LINEAR PHASE** keeps phase untouched (good for mastering) at the cost of about 48 ms of latency.
+9. Ask Claude: "add Apex Multiband 2 to the mix bus and tame the low end".
+
 ## F2g. Atrium Verb (the flagship reverb, Color & Space)
 
 1. Put Atrium Verb on an aux / FX track and send to it, or insert it on a track and lower **MIX** (it opens at 30 %).

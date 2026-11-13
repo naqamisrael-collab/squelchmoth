@@ -1519,13 +1519,14 @@ namespace Skins
     #include "SkinsTorque.inl"
     #include "SkinsSummit.inl"
     #include "SkinsAtrium.inl"
+    #include "SkinsApexMB2.inl"
     #include "SkinsSynths.inl"
     #include "SkinsSynths2.inl"
     #include "SkinsFx181.inl"
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -1966,6 +1967,8 @@ namespace Skins
                                                          G ("OUT", { "Mix", "Output" }, true, 1),
                                                          G ("CONSONANTS", { "Sibilance", "Gate" }, false, 2),
                                                          G ("TUBE", { "Tube", "Brightness" }, false, 2) }; }
+        else if (name == "Apex Multiband 2") { s.family = Family::apexmb2; s.knob = KnobStyle::flat; s.width = 1360; s.height = 880; s.vizH = 880 - 62 - 16; s.resizable = true;
+                                            s.hiddenPrefixes = { "Input", "Output", "Mix", "Lookahead", "Crossover", "Band" }; }   // every control is drawn by the face
         else if (name == "Atrium Verb")    { s.family = Family::atrium; s.knob = KnobStyle::flat; s.width = 1340; s.height = 900; s.vizH = 900 - 62 - 16; s.resizable = true;
                                             s.hiddenPrefixes = { "Decay", "Size", "Predelay", "Diffusion", "Width", "Character", "Low", "High", "Early", "Late", "Duck", "Mix", "Output" }; }   // every control is drawn by the face
         else if (name == "Summit Limiter") { s.family = Family::summit; s.knob = KnobStyle::flat; s.width = 1320; s.height = 860; s.vizH = 860 - 62 - 16; s.resizable = true;
@@ -3038,6 +3041,7 @@ namespace Skins
                 case Family::voxmoth: viz = std::make_unique<VoxMothViz> (handles, plugin, accent); break;
                 case Family::talkwing: viz = std::make_unique<TalkWingViz> (handles, plugin, accent); break;
                 case Family::cleanroom: viz = std::make_unique<CleanRoomViz> (handles, plugin, accent); break;
+                case Family::apexmb2:   { auto mv = std::make_unique<ApexMB2Viz> (handles, plugin, accent); mv->onChange = [this] { repaintControls(); }; viz = std::move (mv); break; }
                 case Family::atrium:    { auto av = std::make_unique<AtriumViz> (handles, plugin, accent); av->onChange = [this] { repaintControls(); }; viz = std::move (av); break; }
                 case Family::summit:    { auto sv = std::make_unique<SummitViz> (handles, plugin, accent); sv->onChange = [this] { repaintControls(); }; viz = std::move (sv); break; }
                 case Family::torque:    { auto tv = std::make_unique<TorqueViz> (handles, plugin, accent); tv->onChange = [this] { repaintControls(); }; viz = std::move (tv); break; }

@@ -31,6 +31,7 @@
 #include "SqTorque.h"
 #include "SqSummit.h"
 #include "SqAtrium.h"
+#include "SqApexMB2.h"
 
 namespace te = tracktion;
 
@@ -113,6 +114,7 @@ namespace Signature
             // ---------------- Dynamics
             { "Summit Limiter",   "sqmSummitLim",    "Dynamics",    "The flagship true-peak limiter: 10 algorithms, a ceiling that holds against an exact reconstruction (band-limit guard + safety stage), lookahead to 10 ms, separate transient / release linking, oversampled gain stage to 32x, DC filter, TPDF dither with noise shaping, unity audition, listen to what's removed, and a full loudness panel against your target", 0xff8fe3ff, "summitlim" },
             { "Atrium Verb",      "sqmAtriumVerb",   "Reverb",      "The flagship algorithmic reverb: a 16-line network with modulated cubic-interpolated delays, 12 spaces (halls, plates, rooms, chamber, cathedral, bloom, gate), early reflections drawn as they happen, decay set per band and measured within a few percent, freeze, ducking, tempo-synced predelay, width, and a 24 dB/oct low / high cut", 0xffffb35c, "atriumverb" },
+            { "Apex Multiband 2", "sqmApexMB2",      "Dynamics",    "The multiband dynamics flagship: up to six bands split in minimum phase (bands sum to an all-pass) or linear phase (bands sum to the input exactly), and per band compress, compress up, expand or expand up, a stereo place (stereo, left, right, mid, side), a side-chain key, range, knee, attack, release, solo and bypass; lookahead to 20 ms; live spectrum with draggable crossovers and every band's gain change drawn as it happens", 0xff1affc8, "apexmb2" },
             { "Torque Comp",      "sqmTorqueComp",   "Dynamics",    "The flagship compressor: 14 styles (Clean, Punch, Glue, Opto, Variable Mu, FET, Bus, Vocal, Mastering, Leveler, Upward, Pump, Smash, Transparent Peak), knee to 72 dB, lookahead, hold, auto release / threshold / gain, a 6-band key EQ, MIDI and tempo keys, Mid / Side routing, oversampled colour to 32x and mix to 200 %", 0xffe0763a, "torquecomp" },
             { "Apex Dynamics",    "sqmApexDyn",      "Dynamics",    "Compressor, expander, gate, ducker and upward compressor in one: lookahead, negative ratios, Smart detection, key filter", 0xffffc21a, "apexdyn" },
             { "Apex Limiter",     "sqmApexLim",      "Dynamics",    "True-peak limiter with lookahead, Character and a full BS.1770-4 loudness meter with one-click loudness targets", 0xffff4a2a, "apexlim" },

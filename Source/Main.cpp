@@ -225,6 +225,7 @@ public:
         engine->getPluginManager().createBuiltInType<SqTorqueCompPlugin>();
         engine->getPluginManager().createBuiltInType<SqSummitLimiterPlugin>();
         engine->getPluginManager().createBuiltInType<SqAtriumVerbPlugin>();
+        engine->getPluginManager().createBuiltInType<SqApexMB2Plugin>();
         engine->getPluginManager().createBuiltInType<SqTremorPlugin>();
         engine->getPluginManager().createBuiltInType<SqOrbitPanPlugin>();
         engine->getPluginManager().createBuiltInType<SqMirrorShiftPlugin>();

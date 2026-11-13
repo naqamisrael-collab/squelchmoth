@@ -195,6 +195,59 @@ def atrium_cpp():
         rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
     return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_atrium()   // Atrium Verb\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
 
+# ---------------------------------------------------------------- Apex Multiband 2
+MODE = {"comp": 0, "up": 1, "exp": 2, "expup": 3}
+PLACE = {"st": 0, "l": 1, "r": 2, "m": 3, "s": 4}
+MB = []
+def bnd(thr=-20, ratio=2, rng=12, knee=6, att=10, rel=150, gain=0, mode="comp", place="st", key=0):
+    return dict(thr=thr, ratio=ratio, range=rng, knee=knee, att=att, rel=rel, gain=gain, mode=MODE[mode], place=PLACE[place], key=key)
+def madd(name, xo, bands, adv=False, phase=0, look=0, det=0, inp=0, out=0, mix=100):
+    MB.append((name, adv, xo, bands, phase, look, det, inp, out, mix))
+madd("Start | Four Bands, Gentle", [120, 500, 2000, 6000], [bnd(-24, 2), bnd(-24, 2), bnd(-24, 2), bnd(-24, 2)])
+madd("Master | Glue the Mix", [120, 600, 3000, 8000], [bnd(-22, 1.8, 6, 10, 30, 200), bnd(-24, 1.6, 4, 10, 20, 160), bnd(-26, 1.5, 4, 10, 15, 120), bnd(-26, 1.5, 4, 10, 10, 100)], look=2)
+madd("Master | Tame the Low End", [90, 250, 2000, 8000], [bnd(-26, 3, 6, 6, 30, 180), bnd(-24, 2.5, 6, 6, 20, 150), bnd(0, 1, 0), bnd(0, 1, 0)], look=3)
+madd("Master | Smooth Harsh Highs", [200, 2500, 5000, 9000], [bnd(0, 1, 0), bnd(0, 1, 0), bnd(-30, 3, 5, 8, 2, 80), bnd(-30, 2.5, 4, 8, 2, 80)], look=2)
+madd("Master | Open the Top (upward)", [150, 1000, 6000, 12000], [bnd(0, 1, 0), bnd(0, 1, 0), bnd(-32, 2, 4, 8, 15, 200, mode="up"), bnd(-36, 2, 5, 8, 15, 200, mode="up")])
+madd("Master | Wide Side Air", [200, 3000, 8000, 12000], [bnd(0, 1, 0), bnd(0, 1, 0), bnd(-36, 2, 3, 8, 20, 200, mode="up", place="s"), bnd(-36, 2, 3, 8, 20, 200, mode="up", place="s")])
+madd("Master | Mono the Lows", [150, 500, 2000, 6000], [bnd(-60, 20, 24, 0, 1, 50, place="s"), bnd(0, 1, 0), bnd(0, 1, 0), bnd(0, 1, 0)])
+madd("Mix | Bass Steady", [80, 250, 1000, 6000], [bnd(-24, 4, 8, 6, 15, 120), bnd(-22, 3, 6, 6, 10, 100), bnd(0, 1, 0), bnd(0, 1, 0)])
+madd("Mix | Vocal Even", [180, 800, 3500, 8000], [bnd(0, 1, 0), bnd(-28, 2.5, 6, 8, 8, 120), bnd(-28, 3, 6, 8, 5, 100), bnd(-30, 3, 6, 8, 2, 80)])
+madd("Mix | De-Box a Vocal", [180, 300, 600, 3000], [bnd(0, 1, 0), bnd(-30, 3, 6, 6, 10, 120), bnd(-30, 3, 6, 6, 10, 120), bnd(0, 1, 0), bnd(0, 1, 0)])
+madd("Mix | Acoustic Guitar Boom", [120, 300, 2000, 6000], [bnd(0, 1, 0), bnd(-28, 4, 8, 6, 8, 100), bnd(0, 1, 0), bnd(0, 1, 0)])
+madd("Drums | Drum Bus Punch", [100, 400, 3000, 8000], [bnd(-20, 3, 6, 6, 25, 100), bnd(-22, 2, 4, 6, 20, 90), bnd(-24, 2, 4, 6, 15, 80), bnd(-30, 2, 4, 6, 5, 70, mode="expup")])
+madd("Drums | Tighten the Room", [150, 600, 3000, 8000], [bnd(-40, 2, 10, 6, 1, 120, mode="exp"), bnd(-40, 2, 10, 6, 1, 120, mode="exp"), bnd(-40, 2, 8, 6, 1, 100, mode="exp"), bnd(-40, 2, 8, 6, 1, 100, mode="exp")])
+madd("Drums | Snare Crack Lift", [200, 1000, 3000, 8000], [bnd(0, 1, 0), bnd(0, 1, 0), bnd(-28, 3, 6, 6, 1, 60, mode="expup"), bnd(0, 1, 0)])
+madd("Beat | Kick Ducks the Bass (side-chain)", [120, 500, 2000, 6000], [bnd(-30, 10, 8, 0, 1, 120, key=1), bnd(0, 1, 0), bnd(0, 1, 0), bnd(0, 1, 0)])
+madd("Beat | 808 Control", [60, 160, 800, 5000], [bnd(-20, 4, 8, 6, 20, 150), bnd(-22, 3, 6, 6, 15, 120), bnd(0, 1, 0), bnd(0, 1, 0)])
+madd("Podcast | Even Voice", [150, 700, 3000, 7000], [bnd(-36, 2, 10, 6, 5, 200, mode="exp"), bnd(-24, 3, 8, 8, 10, 150), bnd(-24, 3, 8, 8, 5, 120), bnd(-30, 4, 8, 8, 1, 60)])
+madd("Podcast | Lift Quiet Speech", [150, 700, 3000, 7000], [bnd(0, 1, 0), bnd(-34, 2, 8, 8, 10, 250, mode="up"), bnd(-34, 2, 8, 8, 10, 250, mode="up"), bnd(0, 1, 0)])
+madd("Clean | Hum and Rumble Down", [60, 200, 2000, 8000], [bnd(-50, 4, 18, 6, 5, 200, mode="exp"), bnd(0, 1, 0), bnd(0, 1, 0), bnd(0, 1, 0)])
+madd("Clean | Hiss Down", [200, 2000, 6000, 10000], [bnd(0, 1, 0), bnd(0, 1, 0), bnd(-56, 3, 12, 6, 5, 200, mode="exp"), bnd(-56, 3, 12, 6, 5, 200, mode="exp")])
+# Advanced
+madd("Linear | Transparent Master Six", [80, 250, 800, 3000, 9000], [bnd(-24, 1.5, 4, 10, 20, 200)] * 6, adv=True, phase=1, look=5)
+madd("Linear | Surgical Two-Band", [180], [bnd(-26, 3, 6, 6, 10, 150), bnd(-26, 2, 4, 6, 5, 100)], adv=True, phase=1)
+madd("Stereo | Left / Right Independent Lows", [150, 1000, 5000, 10000], [bnd(-24, 3, 6, 6, 15, 120, place="l"), bnd(-24, 3, 6, 6, 15, 120, place="r"), bnd(0, 1, 0), bnd(0, 1, 0)], adv=True)
+madd("Stereo | Mid Focus", [200, 1000, 5000, 10000], [bnd(0, 1, 0), bnd(-26, 2.5, 6, 8, 10, 120, place="m"), bnd(-26, 2.5, 6, 8, 10, 120, place="m"), bnd(0, 1, 0)], adv=True)
+madd("Character | Over-the-Top Squash", [100, 500, 3000, 8000], [bnd(-40, 10, 18, 3, 1, 60, gain=6), bnd(-40, 10, 18, 3, 1, 60, gain=6), bnd(-40, 10, 18, 3, 1, 60, gain=6), bnd(-40, 10, 18, 3, 1, 60, gain=4)], adv=True, mix=50)
+madd("Character | Parallel Upward Density", [120, 800, 4000, 10000], [bnd(-40, 3, 10, 10, 10, 200, mode="up")] * 4, adv=True, mix=60)
+madd("Transient | Snap Every Band", [150, 800, 4000, 10000], [bnd(-30, 3, 6, 6, 1, 50, mode="expup")] * 4, adv=True, det=3)
+madd("Detector | Peak Catcher 5 ms Look", [120, 500, 2000, 6000], [bnd(-12, 8, 10, 2, 0.5, 60)] * 4, adv=True, look=5, det=3)
+
+def mb2_cpp():
+    rows = []
+    for name, adv, xo, bands, phase, look, det, inp, out, mix in MB:
+        vals = [("input", inp), ("output", out), ("mix", mix), ("lookahead", look)]
+        for i, x in enumerate(xo): vals.append((f"x{i+1}", x))
+        props = [("bands", len(bands)), ("phase", phase), ("detector", det)]
+        for i, b in enumerate(bands):
+            n = i + 1
+            vals += [(f"b{n}thr", b["thr"]), (f"b{n}ratio", b["ratio"]), (f"b{n}range", b["range"]), (f"b{n}knee", b["knee"]), (f"b{n}att", b["att"]), (f"b{n}rel", b["rel"]), (f"b{n}gain", b["gain"])]
+            props += [(f"mode{n}", b["mode"]), (f"place{n}", b["place"]), (f"key{n}", b["key"])]
+        vs = ", ".join(f'N ("{k}", {float(x)}f)' for k, x in vals)
+        ps = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in props)
+        rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
+    return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_mb2()   // Apex Multiband 2\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
+
 def cpp():
     out = ["// Generated by scripts/gen_presets_114.py - factory presets for the 1.14 Studio Line. Do not edit by hand.",
            "// Included in namespace SignaturePresets (SignaturePresets.h); bank() calls add114().", "",
@@ -215,9 +268,9 @@ def cpp():
         pr = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in props)
         rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {v} }},\n            {{ {pr} }})')
     out.append(",\n".join(rows))
-    out += ["    };", "}", "", torque_cpp(), summit_cpp(), atrium_cpp(), "inline void add114 (std::map<juce::String, std::vector<Preset>>& m)", "{", '    m["Spectra EQ"] = presets114_spectra();', '    m["Torque Comp"] = presets114_torque();', '    m["Summit Limiter"] = presets114_summit();', '    m["Atrium Verb"] = presets114_atrium();', "}", ""]
+    out += ["    };", "}", "", torque_cpp(), summit_cpp(), atrium_cpp(), mb2_cpp(), "inline void add114 (std::map<juce::String, std::vector<Preset>>& m)", "{", '    m["Spectra EQ"] = presets114_spectra();', '    m["Torque Comp"] = presets114_torque();', '    m["Summit Limiter"] = presets114_summit();', '    m["Atrium Verb"] = presets114_atrium();', '    m["Apex Multiband 2"] = presets114_mb2();', "}", ""]
     return "\n".join(out)
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 open(os.path.join(root, "Source", "SignaturePresets114.inl"), "w").write(cpp())
-print(len(P), "Spectra EQ presets,", sum(1 for p in P if not p[1]), "basic;", len(T), "Torque Comp presets,", sum(1 for t in T if not t[1]), "basic;", len(S), "Summit presets,", len(AV), "Atrium presets")
+print(len(P), "Spectra EQ presets,", sum(1 for p in P if not p[1]), "basic;", len(T), "Torque Comp presets,", sum(1 for t in T if not t[1]), "basic;", len(S), "Summit presets,", len(AV), "Atrium presets,", len(MB), "MB2 presets")

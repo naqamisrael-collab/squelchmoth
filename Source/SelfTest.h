@@ -55,6 +55,7 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqTorqueCompPlugin>();
     engine->getPluginManager().createBuiltInType<SqSummitLimiterPlugin>();
     engine->getPluginManager().createBuiltInType<SqAtriumVerbPlugin>();
+    engine->getPluginManager().createBuiltInType<SqApexMB2Plugin>();
     engine->getPluginManager().createBuiltInType<SqTremorPlugin>();
     engine->getPluginManager().createBuiltInType<SqOrbitPanPlugin>();
     engine->getPluginManager().createBuiltInType<SqMirrorShiftPlugin>();
@@ -3711,6 +3712,59 @@ inline int runSelfTest()
             }
         }
         std::cout << "  (1.14 Atrium section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
+    }
+
+    // ===================================================================== 1.14 "Studio Line": Apex Multiband 2
+    {
+        std::cout << "\n-- 1.14 Studio Line: Apex Multiband 2 --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest MB2"})");
+        call ("add_track", R"({"kind":"audio","name":"Mix Bus"})");
+        auto added = call ("apex_multiband", R"({"track":"Mix Bus","action":"add"})");
+        SqApexMB2Plugin* mb = nullptr;
+        if (auto tt = session->findTrack ("Mix Bus")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqApexMB2Plugin*> (pl)) mb = c;
+        check (mb != nullptr && added.contains ("Apex Multiband 2"), "Apex Multiband 2 inserted by apex_multiband add");
+        if (mb != nullptr)
+        {
+            auto st = call ("apex_multiband", R"({"track":"Mix Bus","action":"set","bands":3,"crossovers":[200,5000],"lookahead":2,"detector":"rms"})");
+            check (mb->numBands.get() == 3 && std::abs (mb->bank[SqApexMB2Plugin::x2] - 5000.0f) < 1.0f && mb->detector.get() == 1 && st.contains ("crossovers_hz"), "apex_multiband set: bands, crossovers, lookahead, detector");
+            auto bd = call ("apex_multiband", R"({"track":"Mix Bus","action":"band","band":2,"mode":"compress","place":"side","threshold":-30,"ratio":4,"range":9,"knee":0,"attack":1,"release":50})");
+            check (mb->place[1].get() == 4 && std::abs (mb->bp (1, SqApexMB2Plugin::range) - 9.0f) < 0.01f && bd.contains ("Side"), "apex_multiband band: mode, side-only place, threshold, ratio, range");
+            call ("apex_multiband", R"({"track":"Mix Bus","action":"band","band":2,"place":"stereo","range":40})");
+            auto twin = session->edit->getPluginCache().createNewPlugin (SqApexMB2Plugin::xmlTypeName, {});
+            if (auto* tw = dynamic_cast<SqApexMB2Plugin*> (twin.get()))
+            {
+                tw->restorePluginStateFromValueTree (mb->state);
+                tw->baseClassInitialise ({ te::TimePosition(), 44100.0, 512 });
+                const int N = 44100 * 2; juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi; double eIn = 0, eOut = 0;
+                const int lat = (int) std::lround (tw->getLatencySeconds() * 44100.0);
+                for (int q = 0; q + 512 <= N; q += 512)
+                {
+                    for (int i = 0; i < 512; ++i) { const float v = (float) (0.316 * std::sin (juce::MathConstants<double>::twoPi * 1000.0 * (q + i) / 44100.0)); buf.setSample (0, i, v); buf.setSample (1, i, v); }
+                    te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / 44100.0), te::TimePosition::fromSeconds ((q + 512) / 44100.0)), true, false, true, false);
+                    tw->applyToBuffer (fc);
+                    if (q > 44100) for (int i = 0; i < 512; ++i) { eOut += (double) buf.getSample (0, i) * buf.getSample (0, i); eIn += 0.316 * 0.316 * 0.5; }
+                }
+                tw->baseClassDeinitialise();
+                const double g = 10 * std::log10 (eOut / eIn);
+                check (std::abs (g + 15.0) < 1.0, "Apex Multiband 2 rendered: band 2 (4:1 at -30 dB) takes a -10 dB tone down " + juce::String (g, 2) + " dB (curve -15.0)");
+                check (lat == (int) std::lround (0.002 * 44100.0), "latency = the 2 ms lookahead (" + juce::String (lat) + " samples)");
+            }
+            call ("apex_multiband", R"({"track":"Mix Bus","action":"set","phase":"linear"})");
+            check (std::abs (mb->getLatencySeconds() * mb->sampleRate() - SqMB2::Engine::linearLatency (mb->sampleRate())) < 1.5, "linear phase reports its FIR latency (" + juce::String (mb->getLatencySeconds() * 1000.0, 1) + " ms)");
+            int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmApexMB2") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+            auto pl = call ("apex_multiband", R"({"track":"Mix Bus","action":"preset","preset":"Kick Ducks"})");
+            check (nPre >= 24 && nAdv >= 8 && pl.contains ("Loaded") && mb->keyOf[0].get() == 1, "Apex Multiband 2: " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " Advanced); the side-chain preset keys band 1");
+            check (Edition::packOf ("sqmApexMB2") == Edition::Pack::mastering, "Apex Multiband 2 belongs to the Mastering Suite");
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = mb->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*mb);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (600);
+                auto snap = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                check (snap.isValid() && snap.getWidth() >= 1000, "Apex Multiband 2 window renders offscreen (" + juce::String (snap.getWidth()) + " x " + juce::String (snap.getHeight()) + ")");
+            }
+        }
+        std::cout << "  (1.14 MB2 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));

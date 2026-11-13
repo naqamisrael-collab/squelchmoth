@@ -92,6 +92,7 @@ juce_add_binary_data (${TARGET_NAME}BinaryData SOURCES
     Resources/plugart/pa_torquecomp.jpg
     Resources/plugart/pa_summitlim.jpg
     Resources/plugart/pa_atriumverb.jpg
+    Resources/plugart/pa_apexmb2.jpg
     Resources/plugart/pa_apexsub.jpg
     Resources/plugart/pa_auroraverb.jpg
     Resources/plugart/pa_optoleveler.jpg
