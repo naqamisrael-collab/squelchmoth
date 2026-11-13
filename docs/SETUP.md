@@ -457,6 +457,17 @@ ties, rests, dotted notes and triplets.
 8. When you bounce to 16 bit, choose **DITHER 16 BIT** with **STRONG** shaping (or load *Export | 16-bit with Shaped
    Dither*).
 
+## F2m. Fissure Filter (Color & Space)
+
+1. Insert **Filter > Fissure Filter**. It opens with one warm low-pass (filter 1); filters 2-4 are off.
+2. Drag the numbered node in the display: sideways moves the cutoff, up and down the resonance (or the gain on a Peak).
+3. Click a tab (1-4) to edit that filter: turn it **ON**, pick its **type** and **slope** (12 / 24 / 48 dB).
+4. Choose how the filters connect at the top: **SERIAL** (one after another), **PARALLEL**, **TWO PAIRS**, **MID / SIDE**.
+5. To make it move: in **MODULATION**, click the source (LFO 1, LFO 2 or ENVELOPE), pick a target (for example
+   "Filter 1 Cutoff") and drag the amount (in octaves). The swept range lights up in the display.
+6. Click the LFO's rate chip to lock it to the tempo (1/4, 1/8, dotted, triplet...).
+7. Ask Claude: "add Fissure to the synth with a quarter-note filter wobble".
+
 ## F2l. Spindle Delay (Color & Space)
 
 1. Put Spindle Delay on an aux / FX track (Mix 100 %) or straight on a track (it opens at 30 % Mix).

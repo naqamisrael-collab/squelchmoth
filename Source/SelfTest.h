@@ -60,6 +60,7 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqPortcullisGatePlugin>();
     engine->getPluginManager().createBuiltInType<SqKilnPlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
+    engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqTremorPlugin>();
     engine->getPluginManager().createBuiltInType<SqOrbitPanPlugin>();
     engine->getPluginManager().createBuiltInType<SqMirrorShiftPlugin>();
@@ -3986,6 +3987,60 @@ inline int runSelfTest()
             }
         }
         std::cout << "  (1.14 Spindle section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
+    }
+
+    // ===================================================================== 1.14 "Studio Line": Fissure Filter
+    {
+        std::cout << "\n-- 1.14 Studio Line: Fissure Filter --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest Fissure"})");
+        call ("add_track", R"({"kind":"audio","name":"Synth"})");
+        auto added = call ("fissure_filter", R"({"track":"Synth","action":"add"})");
+        SqFissureFilterPlugin* fi = nullptr;
+        if (auto tt = session->findTrack ("Synth")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqFissureFilterPlugin*> (pl)) fi = c;
+        check (fi != nullptr && added.contains ("Fissure Filter"), "Fissure Filter inserted by fissure_filter add");
+        if (fi != nullptr)
+        {
+            call ("fissure_filter", R"({"track":"Synth","action":"filter","filter":1,"type":"low-pass","slope":24,"cutoff":1000,"resonance":0})");
+            auto md = call ("fissure_filter", R"({"track":"Synth","action":"mod","lfo1_shape":"square","lfo1_sync":"1/4","slot":1,"source":"lfo 1","target":"filter 1 cutoff","amount":2})");
+            check (fi->slotType[0].get() == SqFissure::lowPass && fi->lfo1Sync.get() == 5 && fi->modDst[0].get() == 1 && std::abs (fi->bank[SqFissureFilterPlugin::mod1] * 6.0f - 2.0f) < 0.01f && md.contains ("Filter 1 Cutoff"),
+                   "fissure_filter filter / mod: a 24 dB low-pass, a synced square LFO on its cutoff - by name");
+            check (std::abs (fi->lfoRate (0) - 2.0) < 0.01, "LFO synced to 1/4 at 120 BPM = " + juce::String (fi->lfoRate (0), 2) + " Hz");
+            call ("fissure_filter", R"({"track":"Synth","action":"mod","slot":1,"source":"off"})");
+            auto twin = session->edit->getPluginCache().createNewPlugin (SqFissureFilterPlugin::xmlTypeName, {});
+            if (auto* tw = dynamic_cast<SqFissureFilterPlugin*> (twin.get()))
+            {
+                tw->restorePluginStateFromValueTree (fi->state);
+                tw->baseClassInitialise ({ te::TimePosition(), 44100.0, 512 });
+                auto level = [&] (double f)
+                {
+                    tw->reset(); const int N = 44100 / 2; juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi; double eo = 0, ei = 0;
+                    for (int q = 0; q + 512 <= N; q += 512)
+                    {
+                        for (int i = 0; i < 512; ++i) { const float v = (float) (0.25 * std::sin (juce::MathConstants<double>::twoPi * f * (q + i) / 44100.0)); buf.setSample (0, i, v); buf.setSample (1, i, v); }
+                        te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / 44100.0), te::TimePosition::fromSeconds ((q + 512) / 44100.0)), true, false, true, false);
+                        tw->applyToBuffer (fc);
+                        if (q > N / 2) for (int i = 0; i < 512; ++i) { eo += (double) buf.getSample (0, i) * buf.getSample (0, i); ei += 0.25 * 0.25 * 0.5; }
+                    }
+                    return 10 * std::log10 (eo / ei + 1e-30);
+                };
+                const double atFc = level (1000), at4k = level (4000);
+                tw->baseClassDeinitialise();
+                check (std::abs (atFc + 3.0) < 0.3 && at4k < -45, "Fissure rendered: 24 dB low-pass at 1 kHz reads " + juce::String (atFc, 2) + " dB at the cutoff, " + juce::String (at4k, 1) + " dB at 4 kHz");
+            }
+            int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmFissure") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+            auto pl = call ("fissure_filter", R"({"track":"Synth","action":"preset","preset":"Auto-Wah"})");
+            check (nPre >= 24 && nAdv >= 8 && pl.contains ("Loaded") && fi->modSrc[0].get() == 3, "Fissure Filter: " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " Advanced); the auto-wah routes the envelope");
+            check (Edition::packOf ("sqmFissure") == Edition::Pack::color, "Fissure Filter belongs to Color & Space");
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = fi->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*fi);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (600);
+                auto snap = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                check (snap.isValid() && snap.getWidth() >= 1000, "Fissure Filter window renders offscreen (" + juce::String (snap.getWidth()) + " x " + juce::String (snap.getHeight()) + ")");
+            }
+        }
+        std::cout << "  (1.14 Fissure section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));

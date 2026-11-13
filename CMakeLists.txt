@@ -97,6 +97,7 @@ juce_add_binary_data (${TARGET_NAME}BinaryData SOURCES
     Resources/plugart/pa_portcullis.jpg
     Resources/plugart/pa_kiln.jpg
     Resources/plugart/pa_spindle.jpg
+    Resources/plugart/pa_fissure.jpg
     Resources/plugart/pa_apexsub.jpg
     Resources/plugart/pa_auroraverb.jpg
     Resources/plugart/pa_optoleveler.jpg

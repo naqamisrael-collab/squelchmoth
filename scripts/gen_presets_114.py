@@ -418,6 +418,60 @@ def spindle_cpp():
         rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
     return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_spindle()   // Spindle Delay\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
 
+# ---------------------------------------------------------------- Fissure Filter
+FT = {"lp": 0, "hp": 1, "bp": 2, "notch": 3, "peak": 4, "comb": 5, "vowel": 6}
+FR = {"serial": 0, "parallel": 1, "pairs": 2, "ms": 3}
+FI = []
+def fs_(t="lp", cut=1000, res=20, drive=0, gain=6, pan=0, mix=100, slope=24, on=1): return dict(t=FT[t], cut=cut, res=res, drive=drive, gain=gain, pan=pan, mix=mix, slope=slope, on=on)
+OFF = dict(t=0, cut=1000, res=20, drive=0, gain=6, pan=0, mix=100, slope=24, on=0)
+def fadd(name, slots, adv=False, routing="serial", lfo1=(0, 1.0, 0), lfo2=(1, 0.25, 0), env=(5, 120, 0), mods=(), mix=100, out=0):
+    sl = list(slots) + [OFF] * (4 - len(slots)); FI.append((name, adv, FR[routing], sl, lfo1, lfo2, env, mods, mix, out))
+fadd("Start | Warm Low-Pass", [fs_("lp", 3000, 15)])
+fadd("Sweep | Slow LFO Low-Pass", [fs_("lp", 800, 45)], lfo1=(0, 0.25, 0), mods=((1, 1, 0.4),))
+fadd("Sweep | Tempo Quarter Wobble", [fs_("lp", 600, 60, slope=24)], lfo1=(0, 1, 5), mods=((1, 1, 0.5),))
+fadd("Sweep | Eighth Note Gate Filter", [fs_("lp", 400, 30)], lfo1=(3, 1, 6), mods=((1, 1, 0.6),))
+fadd("Sweep | Random Steps (S&H)", [fs_("bp", 1200, 60, slope=12)], lfo1=(4, 4, 7), mods=((1, 1, 0.45),))
+fadd("Envelope | Funky Auto-Wah", [fs_("bp", 500, 65, slope=12)], env=(3, 120, 6), mods=((3, 1, 0.55),))
+fadd("Envelope | Opens on Hits", [fs_("lp", 400, 35)], env=(2, 200, 0), mods=((3, 1, 0.6),))
+fadd("Drums | Telephone Break", [fs_("hp", 400, 20, slope=24), fs_("lp", 3000, 25, slope=24)])
+fadd("Drums | Crunchy Band-Pass", [fs_("bp", 1500, 40, drive=12, slope=12)])
+fadd("Bass | Squelchy Resonance", [fs_("lp", 350, 75, drive=6, slope=24)], env=(2, 150, 6), mods=((3, 1, 0.5),))
+fadd("Bass | Tight Low-Cut", [fs_("hp", 40, 10, slope=48)])
+fadd("Vocal | Radio Voice", [fs_("hp", 500, 25, slope=24), fs_("lp", 3500, 30, slope=24), fs_("peak", 1800, 30, gain=5)])
+fadd("Vocal | Formant Talk (vowel)", [fs_("vowel", 400, 50)], lfo1=(1, 0.5, 0), mods=((1, 1, 0.35),))
+fadd("Synth | Dual Peak Character", [fs_("peak", 300, 30, gain=6), fs_("peak", 4000, 40, gain=5), fs_("lp", 9000, 10)])
+fadd("Synth | Comb Metallic", [fs_("comb", 220, 80, mix=70)])
+fadd("Pad | Stereo Drift", [fs_("lp", 1500, 40, pan=-60), fs_("lp", 1500, 40, pan=60)], routing="parallel", lfo1=(0, 0.13, 0), lfo2=(0, 0.17, 0), mods=((1, 1, 0.3), (2, 2, -0.3)))
+fadd("Mix | Gentle Tilt Dark", [fs_("lp", 9000, 5, slope=12), fs_("peak", 200, 10, gain=2)])
+fadd("Mix | Notch Out a Whistle", [fs_("notch", 3150, 80, slope=12)])
+fadd("FX | Underwater", [fs_("lp", 400, 60, slope=48)], lfo1=(0, 0.3, 0), mods=((1, 1, 0.15),))
+fadd("FX | Rising Build (sweep up)", [fs_("hp", 60, 40, slope=24)], lfo1=(2, 0.05, 2), mods=((1, 1, 1.0),))
+# Advanced
+fadd("Routing | Two Pairs: Lo-Fi + Air", [fs_("hp", 300), fs_("lp", 2500), fs_("hp", 8000, slope=12), fs_("peak", 12000, 20, gain=4)], adv=True, routing="pairs")
+fadd("Routing | Mid Warm, Side Bright", [fs_("lp", 6000, 10), OFF, fs_("hp", 300, 10), fs_("peak", 9000, 20, gain=4)], adv=True, routing="ms")
+fadd("Routing | Parallel Band Splitter", [fs_("lp", 250, 30), fs_("bp", 1000, 50, slope=12), fs_("bp", 3000, 50, slope=12), fs_("hp", 8000, 30)], adv=True, routing="parallel")
+fadd("Mod | Two LFOs Against Each Other", [fs_("lp", 1200, 55), fs_("hp", 300, 40)], adv=True, lfo1=(0, 0.5, 0), lfo2=(1, 0.33, 0), mods=((1, 1, 0.4), (2, 2, 0.35), (1, 5, -0.3)))
+fadd("Mod | Envelope Ducks the Resonance", [fs_("lp", 900, 80)], adv=True, env=(1, 200, 0), mods=((3, 5, -0.8),))
+fadd("Mod | Comb Sweep Flange", [fs_("comb", 400, 85, mix=50)], adv=True, lfo1=(1, 0.15, 0), mods=((1, 1, 0.5),))
+fadd("Self-Oscillation | Whistling LP", [fs_("lp", 1000, 98, slope=24)], adv=True, lfo1=(0, 0.2, 0), mods=((1, 1, 0.5),), out=-12)
+fadd("Drive | Screaming 48 dB", [fs_("lp", 700, 85, drive=24, slope=48)], adv=True, env=(2, 100, 6), mods=((3, 1, 0.5),), out=-6)
+
+def fissure_cpp():
+    rows = []
+    for name, adv, routing, sl, lfo1, lfo2, env, mods, mix, out in FI:
+        vals = [("lfo1Rate", lfo1[1]), ("lfo2Rate", lfo2[1]), ("envAttack", env[0]), ("envRelease", env[1]), ("envGain", env[2]), ("mix", mix), ("output", out)]
+        props = [("routing", routing), ("lfo1Shape", lfo1[0]), ("lfo1Sync", lfo1[2]), ("lfo2Shape", lfo2[0]), ("lfo2Sync", lfo2[2])]
+        for i, s in enumerate(sl):
+            n = i + 1
+            vals += [(f"f{n}cut", s["cut"]), (f"f{n}res", s["res"]), (f"f{n}drive", s["drive"]), (f"f{n}gain", s["gain"]), (f"f{n}pan", s["pan"]), (f"f{n}mix", s["mix"])]
+            props += [(f"on{n}", s["on"]), (f"type{n}", s["t"]), (f"slope{n}", s["slope"])]
+        for i, (src, dst, amt) in enumerate(mods):
+            vals.append((f"mod{i+1}", amt)); props += [(f"src{i+1}", src), (f"dst{i+1}", dst)]
+        vs = ", ".join(f'N ("{k}", {float(x)}f)' for k, x in vals)
+        ps = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in props)
+        rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
+    return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_fissure()   // Fissure Filter\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
+
 def cpp():
     out = ["// Generated by scripts/gen_presets_114.py - factory presets for the 1.14 Studio Line. Do not edit by hand.",
            "// Included in namespace SignaturePresets (SignaturePresets.h); bank() calls add114().", "",
@@ -438,9 +492,9 @@ def cpp():
         pr = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in props)
         rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {v} }},\n            {{ {pr} }})')
     out.append(",\n".join(rows))
-    out += ["    };", "}", "", torque_cpp(), summit_cpp(), atrium_cpp(), mb2_cpp(), sibyl_cpp(), portcullis_cpp(), kiln_cpp(), spindle_cpp(), "inline void add114 (std::map<juce::String, std::vector<Preset>>& m)", "{", '    m["Spectra EQ"] = presets114_spectra();', '    m["Torque Comp"] = presets114_torque();', '    m["Summit Limiter"] = presets114_summit();', '    m["Atrium Verb"] = presets114_atrium();', '    m["Apex Multiband 2"] = presets114_mb2();', '    m["Sibyl De-Ess"] = presets114_sibyl();', '    m["Portcullis Gate"] = presets114_portcullis();', '    m["Kiln"] = presets114_kiln();', '    m["Spindle Delay"] = presets114_spindle();', "}", ""]
+    out += ["    };", "}", "", torque_cpp(), summit_cpp(), atrium_cpp(), mb2_cpp(), sibyl_cpp(), portcullis_cpp(), kiln_cpp(), spindle_cpp(), fissure_cpp(), "inline void add114 (std::map<juce::String, std::vector<Preset>>& m)", "{", '    m["Spectra EQ"] = presets114_spectra();', '    m["Torque Comp"] = presets114_torque();', '    m["Summit Limiter"] = presets114_summit();', '    m["Atrium Verb"] = presets114_atrium();', '    m["Apex Multiband 2"] = presets114_mb2();', '    m["Sibyl De-Ess"] = presets114_sibyl();', '    m["Portcullis Gate"] = presets114_portcullis();', '    m["Kiln"] = presets114_kiln();', '    m["Spindle Delay"] = presets114_spindle();', '    m["Fissure Filter"] = presets114_fissure();', "}", ""]
     return "\n".join(out)
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 open(os.path.join(root, "Source", "SignaturePresets114.inl"), "w").write(cpp())
-print(len(P), "Spectra EQ presets,", sum(1 for p in P if not p[1]), "basic;", len(T), "Torque Comp presets,", sum(1 for t in T if not t[1]), "basic;", len(S), "Summit presets,", len(AV), "Atrium presets,", len(MB), "MB2 presets,", len(SB), "Sibyl presets,", len(PG), "Portcullis presets,", len(KL), "Kiln presets,", len(SD), "Spindle presets")
+print(len(P), "Spectra EQ presets,", sum(1 for p in P if not p[1]), "basic;", len(T), "Torque Comp presets,", sum(1 for t in T if not t[1]), "basic;", len(S), "Summit presets,", len(AV), "Atrium presets,", len(MB), "MB2 presets,", len(SB), "Sibyl presets,", len(PG), "Portcullis presets,", len(KL), "Kiln presets,", len(SD), "Spindle presets,", len(FI), "Fissure presets")

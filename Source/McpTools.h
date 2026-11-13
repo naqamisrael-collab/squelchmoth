@@ -423,6 +423,7 @@ private:
         registerPortcullisTools();
         registerKilnTools();
         registerSpindleTools();
+        registerFissureTools();
     }
 
     #include "McpToolsParity.h"
@@ -446,6 +447,7 @@ private:
     #include "McpToolsPortcullis.h"
     #include "McpToolsKiln.h"
     #include "McpToolsSpindle.h"
+    #include "McpToolsFissure.h"
 
     //==============================================================================
     void registerSessionTools()
