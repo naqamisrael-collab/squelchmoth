@@ -39,6 +39,29 @@ namespace Skins
 
     //==============================================================================
     /** A control handle: one normalised value with text, backed by an automatable parameter or a plain state value. */
+    /** A short form of a parameter's value text for the scale at a knob's two ends: "20000.0 Hz" -> "20k", "-24.00 dB" -> "-24",
+        "100.0 %" -> "100%", "2500 ms" -> "2.5s". Text that isn't a number is kept (cut to 6 characters). */
+    inline juce::String compactValue (const juce::String& raw)
+    {
+        auto t = raw.trim();
+        const auto num = t.initialSectionContainingOnly ("+-0123456789.");
+        if (num.isEmpty() || num == "-" || num == "+" || num == ".") return t.substring (0, 6);
+        auto unit = t.substring (num.length()).trim();
+        double v = num.getDoubleValue();
+        auto trim = [] (double x, int dec) { juce::String s (x, dec); if (s.contains (".")) { while (s.endsWithChar ('0')) s = s.dropLastCharacters (1); if (s.endsWithChar ('.')) s = s.dropLastCharacters (1); } return s; };
+        if (unit.startsWithIgnoreCase ("kHz")) { v *= 1000.0; unit = "Hz"; }
+        if (unit.startsWithIgnoreCase ("Hz")) return std::abs (v) >= 1000.0 ? trim (v / 1000.0, 1) + "k" : trim (v, 0);
+        if (unit.startsWithIgnoreCase ("ms") && std::abs (v) >= 1000.0) return trim (v / 1000.0, 1) + "s";
+        const int dec = std::abs (v) >= 100 ? 0 : std::abs (v) >= 10 ? 1 : 2;
+        juce::String out = trim (v, dec);
+        if (unit.startsWith ("%")) out << "%";
+        else if (unit.startsWithIgnoreCase ("ms")) out << "ms";
+        else if (unit == "s" || unit.startsWith ("s ")) out << "s";
+        else if (unit.startsWith (":1")) out << ":1";
+        else if (unit.startsWithIgnoreCase ("x")) out = "x" + out;
+        return out;
+    }
+
     struct Handle
     {
         juce::String name;                          // the name used in specs
@@ -52,6 +75,7 @@ namespace Skins
         bool toggle = false;
         bool bipolar = false;                       // knob fills from the centre (pan, gain, tune...)
         float defaultNorm = 0.0f;
+        std::function<juce::String (bool high)> endText;   // the range's two ends, printed beside the knob (phase Z: numbers on every face)
 
         float natural (float lo, float hi) const    { return lo + (hi - lo) * get(); }
     };
@@ -87,6 +111,12 @@ namespace Skins
         };
         h->gestureBegin = [&p] { p.parameterChangeGestureBegin(); };
         h->gestureEnd = [&p] { p.parameterChangeGestureEnd(); };
+        h->endText = [&p, unitRange, range] (bool high)
+        {
+            const float v = high ? range.getEnd() : range.getStart();
+            if (unitRange) return juce::String (high ? "100%" : "0%");
+            return compactValue (p.valueToString (v).trim());
+        };
         h->defaultNorm = h->get();
         const auto& nm = h->name;
         h->bipolar = nm.containsIgnoreCase ("pan") || nm.containsIgnoreCase ("shelf gain") || nm.containsIgnoreCase ("Mid gain") || nm.containsIgnoreCase ("tune")
@@ -102,6 +132,7 @@ namespace Skins
         h->get = [&cv, range] { return range.convertTo0to1 (juce::jlimit (range.start, range.end, cv.get())); };
         h->set = [&cv, range] (float v) { cv = range.convertFrom0to1 (juce::jlimit (0.0f, 1.0f, v)); };
         h->text = [&cv, unit, decimals] { return SqDsp::numText (cv.get(), decimals) + unit; };
+        h->endText = [lo, hi, unit] (bool high) { return compactValue (SqDsp::numText (high ? hi : lo, 1) + unit); };
         h->defaultNorm = range.convertTo0to1 (juce::jlimit (lo, hi, cv.get()));
         return h;
     }
@@ -114,6 +145,7 @@ namespace Skins
         h->get = [&cv, range] { return range.convertTo0to1 (juce::jlimit (range.start, range.end, (float) cv.get())); };
         h->set = [&cv, range] (float v) { cv = juce::roundToInt (range.convertFrom0to1 (juce::jlimit (0.0f, 1.0f, v))); };
         h->text = [&cv, unit] { return juce::String (cv.get()) + unit; };
+        h->endText = [lo, hi, unit] (bool high) { return compactValue (juce::String (high ? hi : lo) + unit); };
         h->defaultNorm = range.convertTo0to1 (juce::jlimit ((float) lo, (float) hi, (float) cv.get()));
         return h;
     }
@@ -275,6 +307,19 @@ namespace Skins
                 }
             }
 
+            // the range's two ends at the ends of the arc
+            if (handle.endText && handle.choices.isEmpty() && ! handle.toggle)
+            {
+                g.setFont (Theme::font (large ? 8.0f : 7.5f, true));
+                g.setColour (Theme::dim().withAlpha (0.9f));
+                const auto lo = handle.endText (false), hi = handle.endText (true);
+                const auto pL = c.getPointOnCircumference (radius + 3.0f, a0), pH = c.getPointOnCircumference (radius + 3.0f, a1);
+                const float wL = juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), lo) + 2.0f, wH = juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), hi) + 2.0f;
+                auto bL = juce::Rectangle<float> (pL.x - wL + 6.0f, pL.y + 1.0f, wL, 9.0f), bH = juce::Rectangle<float> (pH.x - 6.0f, pH.y + 1.0f, wH, 9.0f);
+                const auto bounds = getLocalBounds().toFloat();
+                bL = bL.withX (juce::jmax (bounds.getX(), bL.getX())); bH = bH.withX (juce::jmin (bounds.getRight() - bH.getWidth(), bH.getX()));
+                g.drawText (lo, bL, juce::Justification::centredLeft); g.drawText (hi, bH, juce::Justification::centredRight);
+            }
             g.setFont (Theme::font (large ? 11.0f : 9.5f, true));
             g.setColour (Theme::text());
             g.drawText (handle.text(), valueArea, juce::Justification::centred);
@@ -283,6 +328,7 @@ namespace Skins
             g.drawText (handle.label.toUpperCase(), labelArea, juce::Justification::centred);
         }
 
+        Handle& getHandle() const { return handle; }
         void mouseDown (const juce::MouseEvent& e) override
         {
             if (e.mods.isPopupMenu()) { showMenu(); return; }
@@ -2037,18 +2083,24 @@ namespace Skins
             buildViz();
             buildControls();
             buildHeader();
-            setSize (spec.width, spec.height);
+            if (wantsMeter())
+                if (auto t = dynamic_cast<te::AudioTrack*> (plugin.getOwnerTrack()))
+                    if (auto lm = t->getLevelMeterPlugin()) { trackMeter = &lm->measurer; trackMeter->addClient (meterClient); }
+            outMeter.labIn = "L"; outMeter.labOut = "R";
+            setSize (spec.width + (wantsMeter() ? meterColumn : 0), spec.height);
             startTimerHz (24);
         }
 
-        ~SkinEditor() override   { plugin.edit.flushPluginStateIfNeeded (plugin); }
+        ~SkinEditor() override   { if (trackMeter != nullptr) trackMeter->removeClient (meterClient); plugin.edit.flushPluginStateIfNeeded (plugin); }
+        static constexpr int meterColumn = 92;
 
         bool allowWindowResizing() override                                 { return spec.resizable; }
         juce::ComponentBoundsConstrainer* getBoundsConstrainer() override
         {
             if (! spec.resizable) return nullptr;
-            constrainer.setFixedAspectRatio ((double) spec.width / (double) spec.height);
-            constrainer.setSizeLimits (spec.width * 3 / 4, spec.height * 3 / 4, spec.width * 2, spec.height * 2);
+            const int w = spec.width + (wantsMeter() ? meterColumn : 0);
+            constrainer.setFixedAspectRatio ((double) w / (double) spec.height);
+            constrainer.setSizeLimits (w * 3 / 4, spec.height * 3 / 4, w * 2, spec.height * 2);
             return &constrainer;
         }
         juce::ComponentBoundsConstrainer constrainer;
@@ -2106,6 +2158,13 @@ namespace Skins
                 g.setFont (Theme::font (9.0f, true));
                 g.drawText (gb.title, gb.bounds.reduced (8, 4), juce::Justification::topLeft);
             }
+            if (! meterArea.isEmpty())
+            {
+                auto m = meterArea.toFloat().withTrimmedBottom (10.0f);
+                g.setColour (Theme::dim()); g.setFont (Theme::font (8.0f, true));
+                g.drawText (trackMeter != nullptr ? "TRACK OUT" : "OUT", m.removeFromTop (12.0f), juce::Justification::centred);
+                outMeter.draw (g, m, neon (accent), false);
+            }
             g.setColour (Theme::dim().withAlpha (0.7f));
             g.setFont (Theme::font (8.5f));
             g.drawText ("Squelchmoth - created by Jamar Stewart", getLocalBounds().reduced (10, 4), juce::Justification::bottomRight);
@@ -2121,6 +2180,8 @@ namespace Skins
             header.removeFromRight (6);
             presetBox.setBounds (header.removeFromRight (230).withHeight (22));
             r.reduce (10, 8);
+            if (wantsMeter()) { meterArea = r.removeFromRight (meterColumn - 8); r.removeFromRight (8); }
+            else meterArea = {};
 
             if (spec.family == Family::synth)   { layoutSynth (r); return; }
             if (spec.family == Family::sampler) { layoutSampler (r); return; }
@@ -2172,6 +2233,9 @@ namespace Skins
         struct GroupBox { juce::String title; juce::Rectangle<int> bounds; std::vector<juce::Component*> items; bool big; int cols = 0; };
         std::vector<GroupBox> groupBoxes;
         juce::Rectangle<int> vizArea;
+        // phase Z: every generic face gets numbered L / R level meters (the track's output)
+        juce::Rectangle<int> meterArea; te::LevelMeasurer* trackMeter = nullptr; te::LevelMeasurer::Client meterClient; StudioUi::StudioMeter outMeter;
+        bool wantsMeter() const { return spec.family != Family::midi && ! (spec.vizH > 0 && spec.vizH >= spec.height - 100); }   // MIDI tools have no audio to meter   // the Studio Line faces draw their own
         juce::ComboBox presetBox;
         juce::TextButton bypassBtn { "BYPASS" }, abBtn { "A/B" };
         juce::ValueTree abState; bool abIsB = false;
@@ -3531,6 +3595,12 @@ namespace Skins
         {
             if (viz) { viz->phase += 0.05f; viz->repaint(); }
             for (auto& c : controls) c->repaint();
+            if (! meterArea.isEmpty())
+            {
+                float l = 0, r = 0;
+                if (trackMeter != nullptr) { l = juce::Decibels::decibelsToGain (meterClient.getAndClearAudioLevel (0).dB, -100.0f); r = juce::Decibels::decibelsToGain (meterClient.getAndClearAudioLevel (1).dB, -100.0f); }
+                outMeter.update (l, r, 0.0f); repaint (meterArea);
+            }
             bypassBtn.setToggleState (! plugin.isEnabled(), juce::dontSendNotification);
             if (spec.family == Family::sampler && zoneList.getModel() != nullptr && zoneList.getNumRowsOnScreen() >= 0) zoneList.repaint();
         }
