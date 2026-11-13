@@ -32,6 +32,8 @@
 #include "SqSummit.h"
 #include "SqAtrium.h"
 #include "SqApexMB2.h"
+#include "SqSibyl.h"
+#include "SqPortcullis.h"
 
 namespace te = tracktion;
 
@@ -115,6 +117,8 @@ namespace Signature
             { "Summit Limiter",   "sqmSummitLim",    "Dynamics",    "The flagship true-peak limiter: 10 algorithms, a ceiling that holds against an exact reconstruction (band-limit guard + safety stage), lookahead to 10 ms, separate transient / release linking, oversampled gain stage to 32x, DC filter, TPDF dither with noise shaping, unity audition, listen to what's removed, and a full loudness panel against your target", 0xff8fe3ff, "summitlim" },
             { "Atrium Verb",      "sqmAtriumVerb",   "Reverb",      "The flagship algorithmic reverb: a 16-line network with modulated cubic-interpolated delays, 12 spaces (halls, plates, rooms, chamber, cathedral, bloom, gate), early reflections drawn as they happen, decay set per band and measured within a few percent, freeze, ducking, tempo-synced predelay, width, and a 24 dB/oct low / high cut", 0xffffb35c, "atriumverb" },
             { "Apex Multiband 2", "sqmApexMB2",      "Dynamics",    "The multiband dynamics flagship: up to six bands split in minimum phase (bands sum to an all-pass) or linear phase (bands sum to the input exactly), and per band compress, compress up, expand or expand up, a stereo place (stereo, left, right, mid, side), a side-chain key, range, knee, attack, release, solo and bypass; lookahead to 20 ms; live spectrum with draggable crossovers and every band's gain change drawn as it happens", 0xff1affc8, "apexmb2" },
+            { "Sibyl De-Ess",     "sqmSibylDeEss",   "Voice",       "The de-esser flagship: relative detection (the s against the whole voice, so whispers and shouts are treated alike) or absolute, a split cut that is a clean minimum-phase bell (exactly the input when idle) or a wide one, Track mode that follows the loudest s, lookahead to 15 ms, linked / mid / side, side-chain key, listen to the detection or to exactly what is removed", 0xffe8a48c, "sibyldeess" },
+            { "Portcullis Gate",  "sqmPortcullis",   "Dynamics",    "The gate flagship: separate open and close thresholds (no chatter), range, hold, attack and release with three curves, lookahead to 10 ms, gate / expand / duck, a key from the input, the side-chain or MIDI notes (with velocity), a key filter you can listen to, and flip to hear only what it removes", 0xffffb04a, "portcullis" },
             { "Torque Comp",      "sqmTorqueComp",   "Dynamics",    "The flagship compressor: 14 styles (Clean, Punch, Glue, Opto, Variable Mu, FET, Bus, Vocal, Mastering, Leveler, Upward, Pump, Smash, Transparent Peak), knee to 72 dB, lookahead, hold, auto release / threshold / gain, a 6-band key EQ, MIDI and tempo keys, Mid / Side routing, oversampled colour to 32x and mix to 200 %", 0xffe0763a, "torquecomp" },
             { "Apex Dynamics",    "sqmApexDyn",      "Dynamics",    "Compressor, expander, gate, ducker and upward compressor in one: lookahead, negative ratios, Smart detection, key filter", 0xffffc21a, "apexdyn" },
             { "Apex Limiter",     "sqmApexLim",      "Dynamics",    "True-peak limiter with lookahead, Character and a full BS.1770-4 loudness meter with one-click loudness targets", 0xffff4a2a, "apexlim" },

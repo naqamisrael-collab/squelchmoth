@@ -331,6 +331,114 @@ SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_mb2()   // Apex Multib
     };
 }
 
+SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_sibyl()   // Sibyl De-Ess
+{
+    return {
+        B ("Start | Natural Voice", { N ("threshold", -12.0f), N ("range", 8.0f), N ("knee", 6.0f), N ("release", 60.0f), N ("lookahead", 2.0f), N ("low", 5000.0f), N ("high", 10000.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        B ("Vocal | Female Pop", { N ("threshold", -10.0f), N ("range", 9.0f), N ("knee", 6.0f), N ("release", 50.0f), N ("lookahead", 2.0f), N ("low", 6000.0f), N ("high", 11000.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        B ("Vocal | Male Pop", { N ("threshold", -12.0f), N ("range", 8.0f), N ("knee", 6.0f), N ("release", 60.0f), N ("lookahead", 2.0f), N ("low", 4500.0f), N ("high", 9000.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        B ("Vocal | Rap, Close Mic", { N ("threshold", -14.0f), N ("range", 10.0f), N ("knee", 4.0f), N ("release", 45.0f), N ("lookahead", 3.0f), N ("low", 5000.0f), N ("high", 10000.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        B ("Vocal | Breathy Ballad", { N ("threshold", -16.0f), N ("range", 6.0f), N ("knee", 9.0f), N ("release", 80.0f), N ("lookahead", 2.0f), N ("low", 5500.0f), N ("high", 12000.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        B ("Vocal | Bright Condenser Tamer", { N ("threshold", -12.0f), N ("range", 10.0f), N ("knee", 6.0f), N ("release", 60.0f), N ("lookahead", 2.0f), N ("low", 6500.0f), N ("high", 13000.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 1.0f }, { "sidechain", 0.0f } }),
+        B ("Vocal | Hunt the S (track)", { N ("threshold", -12.0f), N ("range", 9.0f), N ("knee", 6.0f), N ("release", 55.0f), N ("lookahead", 2.0f), N ("low", 4000.0f), N ("high", 12000.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 1.0f }, { "sidechain", 0.0f } }),
+        B ("Vocal | Gentle Polish", { N ("threshold", -8.0f), N ("range", 4.0f), N ("knee", 12.0f), N ("release", 70.0f), N ("lookahead", 2.0f), N ("low", 5000.0f), N ("high", 10000.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        B ("Vocal | Heavy Lisp Fix", { N ("threshold", -18.0f), N ("range", 14.0f), N ("knee", 3.0f), N ("release", 40.0f), N ("lookahead", 4.0f), N ("low", 4500.0f), N ("high", 10000.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        B ("Backing | Stack of Voices", { N ("threshold", -14.0f), N ("range", 10.0f), N ("knee", 6.0f), N ("release", 70.0f), N ("lookahead", 2.0f), N ("low", 5000.0f), N ("high", 11000.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        B ("Podcast | Speech", { N ("threshold", -14.0f), N ("range", 8.0f), N ("knee", 6.0f), N ("release", 60.0f), N ("lookahead", 3.0f), N ("low", 4500.0f), N ("high", 9000.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        B ("Podcast | Phone Bright", { N ("threshold", -12.0f), N ("range", 6.0f), N ("knee", 6.0f), N ("release", 60.0f), N ("lookahead", 2.0f), N ("low", 3000.0f), N ("high", 6500.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        B ("Mix | Cymbal Sizzle", { N ("threshold", -28.0f), N ("range", 6.0f), N ("knee", 6.0f), N ("release", 80.0f), N ("lookahead", 2.0f), N ("low", 7000.0f), N ("high", 14000.0f) },
+            { { "shape", 0.0f }, { "detect", 0.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        B ("Mix | Acoustic Guitar Squeaks", { N ("threshold", -30.0f), N ("range", 8.0f), N ("knee", 4.0f), N ("release", 60.0f), N ("lookahead", 2.0f), N ("low", 2500.0f), N ("high", 6000.0f) },
+            { { "shape", 0.0f }, { "detect", 0.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        B ("Master | Harsh Top, Whole Mix", { N ("threshold", -30.0f), N ("range", 3.0f), N ("knee", 9.0f), N ("release", 90.0f), N ("lookahead", 2.0f), N ("low", 5500.0f), N ("high", 11000.0f) },
+            { { "shape", 0.0f }, { "detect", 0.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        B ("Master | Side Sibilance Only", { N ("threshold", -30.0f), N ("range", 5.0f), N ("knee", 9.0f), N ("release", 80.0f), N ("lookahead", 2.0f), N ("low", 5000.0f), N ("high", 11000.0f) },
+            { { "shape", 0.0f }, { "detect", 0.0f }, { "stereo", 2.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        A ("Wide | Whole Voice Ducks on S", { N ("threshold", -12.0f), N ("range", 6.0f), N ("knee", 6.0f), N ("release", 50.0f), N ("lookahead", 2.0f) },
+            { { "shape", 1.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        A ("Wide | Old-School Broadband", { N ("threshold", -14.0f), N ("range", 10.0f), N ("knee", 3.0f), N ("release", 40.0f), N ("lookahead", 0.0f) },
+            { { "shape", 1.0f }, { "detect", 0.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        A ("Detect | Absolute, Steady Level", { N ("threshold", -34.0f), N ("range", 8.0f), N ("knee", 6.0f), N ("release", 60.0f), N ("lookahead", 2.0f) },
+            { { "shape", 0.0f }, { "detect", 0.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        A ("Detect | Fast Release Consonants", { N ("threshold", -12.0f), N ("range", 10.0f), N ("knee", 4.0f), N ("release", 15.0f), N ("lookahead", 3.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        A ("Detect | Max Lookahead, No Pre-Hiss", { N ("threshold", -12.0f), N ("range", 10.0f), N ("knee", 6.0f), N ("release", 60.0f), N ("lookahead", 10.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        A ("Stereo | Mid Only (centre vocal)", { N ("threshold", -12.0f), N ("range", 8.0f), N ("knee", 6.0f), N ("release", 60.0f), N ("lookahead", 2.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 1.0f }, { "track", 0.0f }, { "sidechain", 0.0f } }),
+        A ("Key | Side-Chain From Lead Vocal", { N ("threshold", -14.0f), N ("range", 8.0f), N ("knee", 6.0f), N ("release", 60.0f), N ("lookahead", 2.0f) },
+            { { "shape", 0.0f }, { "detect", 0.0f }, { "stereo", 0.0f }, { "track", 0.0f }, { "sidechain", 1.0f } }),
+        A ("Fix | Very Narrow Whistle", { N ("threshold", -18.0f), N ("range", 12.0f), N ("knee", 3.0f), N ("release", 40.0f), N ("lookahead", 2.0f), N ("low", 7500.0f), N ("high", 8800.0f) },
+            { { "shape", 0.0f }, { "detect", 1.0f }, { "stereo", 0.0f }, { "track", 1.0f }, { "sidechain", 0.0f } })
+    };
+}
+
+SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_portcullis()   // Portcullis Gate
+{
+    return {
+        B ("Start | Clean Gate", { N ("threshold", -40.0f), N ("hysteresis", 6.0f), N ("range", 60.0f), N ("attack", 0.5f), N ("hold", 30.0f), N ("release", 120.0f) },
+            { { "mode", 0.0f }, { "key", 0.0f }, { "curve", 1.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Drums | Kick Tight", { N ("threshold", -28.0f), N ("hysteresis", 6.0f), N ("range", 40.0f), N ("attack", 0.1f), N ("hold", 20.0f), N ("release", 80.0f), N ("lookahead", 1.0f), N ("keyHp", 30.0f), N ("keyLp", 300.0f) },
+            { { "mode", 0.0f }, { "key", 0.0f }, { "curve", 2.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Drums | Snare, No Hi-Hat Bleed", { N ("threshold", -26.0f), N ("hysteresis", 8.0f), N ("range", 30.0f), N ("attack", 0.1f), N ("hold", 40.0f), N ("release", 150.0f), N ("lookahead", 1.5f), N ("keyHp", 150.0f), N ("keyLp", 6000.0f) },
+            { { "mode", 0.0f }, { "key", 0.0f }, { "curve", 2.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Drums | Toms Ring Control", { N ("threshold", -32.0f), N ("hysteresis", 10.0f), N ("range", 40.0f), N ("attack", 0.2f), N ("hold", 80.0f), N ("release", 250.0f), N ("lookahead", 2.0f), N ("keyHp", 60.0f), N ("keyLp", 2000.0f) },
+            { { "mode", 0.0f }, { "key", 0.0f }, { "curve", 1.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Drums | Overheads Gentle", { N ("threshold", -40.0f), N ("hysteresis", 6.0f), N ("range", 10.0f), N ("attack", 1.0f), N ("hold", 50.0f), N ("release", 300.0f), N ("ratio", 2.0f) },
+            { { "mode", 1.0f }, { "key", 0.0f }, { "curve", 1.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Drums | Room Gated (80s)", { N ("threshold", -24.0f), N ("hysteresis", 4.0f), N ("range", 80.0f), N ("attack", 0.1f), N ("hold", 180.0f), N ("release", 20.0f) },
+            { { "mode", 0.0f }, { "key", 0.0f }, { "curve", 0.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Vocal | Breaths Down", { N ("threshold", -42.0f), N ("hysteresis", 6.0f), N ("range", 12.0f), N ("attack", 2.0f), N ("hold", 60.0f), N ("release", 200.0f), N ("ratio", 2.0f) },
+            { { "mode", 1.0f }, { "key", 0.0f }, { "curve", 1.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Vocal | Headphone Bleed", { N ("threshold", -38.0f), N ("hysteresis", 8.0f), N ("range", 24.0f), N ("attack", 1.0f), N ("hold", 100.0f), N ("release", 250.0f), N ("lookahead", 2.0f), N ("keyHp", 100.0f) },
+            { { "mode", 0.0f }, { "key", 0.0f }, { "curve", 1.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Podcast | Room Noise Between Words", { N ("threshold", -46.0f), N ("hysteresis", 8.0f), N ("range", 18.0f), N ("attack", 2.0f), N ("hold", 120.0f), N ("release", 300.0f), N ("ratio", 3.0f) },
+            { { "mode", 1.0f }, { "key", 0.0f }, { "curve", 1.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Guitar | Amp Hiss Off", { N ("threshold", -50.0f), N ("hysteresis", 10.0f), N ("range", 40.0f), N ("attack", 1.0f), N ("hold", 60.0f), N ("release", 200.0f) },
+            { { "mode", 0.0f }, { "key", 0.0f }, { "curve", 1.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Guitar | Metal Chug Chop", { N ("threshold", -36.0f), N ("hysteresis", 4.0f), N ("range", 80.0f), N ("attack", 0.05f), N ("hold", 5.0f), N ("release", 20.0f), N ("lookahead", 1.0f) },
+            { { "mode", 0.0f }, { "key", 0.0f }, { "curve", 2.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Bass | DI Clean", { N ("threshold", -48.0f), N ("hysteresis", 8.0f), N ("range", 30.0f), N ("attack", 1.0f), N ("hold", 50.0f), N ("release", 180.0f), N ("keyLp", 2000.0f) },
+            { { "mode", 0.0f }, { "key", 0.0f }, { "curve", 1.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Mix | Gentle Expander", { N ("threshold", -45.0f), N ("hysteresis", 4.0f), N ("range", 15.0f), N ("attack", 3.0f), N ("hold", 40.0f), N ("release", 250.0f), N ("ratio", 1.5f) },
+            { { "mode", 1.0f }, { "key", 0.0f }, { "curve", 1.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Duck | Music Under Voice", { N ("threshold", -36.0f), N ("hysteresis", 4.0f), N ("range", 10.0f), N ("attack", 10.0f), N ("hold", 200.0f), N ("release", 600.0f) },
+            { { "mode", 2.0f }, { "key", 1.0f }, { "curve", 1.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Duck | Pad Pump (side-chain kick)", { N ("threshold", -30.0f), N ("hysteresis", 2.0f), N ("range", 18.0f), N ("attack", 1.0f), N ("hold", 0.0f), N ("release", 160.0f) },
+            { { "mode", 2.0f }, { "key", 1.0f }, { "curve", 2.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        B ("Clean | Noise Floor Polish", { N ("threshold", -60.0f), N ("hysteresis", 6.0f), N ("range", 20.0f), N ("attack", 2.0f), N ("hold", 50.0f), N ("release", 400.0f), N ("ratio", 2.0f) },
+            { { "mode", 1.0f }, { "key", 0.0f }, { "curve", 1.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        A ("MIDI | Trance Gate (play notes)", { N ("range", 80.0f), N ("attack", 0.5f), N ("hold", 0.0f), N ("release", 15.0f) },
+            { { "mode", 0.0f }, { "key", 2.0f }, { "curve", 0.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        A ("MIDI | Velocity Gate", { N ("range", 80.0f), N ("attack", 1.0f), N ("hold", 0.0f), N ("release", 40.0f) },
+            { { "mode", 0.0f }, { "key", 2.0f }, { "curve", 1.0f }, { "flip", 0.0f }, { "velocity", 1.0f }, { "listenKey", 0.0f } }),
+        A ("Side-Chain | Kick Opens the Bass", { N ("threshold", -30.0f), N ("hysteresis", 4.0f), N ("range", 40.0f), N ("attack", 0.2f), N ("hold", 20.0f), N ("release", 90.0f) },
+            { { "mode", 0.0f }, { "key", 1.0f }, { "curve", 2.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        A ("Key | Hi-Hat Only Opens (HP 6k)", { N ("threshold", -34.0f), N ("hysteresis", 6.0f), N ("range", 40.0f), N ("attack", 0.1f), N ("hold", 20.0f), N ("release", 60.0f), N ("keyHp", 6000.0f) },
+            { { "mode", 0.0f }, { "key", 0.0f }, { "curve", 2.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        A ("Flip | Hear Only the Bleed", { N ("threshold", -30.0f), N ("hysteresis", 6.0f), N ("range", 60.0f), N ("attack", 0.5f), N ("hold", 30.0f), N ("release", 120.0f) },
+            { { "mode", 0.0f }, { "key", 0.0f }, { "curve", 1.0f }, { "flip", 1.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        A ("Flip | Isolate the Room Tail", { N ("threshold", -24.0f), N ("hysteresis", 6.0f), N ("range", 80.0f), N ("attack", 0.1f), N ("hold", 10.0f), N ("release", 40.0f) },
+            { { "mode", 0.0f }, { "key", 0.0f }, { "curve", 1.0f }, { "flip", 1.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        A ("Shape | Slow Swell In", { N ("threshold", -40.0f), N ("hysteresis", 6.0f), N ("range", 60.0f), N ("attack", 60.0f), N ("hold", 30.0f), N ("release", 400.0f) },
+            { { "mode", 0.0f }, { "key", 0.0f }, { "curve", 1.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 0.0f } }),
+        A ("Listen | Tune the Key Filter", { N ("threshold", -30.0f), N ("hysteresis", 6.0f), N ("range", 60.0f), N ("attack", 0.5f), N ("hold", 30.0f), N ("release", 120.0f), N ("keyHp", 200.0f), N ("keyLp", 5000.0f) },
+            { { "mode", 0.0f }, { "key", 0.0f }, { "curve", 1.0f }, { "flip", 0.0f }, { "velocity", 0.0f }, { "listenKey", 1.0f } })
+    };
+}
+
 inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
 {
     m["Spectra EQ"] = presets114_spectra();
@@ -338,4 +446,6 @@ inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
     m["Summit Limiter"] = presets114_summit();
     m["Atrium Verb"] = presets114_atrium();
     m["Apex Multiband 2"] = presets114_mb2();
+    m["Sibyl De-Ess"] = presets114_sibyl();
+    m["Portcullis Gate"] = presets114_portcullis();
 }

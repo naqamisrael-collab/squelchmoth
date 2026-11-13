@@ -457,6 +457,31 @@ ties, rests, dotted notes and triplets.
 8. When you bounce to 16 bit, choose **DITHER 16 BIT** with **STRONG** shaping (or load *Export | 16-bit with Shaped
    Dither*).
 
+## F2j. Portcullis Gate (Mastering Suite)
+
+1. Insert **Dynamics > Portcullis Gate** on the drum or noisy track. It opens on *Start | Clean Gate*.
+2. Play the track. The steel line is the key; drag the solid amber **OPEN** line just under the hits.
+3. Drag the dashed **CLOSE** line a few dB lower (hysteresis) so ringing notes close once instead of chattering.
+4. Set **RANGE** (how far it closes - 10-20 dB sounds natural, 60+ is silence), then **HOLD** and **RELEASE** so the
+   tail of each hit survives.
+5. If other drums open it, drag the **KEY FILTER** corners (or click **LISTEN KEY** to hear what it listens to).
+6. **LOOKAHEAD** keeps the first millisecond of every hit. **FLIP** lets you hear exactly what it removes.
+7. For a rhythmic gate, choose **KEY: MIDI** and play notes on the track's MIDI input - or load *MIDI | Trance Gate*.
+8. Ask Claude: "gate the snare so the hi-hat bleed disappears".
+
+## F2i. Sibyl De-Ess (Vocal Suite)
+
+1. Insert **Voice > Sibyl De-Ess** on the vocal. It opens on *Start | Natural Voice* (relative detection, split).
+2. Play the vocal. The lilac trace on the right rises on every "s"; drag the pearl **THRESHOLD** line down until the
+   rose cut appears only on the s sounds.
+3. Set **RANGE** - the most it may take (6-10 dB is natural).
+4. Drag the edges of the lit band in the spectrum to the area where the s lives (usually 5-10 kHz), or click **TRACK**
+   and let it find the s by itself.
+5. Click **LISTEN: DETECTION** to hear what it listens to, **LISTEN: REMOVED** to hear exactly what it takes away;
+   click **OUTPUT** to go back.
+6. **RELATIVE** keeps working when the singer gets louder or softer; use **ABSOLUTE** on mixes and instruments.
+7. Ask Claude: "add Sibyl to the lead vocal and make it hunt the s".
+
 ## F2h. Apex Multiband 2 (multiband dynamics, Mastering Suite)
 
 1. Insert **Dynamics > Apex Multiband 2** on a bus or the master. It opens with four gentle bands.

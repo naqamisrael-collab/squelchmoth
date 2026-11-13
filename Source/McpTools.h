@@ -419,6 +419,8 @@ private:
         registerSummitTools();
         registerAtriumTools();
         registerApexMB2Tools();
+        registerSibylTools();
+        registerPortcullisTools();
     }
 
     #include "McpToolsParity.h"
@@ -438,6 +440,8 @@ private:
     #include "McpToolsSummit.h"
     #include "McpToolsAtrium.h"
     #include "McpToolsApexMB2.h"
+    #include "McpToolsSibyl.h"
+    #include "McpToolsPortcullis.h"
 
     //==============================================================================
     void registerSessionTools()

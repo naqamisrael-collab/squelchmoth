@@ -248,6 +248,80 @@ def mb2_cpp():
         rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
     return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_mb2()   // Apex Multiband 2\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
 
+# ---------------------------------------------------------------- Sibyl De-Ess
+SB = []
+def sbadd(name, adv=False, shape=0, detect=1, stereo=0, track=0, side=0, **v): SB.append((name, adv, dict(shape=shape, detect=detect, stereo=stereo, track=track, sidechain=side), v))
+sbadd("Start | Natural Voice", threshold=-12, range=8, knee=6, release=60, lookahead=2, low=5000, high=10000)
+sbadd("Vocal | Female Pop", threshold=-10, range=9, knee=6, release=50, lookahead=2, low=6000, high=11000)
+sbadd("Vocal | Male Pop", threshold=-12, range=8, knee=6, release=60, lookahead=2, low=4500, high=9000)
+sbadd("Vocal | Rap, Close Mic", threshold=-14, range=10, knee=4, release=45, lookahead=3, low=5000, high=10000)
+sbadd("Vocal | Breathy Ballad", threshold=-16, range=6, knee=9, release=80, lookahead=2, low=5500, high=12000)
+sbadd("Vocal | Bright Condenser Tamer", threshold=-12, range=10, knee=6, release=60, lookahead=2, low=6500, high=13000, track=1)
+sbadd("Vocal | Hunt the S (track)", threshold=-12, range=9, knee=6, release=55, lookahead=2, low=4000, high=12000, track=1)
+sbadd("Vocal | Gentle Polish", threshold=-8, range=4, knee=12, release=70, lookahead=2, low=5000, high=10000)
+sbadd("Vocal | Heavy Lisp Fix", threshold=-18, range=14, knee=3, release=40, lookahead=4, low=4500, high=10000)
+sbadd("Backing | Stack of Voices", threshold=-14, range=10, knee=6, release=70, lookahead=2, low=5000, high=11000)
+sbadd("Podcast | Speech", threshold=-14, range=8, knee=6, release=60, lookahead=3, low=4500, high=9000)
+sbadd("Podcast | Phone Bright", threshold=-12, range=6, knee=6, release=60, lookahead=2, low=3000, high=6500)
+sbadd("Mix | Cymbal Sizzle", threshold=-28, range=6, knee=6, release=80, lookahead=2, low=7000, high=14000, detect=0)
+sbadd("Mix | Acoustic Guitar Squeaks", threshold=-30, range=8, knee=4, release=60, lookahead=2, low=2500, high=6000, detect=0)
+sbadd("Master | Harsh Top, Whole Mix", threshold=-30, range=3, knee=9, release=90, lookahead=2, low=5500, high=11000, detect=0)
+sbadd("Master | Side Sibilance Only", threshold=-30, range=5, knee=9, release=80, lookahead=2, low=5000, high=11000, detect=0, stereo=2)
+# Advanced
+sbadd("Wide | Whole Voice Ducks on S", adv=True, threshold=-12, range=6, knee=6, release=50, lookahead=2, shape=1)
+sbadd("Wide | Old-School Broadband", adv=True, threshold=-14, range=10, knee=3, release=40, lookahead=0, shape=1, detect=0)
+sbadd("Detect | Absolute, Steady Level", adv=True, threshold=-34, range=8, knee=6, release=60, lookahead=2, detect=0)
+sbadd("Detect | Fast Release Consonants", adv=True, threshold=-12, range=10, knee=4, release=15, lookahead=3)
+sbadd("Detect | Max Lookahead, No Pre-Hiss", adv=True, threshold=-12, range=10, knee=6, release=60, lookahead=10)
+sbadd("Stereo | Mid Only (centre vocal)", adv=True, threshold=-12, range=8, knee=6, release=60, lookahead=2, stereo=1)
+sbadd("Key | Side-Chain From Lead Vocal", adv=True, threshold=-14, range=8, knee=6, release=60, lookahead=2, side=1, detect=0)
+sbadd("Fix | Very Narrow Whistle", adv=True, threshold=-18, range=12, knee=3, release=40, lookahead=2, low=7500, high=8800, track=1)
+
+def sibyl_cpp():
+    rows = []
+    for name, adv, props, v in SB:
+        vs = ", ".join(f'N ("{k}", {float(x)}f)' for k, x in v.items())
+        ps = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in props.items())
+        rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
+    return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_sibyl()   // Sibyl De-Ess\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
+
+# ---------------------------------------------------------------- Portcullis Gate
+PG = []
+def padd(name, adv=False, mode=0, key=0, curve=1, flip=0, velocity=0, listen=0, **v): PG.append((name, adv, dict(mode=mode, key=key, curve=curve, flip=flip, velocity=velocity, listenKey=listen), v))
+padd("Start | Clean Gate", threshold=-40, hysteresis=6, range=60, attack=0.5, hold=30, release=120)
+padd("Drums | Kick Tight", threshold=-28, hysteresis=6, range=40, attack=0.1, hold=20, release=80, lookahead=1, keyHp=30, keyLp=300, curve=2)
+padd("Drums | Snare, No Hi-Hat Bleed", threshold=-26, hysteresis=8, range=30, attack=0.1, hold=40, release=150, lookahead=1.5, keyHp=150, keyLp=6000, curve=2)
+padd("Drums | Toms Ring Control", threshold=-32, hysteresis=10, range=40, attack=0.2, hold=80, release=250, lookahead=2, keyHp=60, keyLp=2000)
+padd("Drums | Overheads Gentle", threshold=-40, hysteresis=6, range=10, attack=1, hold=50, release=300, mode=1, ratio=2)
+padd("Drums | Room Gated (80s)", threshold=-24, hysteresis=4, range=80, attack=0.1, hold=180, release=20, curve=0)
+padd("Vocal | Breaths Down", threshold=-42, hysteresis=6, range=12, attack=2, hold=60, release=200, mode=1, ratio=2)
+padd("Vocal | Headphone Bleed", threshold=-38, hysteresis=8, range=24, attack=1, hold=100, release=250, lookahead=2, keyHp=100)
+padd("Podcast | Room Noise Between Words", threshold=-46, hysteresis=8, range=18, attack=2, hold=120, release=300, mode=1, ratio=3)
+padd("Guitar | Amp Hiss Off", threshold=-50, hysteresis=10, range=40, attack=1, hold=60, release=200)
+padd("Guitar | Metal Chug Chop", threshold=-36, hysteresis=4, range=80, attack=0.05, hold=5, release=20, lookahead=1, curve=2)
+padd("Bass | DI Clean", threshold=-48, hysteresis=8, range=30, attack=1, hold=50, release=180, keyLp=2000)
+padd("Mix | Gentle Expander", threshold=-45, hysteresis=4, range=15, attack=3, hold=40, release=250, mode=1, ratio=1.5)
+padd("Duck | Music Under Voice", threshold=-36, hysteresis=4, range=10, attack=10, hold=200, release=600, mode=2, key=1)
+padd("Duck | Pad Pump (side-chain kick)", threshold=-30, hysteresis=2, range=18, attack=1, hold=0, release=160, mode=2, key=1, curve=2)
+padd("Clean | Noise Floor Polish", threshold=-60, hysteresis=6, range=20, attack=2, hold=50, release=400, mode=1, ratio=2)
+# Advanced
+padd("MIDI | Trance Gate (play notes)", adv=True, range=80, attack=0.5, hold=0, release=15, key=2, curve=0)
+padd("MIDI | Velocity Gate", adv=True, range=80, attack=1, hold=0, release=40, key=2, velocity=1)
+padd("Side-Chain | Kick Opens the Bass", adv=True, threshold=-30, hysteresis=4, range=40, attack=0.2, hold=20, release=90, key=1, curve=2)
+padd("Key | Hi-Hat Only Opens (HP 6k)", adv=True, threshold=-34, hysteresis=6, range=40, attack=0.1, hold=20, release=60, keyHp=6000, curve=2)
+padd("Flip | Hear Only the Bleed", adv=True, threshold=-30, hysteresis=6, range=60, attack=0.5, hold=30, release=120, flip=1)
+padd("Flip | Isolate the Room Tail", adv=True, threshold=-24, hysteresis=6, range=80, attack=0.1, hold=10, release=40, flip=1)
+padd("Shape | Slow Swell In", adv=True, threshold=-40, hysteresis=6, range=60, attack=60, hold=30, release=400, curve=1)
+padd("Listen | Tune the Key Filter", adv=True, threshold=-30, hysteresis=6, range=60, attack=0.5, hold=30, release=120, keyHp=200, keyLp=5000, listen=1)
+
+def portcullis_cpp():
+    rows = []
+    for name, adv, props, v in PG:
+        vs = ", ".join(f'N ("{k}", {float(x)}f)' for k, x in v.items())
+        ps = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in props.items())
+        rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
+    return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_portcullis()   // Portcullis Gate\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
+
 def cpp():
     out = ["// Generated by scripts/gen_presets_114.py - factory presets for the 1.14 Studio Line. Do not edit by hand.",
            "// Included in namespace SignaturePresets (SignaturePresets.h); bank() calls add114().", "",
@@ -268,9 +342,9 @@ def cpp():
         pr = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in props)
         rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {v} }},\n            {{ {pr} }})')
     out.append(",\n".join(rows))
-    out += ["    };", "}", "", torque_cpp(), summit_cpp(), atrium_cpp(), mb2_cpp(), "inline void add114 (std::map<juce::String, std::vector<Preset>>& m)", "{", '    m["Spectra EQ"] = presets114_spectra();', '    m["Torque Comp"] = presets114_torque();', '    m["Summit Limiter"] = presets114_summit();', '    m["Atrium Verb"] = presets114_atrium();', '    m["Apex Multiband 2"] = presets114_mb2();', "}", ""]
+    out += ["    };", "}", "", torque_cpp(), summit_cpp(), atrium_cpp(), mb2_cpp(), sibyl_cpp(), portcullis_cpp(), "inline void add114 (std::map<juce::String, std::vector<Preset>>& m)", "{", '    m["Spectra EQ"] = presets114_spectra();', '    m["Torque Comp"] = presets114_torque();', '    m["Summit Limiter"] = presets114_summit();', '    m["Atrium Verb"] = presets114_atrium();', '    m["Apex Multiband 2"] = presets114_mb2();', '    m["Sibyl De-Ess"] = presets114_sibyl();', '    m["Portcullis Gate"] = presets114_portcullis();', "}", ""]
     return "\n".join(out)
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 open(os.path.join(root, "Source", "SignaturePresets114.inl"), "w").write(cpp())
-print(len(P), "Spectra EQ presets,", sum(1 for p in P if not p[1]), "basic;", len(T), "Torque Comp presets,", sum(1 for t in T if not t[1]), "basic;", len(S), "Summit presets,", len(AV), "Atrium presets,", len(MB), "MB2 presets")
+print(len(P), "Spectra EQ presets,", sum(1 for p in P if not p[1]), "basic;", len(T), "Torque Comp presets,", sum(1 for t in T if not t[1]), "basic;", len(S), "Summit presets,", len(AV), "Atrium presets,", len(MB), "MB2 presets,", len(SB), "Sibyl presets,", len(PG), "Portcullis presets")

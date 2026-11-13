@@ -56,6 +56,8 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqSummitLimiterPlugin>();
     engine->getPluginManager().createBuiltInType<SqAtriumVerbPlugin>();
     engine->getPluginManager().createBuiltInType<SqApexMB2Plugin>();
+    engine->getPluginManager().createBuiltInType<SqSibylDeEssPlugin>();
+    engine->getPluginManager().createBuiltInType<SqPortcullisGatePlugin>();
     engine->getPluginManager().createBuiltInType<SqTremorPlugin>();
     engine->getPluginManager().createBuiltInType<SqOrbitPanPlugin>();
     engine->getPluginManager().createBuiltInType<SqMirrorShiftPlugin>();
@@ -3765,6 +3767,114 @@ inline int runSelfTest()
             }
         }
         std::cout << "  (1.14 MB2 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
+    }
+
+    // ===================================================================== 1.14 "Studio Line": Sibyl De-Ess
+    {
+        std::cout << "\n-- 1.14 Studio Line: Sibyl De-Ess --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest Sibyl"})");
+        call ("add_track", R"({"kind":"audio","name":"Lead Vox"})");
+        auto added = call ("sibyl_deess", R"({"track":"Lead Vox","action":"add"})");
+        SqSibylDeEssPlugin* sy = nullptr;
+        if (auto tt = session->findTrack ("Lead Vox")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqSibylDeEssPlugin*> (pl)) sy = c;
+        check (sy != nullptr && added.contains ("Sibyl De-Ess"), "Sibyl De-Ess inserted by sibyl_deess add");
+        if (sy != nullptr)
+        {
+            auto st = call ("sibyl_deess", R"({"track":"Lead Vox","action":"set","detection":"absolute","threshold":-40,"range":10,"knee":0,"lookahead":0,"low":5000,"high":10000,"follow":false,"stereo":"side"})");
+            check (sy->detect.get() == 0 && sy->stereoMode.get() == 2 && std::abs (sy->bank[SqSibylDeEssPlugin::range] - 10.0f) < 0.01f && st.contains ("Absolute"), "sibyl_deess set: detection, threshold, range, band, stereo - by name");
+            call ("sibyl_deess", R"({"track":"Lead Vox","action":"set","stereo":"linked"})");
+            auto twin = session->edit->getPluginCache().createNewPlugin (SqSibylDeEssPlugin::xmlTypeName, {});
+            if (auto* tw = dynamic_cast<SqSibylDeEssPlugin*> (twin.get()))
+            {
+                tw->restorePluginStateFromValueTree (sy->state);
+                tw->baseClassInitialise ({ te::TimePosition(), 44100.0, 512 });
+                const int N = 44100 * 2; juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi; double eIn = 0, eOut = 0, lowIn = 0, lowOut = 0;
+                for (int q = 0; q + 512 <= N; q += 512)
+                {
+                    for (int i = 0; i < 512; ++i)
+                    {
+                        const double t = (q + i) / 44100.0;
+                        const float v = (float) (0.2 * std::sin (juce::MathConstants<double>::twoPi * 7000.0 * t) + 0.2 * std::sin (juce::MathConstants<double>::twoPi * 200.0 * t));
+                        buf.setSample (0, i, v); buf.setSample (1, i, v);
+                    }
+                    juce::AudioBuffer<float> in (buf);
+                    te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / 44100.0), te::TimePosition::fromSeconds ((q + 512) / 44100.0)), true, false, true, false);
+                    tw->applyToBuffer (fc);
+                    if (q > 44100)
+                        for (int i = 0; i < 512; ++i)
+                        {
+                            const double t = (q + i) / 44100.0, s7 = std::sin (juce::MathConstants<double>::twoPi * 7000.0 * t), c7 = std::cos (juce::MathConstants<double>::twoPi * 7000.0 * t);
+                            const double s2 = std::sin (juce::MathConstants<double>::twoPi * 200.0 * t), c2 = std::cos (juce::MathConstants<double>::twoPi * 200.0 * t);
+                            eIn += in.getSample (0, i) * s7; eOut += buf.getSample (0, i) * s7; lowIn += in.getSample (0, i) * s2; lowOut += buf.getSample (0, i) * s2;
+                            juce::ignoreUnused (c7, c2);
+                        }
+                }
+                tw->baseClassDeinitialise();
+                const double d7 = 20 * std::log10 (std::abs (eOut) / std::abs (eIn) + 1e-12), d2 = 20 * std::log10 (std::abs (lowOut) / std::abs (lowIn) + 1e-12);
+                check (d7 < -7.0 && std::abs (d2) < 0.3, "Sibyl rendered (split, range 10): the 7 kHz s " + juce::String (d7, 2) + " dB, the 200 Hz body " + juce::String (d2, 2) + " dB");
+            }
+            int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmSibylDeEss") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+            auto pl = call ("sibyl_deess", R"({"track":"Lead Vox","action":"preset","preset":"Hunt the S"})");
+            check (nPre >= 24 && nAdv >= 8 && pl.contains ("Loaded") && sy->track.get(), "Sibyl De-Ess: " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " Advanced); the hunting preset turns Track on");
+            check (Edition::packOf ("sqmSibylDeEss") == Edition::Pack::vocal, "Sibyl De-Ess belongs to the Vocal Suite");
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = sy->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*sy);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (600);
+                auto snap = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                check (snap.isValid() && snap.getWidth() >= 1000, "Sibyl De-Ess window renders offscreen (" + juce::String (snap.getWidth()) + " x " + juce::String (snap.getHeight()) + ")");
+            }
+        }
+        std::cout << "  (1.14 Sibyl section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
+    }
+
+    // ===================================================================== 1.14 "Studio Line": Portcullis Gate
+    {
+        std::cout << "\n-- 1.14 Studio Line: Portcullis Gate --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest Portcullis"})");
+        call ("add_track", R"({"kind":"audio","name":"Snare"})");
+        auto added = call ("portcullis_gate", R"({"track":"Snare","action":"add"})");
+        SqPortcullisGatePlugin* pgt = nullptr;
+        if (auto tt = session->findTrack ("Snare")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqPortcullisGatePlugin*> (pl)) pgt = c;
+        check (pgt != nullptr && added.contains ("Portcullis Gate"), "Portcullis Gate inserted by portcullis_gate add");
+        if (pgt != nullptr)
+        {
+            auto st = call ("portcullis_gate", R"({"track":"Snare","action":"set","mode":"gate","threshold":-30,"hysteresis":6,"range":40,"hold":20,"release":50,"key_highpass":150,"curve":"punchy"})");
+            check (std::abs (pgt->bank[SqPortcullisGatePlugin::range] - 40.0f) < 0.01f && pgt->curve.get() == 2 && st.contains ("close_threshold_db"), "portcullis_gate set: thresholds, range, hold, release, key filter, curve - by name");
+            auto twin = session->edit->getPluginCache().createNewPlugin (SqPortcullisGatePlugin::xmlTypeName, {});
+            if (auto* tw = dynamic_cast<SqPortcullisGatePlugin*> (twin.get()))
+            {
+                tw->restorePluginStateFromValueTree (pgt->state);
+                tw->baseClassInitialise ({ te::TimePosition(), 44100.0, 512 });
+                const int N = 44100 * 2; juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi; double eIn = 0, eOut = 0;
+                for (int q = 0; q + 512 <= N; q += 512)
+                {
+                    for (int i = 0; i < 512; ++i) { const float v = (float) (0.003 * std::sin (juce::MathConstants<double>::twoPi * 440.0 * (q + i) / 44100.0)); buf.setSample (0, i, v); buf.setSample (1, i, v); }   // -50 dB: below the gate
+                    te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / 44100.0), te::TimePosition::fromSeconds ((q + 512) / 44100.0)), true, false, true, false);
+                    tw->applyToBuffer (fc);
+                    if (q > 44100) for (int i = 0; i < 512; ++i) { eOut += (double) buf.getSample (0, i) * buf.getSample (0, i); eIn += 0.003 * 0.003 * 0.5; }
+                }
+                tw->baseClassDeinitialise();
+                const double g = 10 * std::log10 (eOut / eIn + 1e-30);
+                check (std::abs (g + 40.0) < 0.2, "Portcullis rendered: a -50 dB tone under a -30 dB gate is held " + juce::String (g, 2) + " dB down (range 40)");
+            }
+            call ("portcullis_gate", R"({"track":"Snare","action":"set","lookahead":3})");
+            check (std::abs (pgt->getLatencySeconds() * 1000.0 - 3.0) < 0.05, "lookahead reported as latency (" + juce::String (pgt->getLatencySeconds() * 1000.0, 2) + " ms)");
+            int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmPortcullis") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+            auto pl = call ("portcullis_gate", R"({"track":"Snare","action":"preset","preset":"Trance Gate"})");
+            check (nPre >= 24 && nAdv >= 8 && pl.contains ("Loaded") && pgt->keySource.get() == 2, "Portcullis Gate: " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " Advanced); the trance-gate preset keys from MIDI");
+            check (Edition::packOf ("sqmPortcullis") == Edition::Pack::mastering, "Portcullis Gate belongs to the Mastering Suite");
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = pgt->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*pgt);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (600);
+                auto snap = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                check (snap.isValid() && snap.getWidth() >= 1000, "Portcullis Gate window renders offscreen (" + juce::String (snap.getWidth()) + " x " + juce::String (snap.getHeight()) + ")");
+            }
+        }
+        std::cout << "  (1.14 Portcullis section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));
