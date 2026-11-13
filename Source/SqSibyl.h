@@ -71,7 +71,9 @@ public:
         int sw = scopeW.load();
         for (int i = 0; i < n; ++i) scope[(size_t) ((sw + i) & (scopeLen - 1))] = 0.5f * (ch[0][i] + ch[1][i]);
         scopeW = sw + n;
+        { float pk = 0; for (int c = 0; c < nch; ++c) pk = juce::jmax (pk, b.getMagnitude (c, s0, n)); levelIn = pk; }   // the face's IN meter
         engine.process (ch, nch, haveKey ? key : nullptr, haveKey ? 2 : 0, n);
+        { float pk = 0; for (int c = 0; c < nch; ++c) pk = juce::jmax (pk, b.getMagnitude (c, s0, n)); levelOut = pk; }  // and OUT
         const int w = histW.load();
         histDet[(size_t) (w & (histLen - 1))] = engine.meterDetDb; histGr[(size_t) (w & (histLen - 1))] = engine.meterGrDb;
         histW = w + 1;

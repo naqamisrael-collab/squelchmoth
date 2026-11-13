@@ -25,7 +25,7 @@ namespace Edition
             { "INSTR",    "Instrument Collection", "$99",     "$149",    "Hexwing, Toxin FM, Lantern, Lantern Exo, Pollen, Blossom 2, Thorn Bass, Larva Bass, Chrysalis 2 and Chrysalis SF" },
             { "BEAT",     "Beat Lab Expansion",    "$49",     "$79",     "Carapace, Live Drum Synth, Drum Pad Model, Thump Live, Mandible, Mandible Lite, ten more kits and 51 genre loops" },
             { "CREATIVE", "Creative FX",           "$49",     "$79",     "Time Weaver, Larva Filter, Oil Can Delay, Bucket Brigade, Halo Ring, Twelve Phase and Silk Ladder" },
-            { "COLOR",    "Color & Space",         "$179",    "$299",    "Cinder, Wingbeat Echo, Foil Plate, Radiant, Maw, Vellum EQ, Tremor, Orbit Pan, Mirror Shift, Shutter Delay, Shard, Murmuration, Masquerade, Larva Filter 2, Twelve Phase 2, Hive Rack, Atrium Verb and Kiln" } };
+            { "COLOR",    "Color & Space",         "$179",    "$299",    "Cinder, Wingbeat Echo, Foil Plate, Radiant, Maw, Vellum EQ, Tremor, Orbit Pan, Mirror Shift, Shutter Delay, Shard, Murmuration, Masquerade, Larva Filter 2, Twelve Phase 2, Hive Rack, Atrium Verb, Kiln and Spindle Delay" } };
         return p;
     }
     inline const Product* productFor (Pack p)
@@ -85,7 +85,7 @@ namespace Edition
             { "sqmCinder", Pack::color }, { "sqmWingbeat", Pack::color }, { "sqmFoilPlate", Pack::color }, { "sqmRadiant", Pack::color }, { "sqmMaw", Pack::color },
             { "sqmVellum", Pack::color }, { "sqmTremor", Pack::color }, { "sqmOrbitPan", Pack::color }, { "sqmMirrorShift", Pack::color }, { "sqmShutter", Pack::color },
             { "sqmShard", Pack::color }, { "sqmMurmuration", Pack::color }, { "sqmMasquerade", Pack::color },
-            { "sqmLarvaFilter2", Pack::color }, { "sqmPhase12v2", Pack::color }, { "sqmHiveRack", Pack::color }, { "sqmAtriumVerb", Pack::color }, { "sqmKiln", Pack::color } };
+            { "sqmLarvaFilter2", Pack::color }, { "sqmPhase12v2", Pack::color }, { "sqmHiveRack", Pack::color }, { "sqmAtriumVerb", Pack::color }, { "sqmKiln", Pack::color }, { "sqmSpindle", Pack::color } };
         auto it = m.find (type); return it != m.end() ? it->second : Pack::none;
     }
     /** The Demo's basic set: 16 effects, 6 instruments and what the rack needs to run. */

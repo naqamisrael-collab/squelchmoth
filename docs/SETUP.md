@@ -457,6 +457,18 @@ ties, rests, dotted notes and triplets.
 8. When you bounce to 16 bit, choose **DITHER 16 BIT** with **STRONG** shaping (or load *Export | 16-bit with Shaped
    Dither*).
 
+## F2l. Spindle Delay (Color & Space)
+
+1. Put Spindle Delay on an aux / FX track (Mix 100 %) or straight on a track (it opens at 30 % Mix).
+2. Pick a **character**: DIGITAL (clean), TAPE (warm, wobbling), ANALOG (dark, gritty), DIFFUSE (echoes that wash).
+3. The time is synced to the song: click **L: 1/8** to choose another division (dotted and triplet too), or turn
+   **TIME** for a free time in ms. Turn off **LINK L/R** to give the right side its own time.
+4. **FEEDBACK** sets how many repeats. The echo trail shows each one and how it fades and darkens.
+5. Drag the corners in **THE LOOP** to make every repeat thinner (low cut) or darker (high cut).
+6. **PING-PONG** bounces repeats between the speakers; **CROSS** feeds each side into the other.
+7. **DUCK** pulls the echoes down while you sing or play, and lets them bloom in the gaps. **FREEZE** holds the loop.
+8. Ask Claude: "add a dotted-eighth ping-pong delay to the vocal, ducked".
+
 ## F2k. Kiln (multiband saturation, Color & Space)
 
 1. Insert **Saturation > Kiln** on a bus or instrument. It opens with three warm bands.

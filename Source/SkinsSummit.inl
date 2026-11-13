@@ -29,7 +29,12 @@
         juce::Rectangle<float> all() const     { return getLocalBounds().toFloat(); }
         juce::Rectangle<float> topBar() const  { return all().reduced (16.0f, 0).removeFromTop (48.0f).withTrimmedTop (10.0f).withTrimmedBottom (8.0f); }
         juce::Rectangle<float> deck() const    { return all().reduced (16.0f, 0).removeFromBottom (236.0f).withTrimmedBottom (14.0f); }
-        juce::Rectangle<float> middle() const  { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (244.0f); return r; }
+        juce::Rectangle<float> middle() const  { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (244.0f); r.removeFromRight (meterW() + 10.0f); return r; }
+        // the numbers: IN / OUT / GR meters on the right (StudioUi, shared by the Studio Line)
+        StudioUi::StudioMeter meter;
+        static float meterW() { return StudioUi::StudioMeter::width (true); }
+        juce::Rectangle<float> meterR() const { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (244.0f); return r.removeFromRight (meterW()); }
+        void paintMeter (juce::Graphics& g) { meter.update (sm->levelIn.load(), sm->levelOut.load(), (float) sm->grNow.load()); meter.draw (g, meterR(), ice(), true); }
         juce::Rectangle<float> levels() const  { auto r = middle(); return r.removeFromLeft (r.getWidth() - 330.0f); }
         juce::Rectangle<float> loudPane() const { auto r = middle(); return r.removeFromRight (318.0f); }
 
@@ -64,6 +69,7 @@
             paintLevels (g);
             paintLoudness (g);
             paintDeck (g);
+            paintMeter (g);
         }
 
         // ---- levels
@@ -260,6 +266,7 @@
             {
                 const auto& k = knobDefs()[i];
                 drawKnob (g, knobR[i], k.label, knobText (k.param), norm (k.param), k.big, (int) i == hoverKnob || (int) i == dragKnob, (int) i == dragKnob, knobEnabled ((int) i));
+                StudioUi::knobScale (g, knobR[i], sm->bank.specs[(size_t) k.param], text (1.0f), 16.0f, 26.0f, knobEnabled ((int) i) ? 1.0f : 0.4f);
             }
         }
 

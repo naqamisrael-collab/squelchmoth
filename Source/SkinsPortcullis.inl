@@ -24,7 +24,12 @@
         juce::Rectangle<float> all() const     { return getLocalBounds().toFloat(); }
         juce::Rectangle<float> topBar() const  { return all().reduced (16.0f, 0).removeFromTop (48.0f).withTrimmedTop (10.0f).withTrimmedBottom (8.0f); }
         juce::Rectangle<float> deck() const    { return all().reduced (16.0f, 0).removeFromBottom (190.0f).withTrimmedBottom (14.0f); }
-        juce::Rectangle<float> middle() const  { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (198.0f); return r; }
+        juce::Rectangle<float> middle() const  { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (198.0f); r.removeFromRight (meterW() + 10.0f); return r; }
+        // the numbers: IN / OUT / GR meters on the right (StudioUi, shared by the Studio Line)
+        StudioUi::StudioMeter meter;
+        static float meterW() { return StudioUi::StudioMeter::width (true); }
+        juce::Rectangle<float> meterR() const { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (198.0f); return r.removeFromRight (meterW()); }
+        void paintMeter (juce::Graphics& g) { meter.update (pg->levelIn.load(), pg->levelOut.load(), (float) pg->gainNow.load()); meter.draw (g, meterR(), amber(), true); }
         juce::Rectangle<float> histPane() const { auto r = middle(); return r.removeFromLeft (r.getWidth() - 352.0f); }
         juce::Rectangle<float> sidePane() const { auto r = middle(); return r.removeFromRight (340.0f); }
         juce::Rectangle<float> hist() const { return histPane().reduced (16.0f, 0).withTrimmedTop (30.0f).withTrimmedBottom (16.0f).withTrimmedRight (28.0f); }
@@ -55,7 +60,7 @@
                 }
             }
             g.setColour (steel().withAlpha (0.22f)); g.drawRoundedRectangle (a.reduced (0.5f), 10.0f, 1.0f);
-            paintTopBar (g); paintHistory (g); paintSide (g); paintDeck (g);
+            paintTopBar (g); paintHistory (g); paintSide (g); paintDeck (g); paintMeter (g);
         }
 
         // ---- history
@@ -277,6 +282,7 @@
             g.setColour (steel().withAlpha (0.18f)); g.drawRoundedRectangle (d, 14.0f, 1.0f);
             layoutKnobs();
             for (size_t i = 0; i < defs().size(); ++i) drawKnob (g, knobR[i], defs()[i].label, knobText (defs()[i].param), norm (defs()[i].param), (int) i == hoverKnob || (int) i == dragKnob, (int) i == dragKnob, enabled (defs()[i].param));
+            for (size_t i = 0; i < defs().size(); ++i) StudioUi::knobScale (g, knobR[i], pg->bank.specs[(size_t) defs()[i].param], text (1.0f), 15.0f, 24.0f, enabled (defs()[i].param) ? 1.0f : 0.4f);
         }
 
         // ---- mouse

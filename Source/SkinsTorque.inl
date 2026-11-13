@@ -296,6 +296,7 @@
             {
                 const auto& k = knobDefs()[i];
                 drawKnob (g, knobR[i], k.label, knobText (k.param), norm (k.param), k.bipolar, k.big, (int) i == hoverKnob || (int) i == dragKnob, (int) i == dragKnob);
+                StudioUi::knobScale (g, knobR[i], tq->bank.specs[(size_t) k.param], text (1.0f), 14.0f, 24.0f);
             }
         }
 

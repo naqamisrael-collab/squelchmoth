@@ -497,6 +497,64 @@ SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_kiln()   // Kiln
     };
 }
 
+SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_spindle()   // Spindle Delay
+{
+    return {
+        B ("Start | Tape Eighth", { N ("wow", 35.0f), N ("flutter", 25.0f), N ("diffusion", 0.0f), N ("feedback", 40.0f), N ("mix", 30.0f) },
+            { { "character", 1.0f }, { "routing", 0.0f }, { "syncL", 3.0f }, { "syncR", 3.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("Vocal | Slapback", { N ("wow", 35.0f), N ("flutter", 25.0f), N ("diffusion", 0.0f), N ("timeL", 110.0f), N ("feedback", 0.0f), N ("mix", 25.0f), N ("highCut", 6000.0f) },
+            { { "character", 1.0f }, { "routing", 0.0f }, { "syncL", 0.0f }, { "syncR", 0.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("Vocal | Quarter Throw", { N ("wow", 35.0f), N ("flutter", 25.0f), N ("diffusion", 0.0f), N ("feedback", 35.0f), N ("mix", 22.0f), N ("duck", 10.0f), N ("lowCut", 200.0f), N ("highCut", 6000.0f) },
+            { { "character", 1.0f }, { "routing", 0.0f }, { "syncL", 4.0f }, { "syncR", 4.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("Vocal | Dotted Eighth Pop", { N ("wow", 0.0f), N ("flutter", 0.0f), N ("diffusion", 0.0f), N ("feedback", 30.0f), N ("mix", 20.0f), N ("duck", 8.0f), N ("lowCut", 250.0f), N ("highCut", 8000.0f) },
+            { { "character", 0.0f }, { "routing", 0.0f }, { "syncL", 8.0f }, { "syncR", 8.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("Vocal | Wide Ping-Pong", { N ("wow", 0.0f), N ("flutter", 0.0f), N ("diffusion", 0.0f), N ("feedback", 45.0f), N ("mix", 22.0f), N ("duck", 6.0f), N ("lowCut", 200.0f), N ("highCut", 7000.0f) },
+            { { "character", 0.0f }, { "routing", 1.0f }, { "syncL", 3.0f }, { "syncR", 3.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("Vocal | Ambient Wash", { N ("wow", 10.0f), N ("flutter", 5.0f), N ("diffusion", 80.0f), N ("feedback", 55.0f), N ("mix", 30.0f), N ("lowCut", 200.0f), N ("highCut", 6000.0f) },
+            { { "character", 3.0f }, { "routing", 0.0f }, { "syncL", 4.0f }, { "syncR", 4.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("Guitar | Analog Warm Repeats", { N ("wow", 15.0f), N ("flutter", 5.0f), N ("diffusion", 10.0f), N ("feedback", 50.0f), N ("mix", 30.0f), N ("drive", 40.0f) },
+            { { "character", 2.0f }, { "routing", 0.0f }, { "syncL", 8.0f }, { "syncR", 8.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("Guitar | Dub Spring-Free Echo", { N ("wow", 35.0f), N ("flutter", 25.0f), N ("diffusion", 0.0f), N ("feedback", 75.0f), N ("mix", 35.0f), N ("drive", 40.0f), N ("lowCut", 300.0f), N ("highCut", 3500.0f) },
+            { { "character", 1.0f }, { "routing", 0.0f }, { "syncL", 4.0f }, { "syncR", 4.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("Guitar | Doubler (no repeats)", { N ("wow", 0.0f), N ("flutter", 0.0f), N ("diffusion", 0.0f), N ("timeL", 18.0f), N ("timeR", 27.0f), N ("feedback", 0.0f), N ("mix", 40.0f), N ("width", 180.0f) },
+            { { "character", 0.0f }, { "routing", 0.0f }, { "syncL", 0.0f }, { "syncR", 0.0f }, { "linkLR", 0.0f }, { "freeze", 0.0f } }),
+        B ("Keys | Stereo Spread", { N ("wow", 0.0f), N ("flutter", 0.0f), N ("diffusion", 0.0f), N ("timeL", 250.0f), N ("timeR", 375.0f), N ("feedback", 35.0f), N ("mix", 22.0f), N ("crossFeed", 40.0f) },
+            { { "character", 0.0f }, { "routing", 2.0f }, { "syncL", 0.0f }, { "syncR", 0.0f }, { "linkLR", 0.0f }, { "freeze", 0.0f } }),
+        B ("Drums | Snare Tail Quarter", { N ("wow", 35.0f), N ("flutter", 25.0f), N ("diffusion", 0.0f), N ("feedback", 30.0f), N ("mix", 18.0f), N ("lowCut", 300.0f), N ("highCut", 5000.0f), N ("duck", 6.0f) },
+            { { "character", 1.0f }, { "routing", 0.0f }, { "syncL", 4.0f }, { "syncR", 4.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("Drums | Tight Room Echo", { N ("wow", 15.0f), N ("flutter", 5.0f), N ("diffusion", 10.0f), N ("timeL", 70.0f), N ("feedback", 20.0f), N ("mix", 15.0f), N ("highCut", 5000.0f) },
+            { { "character", 2.0f }, { "routing", 0.0f }, { "syncL", 0.0f }, { "syncR", 0.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("Synth | Triplet Bounce", { N ("wow", 0.0f), N ("flutter", 0.0f), N ("diffusion", 0.0f), N ("feedback", 45.0f), N ("mix", 28.0f) },
+            { { "character", 0.0f }, { "routing", 1.0f }, { "syncL", 11.0f }, { "syncR", 11.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("Synth | Long Analog Trail", { N ("wow", 15.0f), N ("flutter", 5.0f), N ("diffusion", 10.0f), N ("feedback", 65.0f), N ("mix", 28.0f), N ("drive", 30.0f), N ("highCut", 4000.0f) },
+            { { "character", 2.0f }, { "routing", 0.0f }, { "syncL", 5.0f }, { "syncR", 5.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("FX | Telephone Echo", { N ("wow", 0.0f), N ("flutter", 0.0f), N ("diffusion", 0.0f), N ("feedback", 50.0f), N ("mix", 40.0f), N ("lowCut", 800.0f), N ("highCut", 2500.0f) },
+            { { "character", 0.0f }, { "routing", 0.0f }, { "syncL", 3.0f }, { "syncR", 3.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("FX | Lo-Fi Wobble", { N ("wow", 90.0f), N ("flutter", 60.0f), N ("diffusion", 0.0f), N ("feedback", 50.0f), N ("mix", 35.0f), N ("drive", 50.0f), N ("highCut", 3000.0f) },
+            { { "character", 1.0f }, { "routing", 0.0f }, { "syncL", 8.0f }, { "syncR", 8.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("Mix | Subtle Depth", { N ("wow", 35.0f), N ("flutter", 25.0f), N ("diffusion", 0.0f), N ("feedback", 20.0f), N ("mix", 10.0f), N ("lowCut", 300.0f), N ("highCut", 5000.0f) },
+            { { "character", 1.0f }, { "routing", 0.0f }, { "syncL", 4.0f }, { "syncR", 4.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        B ("Mix | Ducked Everything", { N ("wow", 35.0f), N ("flutter", 25.0f), N ("diffusion", 0.0f), N ("feedback", 40.0f), N ("mix", 25.0f), N ("duck", 14.0f), N ("duckRelease", 200.0f) },
+            { { "character", 1.0f }, { "routing", 0.0f }, { "syncL", 8.0f }, { "syncR", 8.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        A ("Loop | Freeze Pad", { N ("wow", 10.0f), N ("flutter", 5.0f), N ("diffusion", 80.0f), N ("feedback", 90.0f), N ("mix", 50.0f) },
+            { { "character", 3.0f }, { "routing", 0.0f }, { "syncL", 4.0f }, { "syncR", 4.0f }, { "linkLR", 1.0f }, { "freeze", 1.0f } }),
+        A ("Loop | Self-Oscillation Rise", { N ("wow", 35.0f), N ("flutter", 25.0f), N ("diffusion", 0.0f), N ("feedback", 105.0f), N ("mix", 35.0f), N ("drive", 60.0f), N ("highCut", 4000.0f) },
+            { { "character", 1.0f }, { "routing", 0.0f }, { "syncL", 3.0f }, { "syncR", 3.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        A ("Loop | Runaway Analog", { N ("wow", 15.0f), N ("flutter", 5.0f), N ("diffusion", 10.0f), N ("timeL", 60.0f), N ("feedback", 100.0f), N ("mix", 30.0f), N ("drive", 70.0f), N ("highCut", 2500.0f) },
+            { { "character", 2.0f }, { "routing", 0.0f }, { "syncL", 0.0f }, { "syncR", 0.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        A ("Stereo | Uneven Cross Feed", { N ("wow", 0.0f), N ("flutter", 0.0f), N ("diffusion", 0.0f), N ("timeL", 310.0f), N ("timeR", 460.0f), N ("feedback", 55.0f), N ("crossFeed", 70.0f), N ("mix", 25.0f) },
+            { { "character", 0.0f }, { "routing", 2.0f }, { "syncL", 0.0f }, { "syncR", 0.0f }, { "linkLR", 0.0f }, { "freeze", 0.0f } }),
+        A ("Stereo | Haas Widener", { N ("wow", 0.0f), N ("flutter", 0.0f), N ("diffusion", 0.0f), N ("timeL", 1.0f), N ("timeR", 12.0f), N ("feedback", 0.0f), N ("mix", 50.0f), N ("width", 200.0f) },
+            { { "character", 0.0f }, { "routing", 0.0f }, { "syncL", 0.0f }, { "syncR", 0.0f }, { "linkLR", 0.0f }, { "freeze", 0.0f } }),
+        A ("Character | Clean Digital Grid", { N ("wow", 0.0f), N ("flutter", 0.0f), N ("diffusion", 0.0f), N ("feedback", 50.0f), N ("mix", 30.0f), N ("lowCut", 10.0f), N ("highCut", 20000.0f) },
+            { { "character", 0.0f }, { "routing", 0.0f }, { "syncL", 3.0f }, { "syncR", 3.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        A ("Character | Heavy Diffuse Cloud", { N ("wow", 10.0f), N ("flutter", 5.0f), N ("diffusion", 100.0f), N ("feedback", 70.0f), N ("mix", 40.0f) },
+            { { "character", 3.0f }, { "routing", 0.0f }, { "syncL", 5.0f }, { "syncR", 5.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } }),
+        A ("Tempo | Half-Bar Dotted", { N ("wow", 35.0f), N ("flutter", 25.0f), N ("diffusion", 0.0f), N ("feedback", 45.0f), N ("mix", 25.0f) },
+            { { "character", 1.0f }, { "routing", 0.0f }, { "syncL", 9.0f }, { "syncR", 9.0f }, { "linkLR", 1.0f }, { "freeze", 0.0f } })
+    };
+}
+
 inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
 {
     m["Spectra EQ"] = presets114_spectra();
@@ -507,4 +565,5 @@ inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
     m["Sibyl De-Ess"] = presets114_sibyl();
     m["Portcullis Gate"] = presets114_portcullis();
     m["Kiln"] = presets114_kiln();
+    m["Spindle Delay"] = presets114_spindle();
 }

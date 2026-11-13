@@ -34,7 +34,12 @@
         juce::Rectangle<float> all() const     { return getLocalBounds().toFloat(); }
         juce::Rectangle<float> topBar() const  { return all().reduced (16.0f, 0).removeFromTop (48.0f).withTrimmedTop (10.0f).withTrimmedBottom (8.0f); }
         juce::Rectangle<float> deck() const    { return all().reduced (16.0f, 0).removeFromBottom (214.0f).withTrimmedBottom (14.0f); }
-        juce::Rectangle<float> middle() const  { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (222.0f); return r; }
+        juce::Rectangle<float> middle() const  { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (222.0f); r.removeFromRight (meterW() + 10.0f); return r; }
+        // the numbers: IN / OUT / GR meters on the right (StudioUi, shared by the Studio Line)
+        StudioUi::StudioMeter meter;
+        static float meterW() { return StudioUi::StudioMeter::width (true); }
+        juce::Rectangle<float> meterR() const { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (222.0f); return r.removeFromRight (meterW()); }
+        void paintMeter (juce::Graphics& g) { meter.update (mb->levelIn.load(), mb->levelOut.load(), (float) mbGr()); meter.draw (g, meterR(), mint(), true); }
         juce::Rectangle<float> specPane() const { auto r = middle(); return r.removeFromLeft (r.getWidth() - 342.0f); }
         juce::Rectangle<float> bandPane() const { auto r = middle(); return r.removeFromRight (330.0f); }
         juce::Rectangle<float> plot() const    { return specPane().reduced (14.0f, 0).withTrimmedTop (44.0f).withTrimmedBottom (26.0f).withTrimmedRight (24.0f); }
@@ -98,8 +103,10 @@
             paintSpectrum (g);
             paintBandPane (g);
             paintDeck (g);
+            paintMeter (g);
         }
         int nb() const { return juce::jlimit (1, P::maxBands, mb->numBands.get()); }
+        float mbGr() const { float g = 0; for (int k = 0; k < nb(); ++k) g = std::min (g, mb->grDb[(size_t) k].load()); return g; }
 
         // ---- the spectrum with band regions
         juce::Rectangle<float> tabR (int k) const
@@ -375,6 +382,7 @@
                 const auto& k = ds[i]; const int pi_ = paramIndex (k);
                 const bool bip = (k.band >= 0 && k.k == P::gain) || (k.band < 0 && (k.k == P::input || k.k == P::output));
                 drawKnob (g, knobR[i], k.label, knobText (k), norm (pi_), k.band >= 0 ? col : mint(), (int) i == hoverKnob || (int) i == dragKnob, (int) i == dragKnob, bip);
+                StudioUi::knobScale (g, knobR[i], mb->bank.specs[(size_t) pi_], text (1.0f));
             }
         }
 

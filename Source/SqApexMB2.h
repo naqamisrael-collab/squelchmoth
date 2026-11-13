@@ -107,7 +107,9 @@ public:
         if (haveKey) { key[0] = b.getReadPointer (2, s0); key[1] = b.getReadPointer (b.getNumChannels() > 3 ? 3 : 2, s0); }
         int sw = scopeW.load();
         for (int i = 0; i < n; ++i) scopeIn[(size_t) ((sw + i) & (scopeLen - 1))] = 0.5f * (ch[0][i] + ch[1][i]);
+        { float pk = 0; for (int c = 0; c < nch; ++c) pk = juce::jmax (pk, b.getMagnitude (c, s0, n)); levelIn = pk; }   // the face's IN meter
         engine.process (ch, nch, haveKey ? key : nullptr, haveKey ? 2 : 0, n);
+        { float pk = 0; for (int c = 0; c < nch; ++c) pk = juce::jmax (pk, b.getMagnitude (c, s0, n)); levelOut = pk; }  // and OUT
         for (int i = 0; i < n; ++i) scopeOut[(size_t) ((sw + i) & (scopeLen - 1))] = 0.5f * (ch[0][i] + ch[1][i]);
         scopeW = sw + n;
         for (int k = 0; k < maxBands; ++k) { grDb[(size_t) k] = engine.meterGrDb[(size_t) k].load(); levelDb[(size_t) k] = engine.meterLevelDb[(size_t) k].load(); }

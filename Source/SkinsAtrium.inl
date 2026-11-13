@@ -30,7 +30,12 @@
         juce::Rectangle<float> all() const      { return getLocalBounds().toFloat(); }
         juce::Rectangle<float> topBar() const   { return all().reduced (16.0f, 0).removeFromTop (48.0f).withTrimmedTop (10.0f).withTrimmedBottom (8.0f); }
         juce::Rectangle<float> deck() const     { return all().reduced (16.0f, 0).removeFromBottom (318.0f).withTrimmedBottom (14.0f); }
-        juce::Rectangle<float> middle() const   { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (326.0f); return r; }
+        juce::Rectangle<float> middle() const   { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (326.0f); r.removeFromRight (meterW() + 10.0f); return r; }
+        // the numbers: IN / OUT meters on the right (StudioUi, shared by the Studio Line)
+        StudioUi::StudioMeter meter;
+        static float meterW() { return StudioUi::StudioMeter::width (false); }
+        juce::Rectangle<float> meterR() const { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (326.0f); return r.removeFromRight (meterW()); }
+        void paintMeter (juce::Graphics& g) { meter.update (av->levelIn.load(), av->levelOut.load(), (float) 0.0f); meter.draw (g, meterR(), amber(), false); }
         juce::Rectangle<float> timeline() const { auto r = middle(); return r.removeFromLeft (r.getWidth() * 0.58f); }
         juce::Rectangle<float> landscape() const{ auto r = middle(); r.removeFromLeft (r.getWidth() * 0.58f + 12.0f); return r; }
 
@@ -65,6 +70,7 @@
             paintTimeline (g);
             paintLandscape (g);
             paintDeck (g);
+            paintMeter (g);
         }
 
         // ---- the reflection timeline
@@ -387,6 +393,7 @@
             {
                 const auto& k = knobDefs()[i];
                 drawKnob (g, knobR[i], k.label, knobText (k.param), norm (k.param), k.big, (int) i == hoverKnob || (int) i == dragKnob, (int) i == dragKnob, knobEnabled ((int) i), k.param == P::output);
+                StudioUi::knobScale (g, knobR[i], av->bank.specs[(size_t) k.param], text (1.0f), 15.0f, k.big ? 26.0f : 22.0f, knobEnabled ((int) i) ? 1.0f : 0.4f);
             }
         }
 

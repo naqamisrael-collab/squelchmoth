@@ -79,7 +79,9 @@ public:
         const bool haveKey = b.getNumChannels() > 2;
         if (haveKey) { key[0] = b.getReadPointer (2, s0); key[1] = b.getReadPointer (b.getNumChannels() > 3 ? 3 : 2, s0); }
         float inPk = 0; for (int c = 0; c < nch; ++c) inPk = juce::jmax (inPk, b.getMagnitude (c, s0, n));
+        { float pk = 0; for (int c = 0; c < nch; ++c) pk = juce::jmax (pk, b.getMagnitude (c, s0, n)); levelIn = pk; }   // the face's IN meter
         engine.process (ch, nch, haveKey ? key : nullptr, haveKey ? 2 : 0, n);
+        { float pk = 0; for (int c = 0; c < nch; ++c) pk = juce::jmax (pk, b.getMagnitude (c, s0, n)); levelOut = pk; }  // and OUT
         const int w = histW.load();
         histKey[(size_t) (w & (histLen - 1))] = engine.meterKeyDb; histGain[(size_t) (w & (histLen - 1))] = engine.meterGainDb;
         histIn[(size_t) (w & (histLen - 1))] = (float) SqPortcullis::gainToDb (inPk);

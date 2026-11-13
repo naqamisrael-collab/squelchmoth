@@ -28,7 +28,12 @@
         juce::Rectangle<float> all() const     { return getLocalBounds().toFloat(); }
         juce::Rectangle<float> topBar() const  { return all().reduced (16.0f, 0).removeFromTop (48.0f).withTrimmedTop (10.0f).withTrimmedBottom (8.0f); }
         juce::Rectangle<float> deck() const    { return all().reduced (16.0f, 0).removeFromBottom (196.0f).withTrimmedBottom (14.0f); }
-        juce::Rectangle<float> middle() const  { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (204.0f); return r; }
+        juce::Rectangle<float> middle() const  { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (204.0f); r.removeFromRight (meterW() + 10.0f); return r; }
+        // the numbers: IN / OUT meters on the right (StudioUi, shared by the Studio Line)
+        StudioUi::StudioMeter meter;
+        static float meterW() { return StudioUi::StudioMeter::width (false); }
+        juce::Rectangle<float> meterR() const { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (204.0f); return r.removeFromRight (meterW()); }
+        void paintMeter (juce::Graphics& g) { meter.update (kn->levelIn.load(), kn->levelOut.load(), (float) 0.0f); meter.draw (g, meterR(), gold(), false); }
         juce::Rectangle<float> furnace() const { auto r = middle(); return r.removeFromLeft (r.getWidth() - 372.0f); }
         juce::Rectangle<float> side() const    { auto r = middle(); return r.removeFromRight (360.0f); }
         juce::Rectangle<float> plot() const    { return furnace().reduced (14.0f, 0).withTrimmedTop (46.0f).withTrimmedBottom (24.0f); }
@@ -91,7 +96,7 @@
             g.setColour (ember().withAlpha (0.24f)); g.drawRoundedRectangle (a.reduced (0.5f), 10.0f, 1.0f);
             sel = juce::jlimit (0, nb() - 1, sel);
             hits.clear();
-            paintTopBar (g); paintFurnace (g); paintSide (g); paintDeck (g);
+            paintTopBar (g); paintFurnace (g); paintSide (g); paintDeck (g); paintMeter (g);
         }
 
         // ---- the furnace
@@ -377,6 +382,7 @@
                 const auto& k = ds[i]; const int pi_ = paramIndex (k);
                 const bool bip = (k.band >= 0 && (k.k == P::bias || k.k == P::bandOut)) || (k.band < 0 && (k.k == P::input || k.k == P::output));
                 drawKnob (g, knobR[i], k.label, knobText (k), norm (pi_), (int) i == hoverKnob || (int) i == dragKnob, (int) i == dragKnob, bip);
+                StudioUi::knobScale (g, knobR[i], kn->bank.specs[(size_t) pi_], text (1.0f));
             }
         }
 

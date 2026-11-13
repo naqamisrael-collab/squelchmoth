@@ -28,7 +28,12 @@
         juce::Rectangle<float> all() const     { return getLocalBounds().toFloat(); }
         juce::Rectangle<float> topBar() const  { return all().reduced (16.0f, 0).removeFromTop (48.0f).withTrimmedTop (10.0f).withTrimmedBottom (8.0f); }
         juce::Rectangle<float> deck() const    { return all().reduced (16.0f, 0).removeFromBottom (196.0f).withTrimmedBottom (14.0f); }
-        juce::Rectangle<float> middle() const  { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (204.0f); return r; }
+        juce::Rectangle<float> middle() const  { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (204.0f); r.removeFromRight (meterW() + 10.0f); return r; }
+        // the numbers: IN / OUT / GR meters on the right (StudioUi, shared by the Studio Line)
+        StudioUi::StudioMeter meter;
+        static float meterW() { return StudioUi::StudioMeter::width (true); }
+        juce::Rectangle<float> meterR() const { auto r = all().reduced (16.0f, 0); r.removeFromTop (50.0f); r.removeFromBottom (204.0f); return r.removeFromRight (meterW()); }
+        void paintMeter (juce::Graphics& g) { meter.update (sb->levelIn.load(), sb->levelOut.load(), (float) sb->grNow.load()); meter.draw (g, meterR(), rose(), true); }
         juce::Rectangle<float> bandPane() const { auto r = middle(); return r.removeFromLeft (r.getWidth() * 0.60f); }
         juce::Rectangle<float> tracePane() const { auto r = middle(); r.removeFromLeft (r.getWidth() * 0.60f + 12.0f); return r; }
         juce::Rectangle<float> plot() const { return bandPane().reduced (16.0f, 0).withTrimmedTop (30.0f).withTrimmedBottom (26.0f).withTrimmedRight (26.0f); }
@@ -86,7 +91,7 @@
                 }
             }
             g.setColour (rose().withAlpha (0.26f)); g.drawRoundedRectangle (a.reduced (0.5f), 10.0f, 1.0f);
-            paintTopBar (g); paintBand (g); paintTrace (g); paintDeck (g);
+            paintTopBar (g); paintBand (g); paintTrace (g); paintDeck (g); paintMeter (g);
         }
 
         // ---- the band
@@ -319,6 +324,7 @@
             layoutKnobs();
             for (size_t i = 0; i < defs().size(); ++i)
                 drawKnob (g, knobR[i], defs()[i].label, knobText (defs()[i].param), norm (defs()[i].param), (int) i == hoverKnob || (int) i == dragKnob, (int) i == dragKnob, defs()[i].param == P::output);
+            for (size_t i = 0; i < defs().size(); ++i) StudioUi::knobScale (g, knobR[i], sb->bank.specs[(size_t) defs()[i].param], text (1.0f));
         }
 
         // ---- mouse

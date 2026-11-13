@@ -35,6 +35,7 @@
 #include "SqSibyl.h"
 #include "SqPortcullis.h"
 #include "SqKiln.h"
+#include "SqSpindle.h"
 
 namespace te = tracktion;
 
@@ -121,6 +122,7 @@ namespace Signature
             { "Sibyl De-Ess",     "sqmSibylDeEss",   "Voice",       "The de-esser flagship: relative detection (the s against the whole voice, so whispers and shouts are treated alike) or absolute, a split cut that is a clean minimum-phase bell (exactly the input when idle) or a wide one, Track mode that follows the loudest s, lookahead to 15 ms, linked / mid / side, side-chain key, listen to the detection or to exactly what is removed", 0xffe8a48c, "sibyldeess" },
             { "Portcullis Gate",  "sqmPortcullis",   "Dynamics",    "The gate flagship: separate open and close thresholds (no chatter), range, hold, attack and release with three curves, lookahead to 10 ms, gate / expand / duck, a key from the input, the side-chain or MIDI notes (with velocity), a key filter you can listen to, and flip to hear only what it removes", 0xffffb04a, "portcullis" },
             { "Kiln",             "sqmKiln",         "Saturation",  "Multiband saturation on the Cinder engine: up to six bands that sum back flat, each with its own model of the ten, drive, bias, dynamics, mix and output; oversampling to 16x (minimum or linear phase); an LFO and an envelope follower routed by a four-slot matrix to any band's drive or mix; the furnace view shows the heat each band is adding", 0xffff7a2e, "kiln" },
+            { "Spindle Delay",    "sqmSpindle",      "Delay",       "The delay flagship: digital, tape, analog and diffuse characters; normal, ping-pong and cross routing; times free or synced (dotted and triplet too), left and right linked or apart; filters, drive, wow, flutter and diffusion inside the loop; tape-style gliding or clean cross-faded time changes; ducking, freeze and width; the echo trail shows where every repeat will land", 0xff3fe0d0, "spindle" },
             { "Torque Comp",      "sqmTorqueComp",   "Dynamics",    "The flagship compressor: 14 styles (Clean, Punch, Glue, Opto, Variable Mu, FET, Bus, Vocal, Mastering, Leveler, Upward, Pump, Smash, Transparent Peak), knee to 72 dB, lookahead, hold, auto release / threshold / gain, a 6-band key EQ, MIDI and tempo keys, Mid / Side routing, oversampled colour to 32x and mix to 200 %", 0xffe0763a, "torquecomp" },
             { "Apex Dynamics",    "sqmApexDyn",      "Dynamics",    "Compressor, expander, gate, ducker and upward compressor in one: lookahead, negative ratios, Smart detection, key filter", 0xffffc21a, "apexdyn" },
             { "Apex Limiter",     "sqmApexLim",      "Dynamics",    "True-peak limiter with lookahead, Character and a full BS.1770-4 loudness meter with one-click loudness targets", 0xffff4a2a, "apexlim" },

@@ -59,6 +59,7 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqSibylDeEssPlugin>();
     engine->getPluginManager().createBuiltInType<SqPortcullisGatePlugin>();
     engine->getPluginManager().createBuiltInType<SqKilnPlugin>();
+    engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqTremorPlugin>();
     engine->getPluginManager().createBuiltInType<SqOrbitPanPlugin>();
     engine->getPluginManager().createBuiltInType<SqMirrorShiftPlugin>();
@@ -3932,6 +3933,59 @@ inline int runSelfTest()
             }
         }
         std::cout << "  (1.14 Kiln section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
+    }
+
+    // ===================================================================== 1.14 "Studio Line": Spindle Delay
+    {
+        std::cout << "\n-- 1.14 Studio Line: Spindle Delay --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest Spindle"})");
+        call ("add_track", R"({"kind":"audio","name":"Echo Return"})");
+        auto added = call ("spindle_delay", R"({"track":"Echo Return","action":"add"})");
+        SqSpindleDelayPlugin* sd = nullptr;
+        if (auto tt = session->findTrack ("Echo Return")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqSpindleDelayPlugin*> (pl)) sd = c;
+        check (sd != nullptr && added.contains ("Spindle Delay"), "Spindle Delay inserted by spindle_delay add");
+        if (sd != nullptr)
+        {
+            auto st = call ("spindle_delay", R"({"track":"Echo Return","action":"set","character":"digital","routing":"pingpong","sync":"1/8 dotted","feedback":50,"mix":100})");
+            check (sd->character.get() == 0 && sd->routing.get() == 1 && sd->syncL.get() == 8 && std::abs (sd->bank[SqSpindleDelayPlugin::wow]) < 0.01f && st.contains ("Ping-Pong"),
+                   "spindle_delay set: character (with its own wow), ping-pong, a dotted-eighth sync - by name");
+            check (std::abs (sd->timeMs (0) - 375.0) < 0.5, "1/8 dotted at 120 BPM = " + juce::String (sd->timeMs (0), 1) + " ms");
+            call ("spindle_delay", R"({"track":"Echo Return","action":"set","routing":"normal","time":200,"low_cut":10,"high_cut":20000,"drive":0})");
+            check (sd->syncL.get() == 0, "a time in ms sets the sync back to free");
+            auto twin = session->edit->getPluginCache().createNewPlugin (SqSpindleDelayPlugin::xmlTypeName, {});
+            if (auto* tw = dynamic_cast<SqSpindleDelayPlugin*> (twin.get()))
+            {
+                tw->restorePluginStateFromValueTree (sd->state);
+                tw->baseClassInitialise ({ te::TimePosition(), 44100.0, 512 });
+                const int N = 44100; juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi; std::vector<float> out;
+                for (int q = 0; q + 512 <= N; q += 512)
+                {
+                    buf.clear(); if (q == 0) { buf.setSample (0, 0, 1.0f); buf.setSample (1, 0, 1.0f); }
+                    te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / 44100.0), te::TimePosition::fromSeconds ((q + 512) / 44100.0)), true, false, true, false);
+                    tw->applyToBuffer (fc);
+                    for (int i = 0; i < 512; ++i) out.push_back (buf.getSample (0, i));
+                }
+                tw->baseClassDeinitialise();
+                auto peakNear = [&] (int at) { int best = at; for (int i = at - 50; i <= at + 50; ++i) if (std::abs (out[(size_t) i]) > std::abs (out[(size_t) best])) best = i; return best; };
+                const int e1 = peakNear (8820), e2 = peakNear (17640);
+                const double ratio = 20 * std::log10 (std::abs (out[(size_t) e2]) / std::max (1e-9f, std::abs (out[(size_t) e1])));
+                check (std::abs (e1 - 8820) <= 1 && std::abs (e2 - 17640) <= 1 && std::abs (ratio - 20 * std::log10 (0.5)) < 0.2,
+                       "Spindle rendered: echoes at 200 / 400 ms (samples " + juce::String (e1) + ", " + juce::String (e2) + "), the second " + juce::String (ratio, 2) + " dB (feedback 50 %)");
+            }
+            int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmSpindle") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+            auto pl = call ("spindle_delay", R"({"track":"Echo Return","action":"preset","preset":"Freeze Pad"})");
+            check (nPre >= 24 && nAdv >= 8 && pl.contains ("Loaded") && sd->freeze.get(), "Spindle Delay: " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " Advanced); the freeze preset freezes");
+            check (Edition::packOf ("sqmSpindle") == Edition::Pack::color, "Spindle Delay belongs to Color & Space");
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = sd->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*sd);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (600);
+                auto snap = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                check (snap.isValid() && snap.getWidth() >= 1000, "Spindle Delay window renders offscreen (" + juce::String (snap.getWidth()) + " x " + juce::String (snap.getHeight()) + ")");
+            }
+        }
+        std::cout << "  (1.14 Spindle section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));
