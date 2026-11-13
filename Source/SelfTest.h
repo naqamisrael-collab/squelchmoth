@@ -58,6 +58,7 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqApexMB2Plugin>();
     engine->getPluginManager().createBuiltInType<SqSibylDeEssPlugin>();
     engine->getPluginManager().createBuiltInType<SqPortcullisGatePlugin>();
+    engine->getPluginManager().createBuiltInType<SqKilnPlugin>();
     engine->getPluginManager().createBuiltInType<SqTremorPlugin>();
     engine->getPluginManager().createBuiltInType<SqOrbitPanPlugin>();
     engine->getPluginManager().createBuiltInType<SqMirrorShiftPlugin>();
@@ -3875,6 +3876,62 @@ inline int runSelfTest()
             }
         }
         std::cout << "  (1.14 Portcullis section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
+    }
+
+    // ===================================================================== 1.14 "Studio Line": Kiln
+    {
+        std::cout << "\n-- 1.14 Studio Line: Kiln --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest Kiln"})");
+        call ("add_track", R"({"kind":"audio","name":"Drum Bus"})");
+        auto added = call ("kiln", R"({"track":"Drum Bus","action":"add"})");
+        SqKilnPlugin* kl = nullptr;
+        if (auto tt = session->findTrack ("Drum Bus")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqKilnPlugin*> (pl)) kl = c;
+        check (kl != nullptr && added.contains ("Kiln"), "Kiln inserted by kiln add");
+        if (kl != nullptr)
+        {
+            call ("kiln", R"({"track":"Drum Bus","action":"set","bands":2,"crossovers":[300],"oversampling":4,"auto_gain":false})");
+            auto bd = call ("kiln", R"({"track":"Drum Bus","action":"band","band":1,"model":"pentode box","drive":24,"mix":100})");
+            call ("kiln", R"({"track":"Drum Bus","action":"band","band":2,"drive":-12,"mix":0})");
+            auto md = call ("kiln", R"({"track":"Drum Bus","action":"mod","slot":1,"source":"lfo","target":"band 1 drive","amount":6})");
+            check (kl->numBands.get() == 2 && kl->model[0].get() == Cinder::pentodeBox && kl->slotTarget[0].get() == 1 && std::abs (kl->bank[SqKilnPlugin::slot1] * 36.0f - 6.0f) < 0.01f && md.contains ("Band 1 Drive"),
+                   "kiln set / band / mod: two bands, a pentode low band, an LFO on its drive - by name");
+            call ("kiln", R"({"track":"Drum Bus","action":"mod","slot":1,"source":"off"})");
+            auto twin = session->edit->getPluginCache().createNewPlugin (SqKilnPlugin::xmlTypeName, {});
+            if (auto* tw = dynamic_cast<SqKilnPlugin*> (twin.get()))
+            {
+                tw->restorePluginStateFromValueTree (kl->state);
+                tw->baseClassInitialise ({ te::TimePosition(), 44100.0, 512 });
+                const int N = 44100 * 2; juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi; std::vector<float> out;
+                for (int q = 0; q + 512 <= N; q += 512)
+                {
+                    for (int i = 0; i < 512; ++i) { const double t = (q + i) / 44100.0; const float v = (float) (0.25 * std::sin (juce::MathConstants<double>::twoPi * 100.0 * t) + 0.1 * std::sin (juce::MathConstants<double>::twoPi * 3050.0 * t)); buf.setSample (0, i, v); buf.setSample (1, i, v); }
+                    te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / 44100.0), te::TimePosition::fromSeconds ((q + 512) / 44100.0)), true, false, true, false);
+                    tw->applyToBuffer (fc);
+                    for (int i = 0; i < 512; ++i) out.push_back (buf.getSample (0, i));
+                }
+                tw->baseClassDeinitialise();
+                auto bin = [&] (double f) { std::complex<double> acc = 0; double ws = 0; const int from = 44100, M = 16384;
+                    for (int i = 0; i < M; ++i) { const double w = 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * i / (M - 1)); acc += w * (double) out[(size_t) (from + i)] * std::polar (1.0, -juce::MathConstants<double>::twoPi * f * i / 44100.0); ws += w; }
+                    return 20 * std::log10 (2 * std::abs (acc) / ws + 1e-12); };
+                const double h3 = bin (300) - bin (100), tone = bin (3050), side = std::max (bin (2950), bin (3150));
+                check (h3 > -30 && std::abs (tone - 20 * std::log10 (0.1)) < 0.5 && side < tone - 50,
+                       "Kiln rendered: the driven low band adds a 3rd harmonic at " + juce::String (h3, 1) + " dBc; the clean upper band keeps 3.05 kHz at " + juce::String (tone, 2) + " dB, no intermodulation");
+            }
+            check (kl->getLatencySeconds() > 0.0, "4x oversampling reports its latency (" + juce::String (kl->getLatencySeconds() * 1000.0, 2) + " ms)");
+            int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmKiln") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+            auto pl = call ("kiln", R"({"track":"Drum Bus","action":"preset","preset":"Louder Is Dirtier"})");
+            check (nPre >= 24 && nAdv >= 8 && pl.contains ("Loaded") && kl->slotSource[0].get() == 2, "Kiln: " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " Advanced); the dynamic preset routes the envelope");
+            check (Edition::packOf ("sqmKiln") == Edition::Pack::color, "Kiln belongs to Color & Space");
+            {
+                std::unique_ptr<te::Plugin::EditorComponent> ed = kl->createEditor();
+                if (ed == nullptr) ed = std::make_unique<Skins::SkinEditor> (*kl);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (600);
+                auto snap = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+                check (snap.isValid() && snap.getWidth() >= 1000, "Kiln window renders offscreen (" + juce::String (snap.getWidth()) + " x " + juce::String (snap.getHeight()) + ")");
+            }
+        }
+        std::cout << "  (1.14 Kiln section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));

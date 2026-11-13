@@ -322,6 +322,57 @@ def portcullis_cpp():
         rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
     return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_portcullis()   // Portcullis Gate\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
 
+# ---------------------------------------------------------------- Kiln
+KM = {n: i for i, n in enumerate(["Tape Preamp","British Channel","Germanium Class-A","Triode Box","Pentode Box","Transformer Iron","Op-Amp Rail","Diode Fuzz","Tape Hysteresis","Broadcast Limiter Amp"])}
+KL = []
+def kb(model, drive=6, bias=0, dyn=30, mix=100, out=0): return dict(model=KM[model], drive=drive, bias=bias, dyn=dyn, mix=mix, out=out)
+def kadd(name, xo, bands, adv=False, os=2, lin=0, auto=1, inp=0, out=0, mix=100, lfo=(0, 1.0), env=(10, 150), slots=()):
+    KL.append((name, adv, xo, bands, os, lin, auto, inp, out, mix, lfo, env, slots))
+kadd("Start | Warm Three-Band", [200, 2500], [kb("Transformer Iron", 4), kb("Triode Box", 4), kb("Tape Hysteresis", 3)])
+kadd("Mix | Glue and Glow", [180, 3000], [kb("Transformer Iron", 3, dyn=40), kb("Tape Preamp", 4, dyn=40), kb("Tape Preamp", 2, dyn=40)], mix=70)
+kadd("Mix | Tape Bus", [120, 4000], [kb("Tape Hysteresis", 6), kb("Tape Hysteresis", 4), kb("Tape Hysteresis", 3)])
+kadd("Drums | Fat Low, Clean Top", [150, 5000], [kb("Germanium Class-A", 12), kb("British Channel", 4), kb("Tape Preamp", 0, mix=0)])
+kadd("Drums | Crushed Room", [250, 4000], [kb("Diode Fuzz", 18), kb("Pentode Box", 16), kb("Op-Amp Rail", 12)], mix=40)
+kadd("Drums | Snare Crack", [300, 2500, 7000], [kb("Tape Preamp", 0, mix=0), kb("Pentode Box", 12), kb("Triode Box", 8), kb("Tape Preamp", 0, mix=0)])
+kadd("Bass | Growl Up Top Only", [200], [kb("Tape Preamp", 0, mix=0), kb("Diode Fuzz", 20, mix=80)])
+kadd("Bass | Warm Weight", [100, 800], [kb("Transformer Iron", 8), kb("Triode Box", 6), kb("Tape Preamp", 0, mix=0)])
+kadd("808 | Audible on Phones", [90], [kb("Tape Preamp", 0, mix=0), kb("Pentode Box", 18)])
+kadd("Vocal | Presence Heat", [300, 2500, 8000], [kb("Tape Preamp", 0, mix=0), kb("Tape Preamp", 3), kb("Triode Box", 8, mix=70), kb("Tape Preamp", 2)])
+kadd("Vocal | Radio Edge", [400, 4000], [kb("Tape Preamp", 0, mix=0), kb("Broadcast Limiter Amp", 12), kb("Op-Amp Rail", 6, mix=50)])
+kadd("Guitar | Amp-Like Mids", [250, 3000], [kb("Tape Preamp", 2), kb("Pentode Box", 18), kb("Triode Box", 6, mix=60)])
+kadd("Keys | Electric Piano Bark", [300, 2000], [kb("Tape Preamp", 2), kb("Triode Box", 14), kb("Tape Preamp", 3)])
+kadd("Synth | Bright Fizz", [800, 5000], [kb("Tape Preamp", 0, mix=0), kb("Diode Fuzz", 12, mix=60), kb("Op-Amp Rail", 10, mix=50)])
+kadd("Master | Gentle Analogue", [150, 3000], [kb("Transformer Iron", 2, dyn=50), kb("Tape Preamp", 2, dyn=50), kb("Tape Preamp", 1, dyn=50)], mix=60, os=3, lin=1)
+kadd("Master | Loud and Thick", [120, 2000, 8000], [kb("Transformer Iron", 6), kb("British Channel", 5), kb("Tape Hysteresis", 4), kb("Tape Preamp", 3)], os=3, lin=1)
+kadd("Lo-Fi | Broken Speaker", [500, 3000], [kb("Diode Fuzz", 24, bias=0.6), kb("Op-Amp Rail", 20), kb("Diode Fuzz", 24, bias=-0.5)], mix=60)
+kadd("Lo-Fi | Old Radio", [300, 3500], [kb("Tape Preamp", -12, mix=0, out=-24), kb("Broadcast Limiter Amp", 18), kb("Tape Preamp", -12, mix=0, out=-24)])
+# Advanced (modulated)
+kadd("Motion | Pulsing Drive (LFO)", [200, 2500], [kb("Transformer Iron", 4), kb("Pentode Box", 10), kb("Triode Box", 4)], adv=True, lfo=(0, 2.0), slots=((1, 2, 0.4),))
+kadd("Motion | Random Grit Steps", [300, 3000], [kb("Tape Preamp", 2), kb("Diode Fuzz", 8), kb("Op-Amp Rail", 6)], adv=True, lfo=(3, 4.0), slots=((1, 2, 0.5), (1, 3, 0.3)))
+kadd("Motion | Square Gate Grit", [200, 4000], [kb("Tape Preamp", 0), kb("Pentode Box", 12), kb("Tape Preamp", 0)], adv=True, lfo=(2, 1.0), slots=((1, 8, -1.0),))
+kadd("Dynamic | Louder Is Dirtier", [250, 3000], [kb("Transformer Iron", 6, mix=0), kb("Pentode Box", 14, mix=0), kb("Triode Box", 8, mix=0)], adv=True, env=(5, 120), slots=((2, 7, 1.0), (2, 8, 1.0), (2, 9, 1.0)))
+kadd("Dynamic | Quiet Gets Warm", [200, 3000], [kb("Triode Box", 12), kb("Triode Box", 10), kb("Tape Preamp", 6)], adv=True, env=(20, 300), slots=((2, 13, -0.8),))
+kadd("Dynamic | Hits Light the Top", [300, 4000], [kb("Tape Preamp", 0, mix=0), kb("Tape Preamp", 0, mix=0), kb("Op-Amp Rail", 14, mix=0)], adv=True, env=(1, 80), slots=((2, 9, 1.0),))
+kadd("Six | Full Spectrum Heat", [80, 250, 800, 3000, 9000], [kb("Transformer Iron", 6), kb("Germanium Class-A", 6), kb("British Channel", 6), kb("Triode Box", 6), kb("Tape Hysteresis", 6), kb("Tape Preamp", 4)], adv=True, os=3)
+kadd("Clean | Oversampled 16x Polish", [200, 4000], [kb("Tape Preamp", 3), kb("Tape Preamp", 3), kb("Tape Preamp", 3)], adv=True, os=4, lin=1, mix=50)
+
+def kiln_cpp():
+    rows = []
+    for name, adv, xo, bands, os_, lin, auto, inp, out, mix, lfo, env, slots in KL:
+        vals = [("input", inp), ("output", out), ("mix", mix), ("lfoRate", lfo[1]), ("envAttack", env[0]), ("envRelease", env[1])]
+        for i, x in enumerate(xo): vals.append((f"x{i+1}", x))
+        props = [("bands", len(bands)), ("oversample", os_), ("linearOs", lin), ("autoGain", auto), ("lfoShape", lfo[0])]
+        for i, b in enumerate(bands):
+            n = i + 1
+            vals += [(f"b{n}drive", b["drive"]), (f"b{n}bias", b["bias"]), (f"b{n}dyn", b["dyn"]), (f"b{n}mix", b["mix"]), (f"b{n}out", b["out"])]
+            props += [(f"model{n}", b["model"])]
+        for i, (src, dst, amt) in enumerate(slots):
+            vals.append((f"slot{i+1}", amt)); props += [(f"src{i+1}", src), (f"dst{i+1}", dst)]
+        vs = ", ".join(f'N ("{k}", {float(x)}f)' for k, x in vals)
+        ps = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in props)
+        rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {vs} }},\n            {{ {ps} }})')
+    return "SQ_PRESETS_NOINLINE inline std::vector<Preset> presets114_kiln()   // Kiln\n{\n    return {\n" + ",\n".join(rows) + "\n    };\n}\n"
+
 def cpp():
     out = ["// Generated by scripts/gen_presets_114.py - factory presets for the 1.14 Studio Line. Do not edit by hand.",
            "// Included in namespace SignaturePresets (SignaturePresets.h); bank() calls add114().", "",
@@ -342,9 +393,9 @@ def cpp():
         pr = ", ".join(f'{{ "{k}", {float(x)}f }}' for k, x in props)
         rows.append(f'        {"A" if adv else "B"} ("{name}", {{ {v} }},\n            {{ {pr} }})')
     out.append(",\n".join(rows))
-    out += ["    };", "}", "", torque_cpp(), summit_cpp(), atrium_cpp(), mb2_cpp(), sibyl_cpp(), portcullis_cpp(), "inline void add114 (std::map<juce::String, std::vector<Preset>>& m)", "{", '    m["Spectra EQ"] = presets114_spectra();', '    m["Torque Comp"] = presets114_torque();', '    m["Summit Limiter"] = presets114_summit();', '    m["Atrium Verb"] = presets114_atrium();', '    m["Apex Multiband 2"] = presets114_mb2();', '    m["Sibyl De-Ess"] = presets114_sibyl();', '    m["Portcullis Gate"] = presets114_portcullis();', "}", ""]
+    out += ["    };", "}", "", torque_cpp(), summit_cpp(), atrium_cpp(), mb2_cpp(), sibyl_cpp(), portcullis_cpp(), kiln_cpp(), "inline void add114 (std::map<juce::String, std::vector<Preset>>& m)", "{", '    m["Spectra EQ"] = presets114_spectra();', '    m["Torque Comp"] = presets114_torque();', '    m["Summit Limiter"] = presets114_summit();', '    m["Atrium Verb"] = presets114_atrium();', '    m["Apex Multiband 2"] = presets114_mb2();', '    m["Sibyl De-Ess"] = presets114_sibyl();', '    m["Portcullis Gate"] = presets114_portcullis();', '    m["Kiln"] = presets114_kiln();', "}", ""]
     return "\n".join(out)
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 open(os.path.join(root, "Source", "SignaturePresets114.inl"), "w").write(cpp())
-print(len(P), "Spectra EQ presets,", sum(1 for p in P if not p[1]), "basic;", len(T), "Torque Comp presets,", sum(1 for t in T if not t[1]), "basic;", len(S), "Summit presets,", len(AV), "Atrium presets,", len(MB), "MB2 presets,", len(SB), "Sibyl presets,", len(PG), "Portcullis presets")
+print(len(P), "Spectra EQ presets,", sum(1 for p in P if not p[1]), "basic;", len(T), "Torque Comp presets,", sum(1 for t in T if not t[1]), "basic;", len(S), "Summit presets,", len(AV), "Atrium presets,", len(MB), "MB2 presets,", len(SB), "Sibyl presets,", len(PG), "Portcullis presets,", len(KL), "Kiln presets")

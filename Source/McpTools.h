@@ -421,6 +421,7 @@ private:
         registerApexMB2Tools();
         registerSibylTools();
         registerPortcullisTools();
+        registerKilnTools();
     }
 
     #include "McpToolsParity.h"
@@ -442,6 +443,7 @@ private:
     #include "McpToolsApexMB2.h"
     #include "McpToolsSibyl.h"
     #include "McpToolsPortcullis.h"
+    #include "McpToolsKiln.h"
 
     //==============================================================================
     void registerSessionTools()

@@ -457,6 +457,18 @@ ties, rests, dotted notes and triplets.
 8. When you bounce to 16 bit, choose **DITHER 16 BIT** with **STRONG** shaping (or load *Export | 16-bit with Shaped
    Dither*).
 
+## F2k. Kiln (multiband saturation, Color & Space)
+
+1. Insert **Saturation > Kiln** on a bus or instrument. It opens with three warm bands.
+2. Click **BANDS** to choose how many, and drag the gold seams to move the crossovers.
+3. Click a band (its tab or its area) and pick its **model** with the arrows - each one says what it is.
+4. Turn up that band's **DRIVE**. Its area glows with the heat it is adding; **BAND MIX** blends it back in.
+5. Leave the bands you don't want touched at low drive or Band Mix 0 - they stay exactly clean.
+6. For movement, set a **MODULATION** row: click the source (LFO or ENVELOPE), choose a target (a band's drive or
+   mix), and drag the amount. Example: *Envelope -> Band 2 Mix* makes loud hits dirtier.
+7. Raise **OVERSAMPLING** (8x or 16x) on bright, heavily driven material to keep it clean of aliasing.
+8. Ask Claude: "add Kiln to the drums with a fat low band and a clean top".
+
 ## F2j. Portcullis Gate (Mastering Suite)
 
 1. Insert **Dynamics > Portcullis Gate** on the drum or noisy track. It opens on *Start | Clean Gate*.
