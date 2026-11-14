@@ -1,0 +1,31 @@
+Settings file: /Users/runner/Library/SquelchmothSelfTest/Settings.xml
+Audio block size: 512  Rate: 48000.000000
+Creating Default Controllers...
+Rebuilding Wave Device List...
+Wave In: 1 + Input 2 (enabled): 0 (L), 1 (R)
+Wave Out: 1 + Output 2 (enabled): 0 (L), 1 (R)
+Default Wave Out: 1 + Output 2
+Default MIDI Out: 
+Default Wave In: 1 + Input 2
+Default MIDI In: 
+MIDI Input devices scanned in: 0
+Updating MIDI I/O devices
+Found MIDI in: all_midi_in ("All MIDI Ins") (enabled)
+Updating MIDI I/O devices
+Found MIDI in: all_midi_in ("All MIDI Ins") (enabled)
+Rebuilding Wave Device List...
+Wave In: 1 (enabled): 0 (C)
+Wave In: Input 2 (enabled): 1 (C)
+Wave Out: 1 + Output 2 (enabled): 0 (L), 1 (R)
+Default Wave Out: 1 + Output 2
+Default MIDI Out: 
+Default Wave In: 1
+Default MIDI In: All MIDI Ins
+Rebuilding Wave Device List...
+Wave In: 1 + Input 2 (enabled): 0 (L), 1 (R)
+Wave Out: 1 + Output 2 (enabled): 0 (L), 1 (R)
+Default Wave Out: 1 + Output 2
+Default MIDI Out: 
+Default Wave In: 1 + Input 2
+Default MIDI In: All MIDI Ins
+Cleaning up temp files..
