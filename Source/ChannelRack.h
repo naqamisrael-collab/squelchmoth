@@ -149,7 +149,7 @@ public:
         addAndMakeVisible (filterBox);
         mkButton (starterBtn, "BEAT STARTER", "Fill the kit channels with a groove in a genre (dice again for another)", [this] { showStarterMenu(); });
         mkButton (zipBtn, "ZIP", "Zip / unzip all channels (compact rows)", [this] { bool any = false; for (auto t : channels()) any = any || ! Rack::isZipped (*t); for (auto t : channels()) Rack::setZipped (*t, any); refresh(); });
-        mkButton (claudeBtn, "CLAUDE", "Ask Claude to work on this rack", [this] { if (onClaude) onClaude(); });
+        mkButton (claudeBtn, "ASK AI", "Open Squelchmoth Chat to have Claude or ChatGPT work on this rack", [this] { if (onClaude) onClaude(); });
         mkButton (pianoBtn, "PIANO ROLL", "Open the selected channel in the piano roll (steps are converted)", [this] { if (auto t = selected()) { if (auto mc = Rack::sendToPianoRoll (*t, pat())) { if (onOpenPianoRoll) onOpenPianoRoll (*mc); } refresh(); } });
 
         // ---- graph editor tabs
@@ -273,9 +273,9 @@ public:
         top.removeFromLeft (10);
         place (patMode, 42); place (songMode, 50);
         top.removeFromLeft (10);
-        place (graphBtn, 54); place (keysBtn, 46); place (pianoBtn, 80);
+        place (graphBtn, 66); place (keysBtn, 56); place (pianoBtn, 86);
         top.removeFromLeft (10);
-        place (starterBtn, 104); place (zipBtn, 36); place (claudeBtn, 60);
+        place (starterBtn, 108); place (zipBtn, 44); place (claudeBtn, 72);
         if (graphVisible)
         {
             auto gArea = r.removeFromBottom (graphH);
@@ -703,6 +703,16 @@ private:
         g.drawText (t->getName() + "  -  " + graphTabs.getCurrentTabName() + (graphLane == Lane::note ? "  (drag to pick a note, Shift-click adds a chord note, Alt-click resets)" : "  (drag to draw, right-drag ramps, Alt-click resets, Ctrl-drag scales all)"), area.getX() + 8, area.getY() + 4, leftW - 16, 14, juce::Justification::centredLeft);
         const bool bipolar = graphLane == Lane::pitch || graphLane == Lane::pan || graphLane == Lane::shift;
         const float zeroY = bipolar ? (float) in.getCentreY() : (float) in.getBottom();
+        if (graphLane != Lane::note)   // phase Z: the lane's scale beside the steps (top, centre / zero, bottom)
+        {
+            g.setFont (Theme::font (8.5f)); g.setColour (Theme::dim());
+            const int sx = leftW - 70;
+            g.drawText (laneText (hi, t), sx, juce::jmax (in.getY(), area.getY() + 20), 62, 10, juce::Justification::right);   // below the lane title
+            g.drawText (laneText (bipolar ? (lo + hi) * 0.5f : lo, t), sx, (bipolar ? in.getCentreY() : in.getBottom()) - 5, 62, 10, juce::Justification::right);
+            if (bipolar) g.drawText (laneText (lo, t), sx, in.getBottom() - 10, 62, 10, juce::Justification::right);
+            g.setColour (Theme::text().withAlpha (0.1f));
+            for (float y : { (float) in.getY(), zeroY, (float) in.getBottom() }) g.drawHorizontalLine ((int) y, (float) leftW - 6.0f, (float) getWidth());
+        }
         auto notes = graphLane == Lane::note ? Rack::extraLane (*t, pat(), "note") : juce::StringArray();
         for (int s = 0; s < steps; ++s)
         {

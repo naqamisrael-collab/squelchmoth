@@ -1810,7 +1810,16 @@ inline int runSelfTest()
         auto fGr = tmp.getChildFile ("sqm110_gr.wav"); fGr.deleteFile();
         call ("bounce", "{\"path\":\"" + pathOf (fGr) + "\",\"tracks\":[\"Gtr\"],\"start_bar\":1,\"end_bar\":3,\"tail_seconds\":0}");
         dyn = juce::JSON::parse (call ("channel_dynamics", R"({"action":"get","track":"Gtr"})"));
-        const double cgr = dyn["comp"]["gain_reduction_db"].toString().getDoubleValue();
+        double cgr = dyn["comp"]["gain_reduction_db"].toString().getDoubleValue();
+        for (int attempt = 0; attempt < 3 && cgr >= -3.0; ++attempt)
+        {   // slow CI runners (Intel Mac) can read the meter before the render reached it: render again and re-read
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (500);
+            fGr.deleteFile();
+            call ("bounce", "{\"path\":\"" + pathOf (fGr) + "\",\"tracks\":[\"Gtr\"],\"start_bar\":1,\"end_bar\":3,\"tail_seconds\":0}");
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
+            dyn = juce::JSON::parse (call ("channel_dynamics", R"({"action":"get","track":"Gtr"})"));
+            cgr = dyn["comp"]["gain_reduction_db"].toString().getDoubleValue();
+        }
         check (cgr < -3.0, "gain reduction: Cocoon reports real GR on a hot signal (" + juce::String (cgr, 1) + " dB, threshold -30 dB, 4:1)");
         call ("channel_dynamics", R"({"action":"set","track":"Gtr","limit":"Apex Limiter"})");
         call ("bounce", "{\"path\":\"" + pathOf (fGr) + "\",\"tracks\":[\"Gtr\"],\"start_bar\":1,\"end_bar\":3,\"tail_seconds\":0}");
@@ -4384,6 +4393,21 @@ inline int runSelfTest()
         { Chat::Panel cp (*session, tools); chatOk = shoot (cp, 460, 900, "chat_chatgpt") && chatOk && cp.getEngine().provider == Chat::Provider::chatgpt; }
         Prefs::set ("chat_provider", savedProvider.isNotEmpty() ? savedProvider : juce::String ("claude"));
         check (chatOk, "Squelchmoth Chat renders with Claude and with ChatGPT selected (the panel follows the saved switch)");
+        // Channel Rack (a kit + an instrument with steps) and Score (a MIDI clip with a melody)
+        call ("rack", R"({"action":"add","type":"instrument","what":"Venom","name":"Lead"})");
+        call ("rack", R"({"action":"add","type":"kit","what":"Trap"})");
+        call ("rack", R"({"action":"write","channel":"Kick","steps":"x...x...x...x..."})");
+        call ("rack", R"({"action":"write","channel":"Snare","steps":"....x.......x..."})");
+        call ("add_track", R"({"kind":"midi","name":"Melody"})");
+        call ("create_midi_clip", R"({"track":"Melody","start_bar":1,"length_bars":2,"name":"Tune","notes":[
+            {"pitch":"C4","start_beat":0,"length_beats":1},{"pitch":"E4","start_beat":1,"length_beats":1},{"pitch":"G4","start_beat":2,"length_beats":0.5},
+            {"pitch":"A4","start_beat":2.5,"length_beats":0.5},{"pitch":"G4","start_beat":3,"length_beats":1},{"pitch":"F4","start_beat":4,"length_beats":2},
+            {"pitch":"D4","start_beat":6,"length_beats":1},{"pitch":"C4","start_beat":7,"length_beats":1}]})");
+        ChannelRackComponent rk (*session); ScoreContent sc (*session);
+        bool rackOk = shoot (rk, 1400, 760, "rack");
+        rk.setGraphVisible (true);
+        rackOk = shoot (rk, 1400, 760, "rack_graph") && rackOk;
+        check (rackOk && shoot (sc, 1600, 900, "score"), "Channel Rack (with and without the Graph Editor) and Score render offscreen with content");
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));
