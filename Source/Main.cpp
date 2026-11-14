@@ -34,7 +34,7 @@ public:
     bool moreThanOneInstanceAllowed() override
     {
         auto cl = getCommandLineParameters();
-        return cl.contains ("--selftest") || cl.contains ("--preset-audit") || cl.contains ("--render-faces") || cl.contains ("--make-") || cl.contains ("--check-key") || cl.contains ("--dump-catalog") || cl.contains ("PluginScan");
+        return cl.contains ("--selftest") || cl.contains ("--preset-audit") || cl.contains ("--render-faces") || cl.contains ("--site-shots") || cl.contains ("--make-") || cl.contains ("--check-key") || cl.contains ("--dump-catalog") || cl.contains ("PluginScan");
     }
 
     void initialise (const juce::String& commandLine) override
@@ -42,7 +42,7 @@ public:
        #if JUCE_MAC
         // Plug-in scanning and the command-line modes are extra copies of this binary: on macOS each would
         // otherwise add its own Squelchmoth icon to the Dock next to the real app.
-        if (commandLine.contains ("PluginScan") || commandLine.contains ("--selftest") || commandLine.contains ("--preset-audit") || commandLine.contains ("--render-faces")
+        if (commandLine.contains ("PluginScan") || commandLine.contains ("--selftest") || commandLine.contains ("--preset-audit") || commandLine.contains ("--render-faces") || commandLine.contains ("--site-shots")
             || commandLine.contains ("--make-") || commandLine.contains ("--check-key") || commandLine.contains ("--dump-catalog"))
             juce::Process::setDockIconVisible (false);
        #endif
@@ -119,6 +119,17 @@ public:
                 if (args[i].text == "--only" && i + 1 < args.size()) SelfTestMode::only = juce::StringArray::fromTokens (args[i + 1].text.unquoted(), ",", "\"");
             }
             for (auto& o : SelfTestMode::only) o = o.trim();
+            setApplicationReturnValue (runSelfTest());
+            quit();
+            return;
+        }
+
+        if (commandLine.contains ("--site-shots"))
+        {
+            // Squelchmoth --site-shots DIR   (website screenshots of real app views with real content, drawn offscreen)
+            auto args = juce::ArgumentList ("Squelchmoth", commandLine);
+            SelfTestMode::siteShots = true;
+            for (int i = 0; i + 1 < args.size(); ++i) if (args[i].text == "--site-shots") SelfTestMode::facesDir = args[i + 1].text.unquoted();
             setApplicationReturnValue (runSelfTest());
             quit();
             return;

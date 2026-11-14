@@ -123,9 +123,9 @@ void register110Tools()
     //==========================================================================
     add ("channel_dynamics",
          "A channel's COMP and LIMIT slots (the console strip selectors). get: the plug-ins, bypass state and live gain reduction in dB "
-         "(Cocoon Compressor, Apex Dynamics / Limiter / Multiband / Triad and Opto Leveler report it; others say so). "
-         "set: comp and/or limit = a name or 'none'. COMP choices: Cocoon Compressor, Apex Dynamics, Opto Leveler, Apex Multiband, Moth Press, Pupa Buss Comp, Vari-Mu Tube. "
-         "LIMIT choices: Apex Limiter, Cocoon Limit (Cocoon at infinite ratio, -1 dBFS), Clamp Limiter, Apex Triad. COMP goes before the limiter; LIMIT is last before the fader. "
+         "(Torque Comp, Summit Limiter, Cocoon Compressor, Apex Dynamics / Limiter / Multiband / Triad and Opto Leveler report it; others say so). "
+         "set: comp and/or limit = a name or 'none'. COMP choices: Torque Comp, Cocoon Compressor, Apex Dynamics, Opto Leveler, Apex Multiband, Moth Press, Pupa Buss Comp, Vari-Mu Tube. "
+         "LIMIT choices: Summit Limiter, Apex Limiter, Cocoon Limit (Cocoon at infinite ratio, -1 dBFS), Clamp Limiter, Apex Triad. COMP goes before the limiter; LIMIT is last before the fader. "
          "To change their settings use set_plugin_parameter on the slot get_session lists.",
          R"json({"type":"object","properties":{"action":{"type":"string","enum":["get","set"]},"track":{"type":["string","integer"]},"comp":{"type":"string"},"limit":{"type":"string"}},"required":["action","track"]})json",
          [this, refresh] (const juce::var& a)

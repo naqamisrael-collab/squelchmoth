@@ -263,7 +263,7 @@ namespace Console
         inline const std::vector<Choice>& compChoices()
         {
             static const std::vector<Choice> c {
-                { "compressor", "Cocoon Compressor", false }, { "sqmApexDyn", "Apex Dynamics", false }, { "sqmOpto", "Opto Leveler", false },
+                { "sqmTorqueComp", "Torque Comp", false }, { "compressor", "Cocoon Compressor", false }, { "sqmApexDyn", "Apex Dynamics", false }, { "sqmOpto", "Opto Leveler", false },
                 { "sqmApexMB", "Apex Multiband", false }, { "airwindows_pressure4", "Moth Press", false }, { "airwindows_buttercomp2", "Pupa Buss Comp", false },
                 { "airwindows_varimu", "Vari-Mu Tube", false } };
             return c;
@@ -271,11 +271,11 @@ namespace Console
         inline const std::vector<Choice>& limitChoices()
         {
             static const std::vector<Choice> c {
-                { "sqmApexLim", "Apex Limiter", true }, { "compressor", "Cocoon Limit", true }, { "airwindows_adclip7", "Clamp Limiter", true },
+                { "sqmSummitLim", "Summit Limiter", true }, { "sqmApexLim", "Apex Limiter", true }, { "compressor", "Cocoon Limit", true }, { "airwindows_adclip7", "Clamp Limiter", true },
                 { "sqmApexTriad", "Apex Triad", true } };
             return c;
         }
-        inline bool isLimitTypeByNature (const juce::String& type)   { return type == "sqmApexLim" || type == "airwindows_adclip7" || type == "sqmApexTriad"; }
+        inline bool isLimitTypeByNature (const juce::String& type)   { return type == "sqmSummitLim" || type == "sqmApexLim" || type == "airwindows_adclip7" || type == "sqmApexTriad"; }
 
         inline juce::String typeOf (te::Plugin& p)   { return p.getPluginType(); }
 
@@ -310,7 +310,7 @@ namespace Console
         inline juce::String shortLabel (const juce::String& full)
         {
             static const std::map<juce::String, juce::String> m {
-                { "Cocoon Compressor", "Cocoon" }, { "Apex Dynamics", "Apex Dyn" }, { "Opto Leveler", "Opto" }, { "Apex Multiband", "Apex MB" },
+                { "Torque Comp", "Torque" }, { "Summit Limiter", "Summit" }, { "Cocoon Compressor", "Cocoon" }, { "Apex Dynamics", "Apex Dyn" }, { "Opto Leveler", "Opto" }, { "Apex Multiband", "Apex MB" },
                 { "Moth Press", "Press" }, { "Pupa Buss Comp", "Pupa Buss" }, { "Vari-Mu Tube", "Vari-Mu" }, { "Apex Limiter", "Apex Lim" },
                 { "Cocoon Limit", "Cocoon" }, { "Clamp Limiter", "Clamp" }, { "Apex Triad", "Triad" } };
             auto it = m.find (full);
@@ -325,6 +325,8 @@ namespace Console
             if (! p->isEnabled()) return 0.0f;
             if (auto c = dynamic_cast<te::CompressorPlugin*> (p))   return juce::jmin (0.0f, c->gainReductionDb.load (std::memory_order_relaxed));
             if (auto t = dynamic_cast<SqApexTriadPlugin*> (p))      return neg (t->limiterGrDb.load());
+            if (auto tq = dynamic_cast<SqTorqueCompPlugin*> (p))    return neg (tq->grNow.load());
+            if (auto su = dynamic_cast<SqSummitLimiterPlugin*> (p)) return neg (su->grNow.load());
             if (auto mb = dynamic_cast<SqApexMultibandPlugin*> (p))
             {
                 float deepest = 0.0f;

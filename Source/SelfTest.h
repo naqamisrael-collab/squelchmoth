@@ -11,7 +11,7 @@
 #include "ScoreWindow.h"
 
 /** Set by Main for "--preset-audit [report.md]": the self-test sets up the engine, runs the audit and returns. */
-struct SelfTestMode { static inline bool presetAuditOnly = false, renderFaces = false; static inline juce::String reportPath, facesDir, facePreset; static inline juce::StringArray only; };
+struct SelfTestMode { static inline bool presetAuditOnly = false, renderFaces = false, siteShots = false; static inline juce::String reportPath, facesDir, facePreset; static inline juce::StringArray only; };
 
 inline int runSelfTest()
 {
@@ -247,6 +247,102 @@ inline int runSelfTest()
         (cond ? passes : failures)++;
         std::cout << (cond ? "  PASS " : "  FAIL ") << what << std::endl;
     };
+
+    if (SelfTestMode::siteShots)
+    {
+        // Website screenshots: real views, real tools, real content (the chat's replies come from a local stand-in for
+        // the OpenAI API so no account is needed; every tool it asks for really runs in the session).
+        auto dir = juce::File::getCurrentWorkingDirectory().getChildFile (SelfTestMode::facesDir.isNotEmpty() ? SelfTestMode::facesDir : juce::String ("siteshots"));
+        dir.createDirectory();
+        Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+        auto save = [&] (const juce::Image& img, const juce::String& name)
+        {
+            auto f = dir.getChildFile (name + ".png"); f.deleteFile();
+            juce::FileOutputStream os (f); juce::PNGImageFormat().writeImageToStream (img, os);
+            std::cout << "  " << f.getFullPathName() << " (" << img.getWidth() << " x " << img.getHeight() << ")\n";
+        };
+        auto snap = [&] (juce::Component& c, int w, int h) { c.setSize (w, h); juce::MessageManager::getInstance()->runDispatchLoopUntil (400); return c.createComponentSnapshot (c.getLocalBounds(), true, 1.0f); };
+
+        // 1. The mixer with ChatGPT working in Squelchmoth Chat
+        call ("new_session", R"({"name":"Late Night Drive"})");
+        call ("set_tempo", R"({"bpm":92})");
+        call ("delete_track", R"({"track":"Synth 1"})");
+        {   int n = 1; for (auto t : { "Kick", "Snare", "Bass", "Keys" }) call ("update_track", "{\"track\":\"Audio " + juce::String (n++) + "\",\"name\":\"" + t + "\"}"); }
+        call ("add_track", R"json({"kind":"audio","name":"Vocal (Lead)"})json");
+        call ("update_track", R"({"track":"Kick","volume_db":-2.0})");
+        call ("update_track", R"({"track":"Snare","volume_db":-4.5,"pan":0.1})");
+        call ("update_track", R"({"track":"Bass","volume_db":-3.0})");
+        call ("update_track", R"({"track":"Keys","volume_db":-7.0,"pan":-0.35})");
+        call ("channel_dynamics", R"({"action":"set","track":"Kick","comp":"Cocoon Compressor"})");
+        call ("channel_dynamics", R"({"action":"set","track":"Snare","comp":"Apex Dynamics"})");
+        call ("channel_dynamics", R"({"action":"set","track":"Bass","comp":"Opto Leveler","limit":"Clamp Limiter"})");
+        call ("channel_dynamics", R"({"action":"set","track":"master","limit":"Summit Limiter"})");
+        httplib::Server mock;
+        mock.Get ("/v1/models", [] (const httplib::Request&, httplib::Response& res)
+        { res.set_content (R"({"object":"list","data":[{"id":"gpt-6-astra","object":"model","created":1790000000,"owned_by":"system"}]})", "application/json"); });
+        mock.Post ("/v1/responses", [&] (const httplib::Request& req, httplib::Response& res)
+        {
+            const bool second = juce::String::fromUTF8 (req.body.data(), (int) req.body.size()).contains ("function_call_output");
+            if (! second)
+                res.set_content (R"({"id":"r1","status":"completed","output":[
+                    {"id":"m1","type":"message","role":"assistant","content":[{"type":"output_text","text":"On it - Torque Comp and Summit Limiter on the lead vocal, the meter on RMS, and the fader pulled back a touch."}]},
+                    {"id":"f1","type":"function_call","call_id":"c1","name":"channel_dynamics","arguments":"{\"action\":\"set\",\"track\":\"Vocal (Lead)\",\"comp\":\"Torque Comp\",\"limit\":\"Summit Limiter\"}"},
+                    {"id":"f2","type":"function_call","call_id":"c2","name":"mixer_layout","arguments":"{\"action\":\"set_meter\",\"track\":\"Vocal (Lead)\",\"meter\":\"rms\"}"},
+                    {"id":"f3","type":"function_call","call_id":"c3","name":"update_track","arguments":"{\"track\":\"Vocal (Lead)\",\"volume_db\":-1.5}"}]})", "application/json");
+            else
+                res.set_content (R"({"id":"r2","status":"completed","output":[{"id":"m2","type":"message","role":"assistant","content":[{"type":"output_text","text":"Done on **Vocal (Lead)**:\n- COMP: Torque Comp (watch the GR meter)\n- LIMIT: Summit Limiter, ceiling -1 dBTP\n- Meter: RMS, fader at -1.5 dB\nWant the same chain on the backing vocals?"}]}]})", "application/json");
+        });
+        const int port = mock.bind_to_any_port ("127.0.0.1");
+        std::thread mockThread ([&] { mock.listen_after_bind(); });
+        const auto savedProvider = Prefs::getString ("chat_provider");
+        Prefs::set ("chat_apiBase", "http://127.0.0.1:" + juce::String (port));
+        Prefs::set ("chat_provider", "chatgpt");
+        Prefs::set ("chat_model_openai", "gpt-6-astra");
+        Chat::KeyStore::set ("sk-site-shot-key-0000000000", Chat::Provider::chatgpt);
+        {
+            TimelineView tl (*session); MixerView mx (*session, &tl.state);
+            Chat::Panel cp (*session, tools);
+            cp.setSize (420, 900); juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
+            cp.sendText ("Compress the lead vocal, add a limiter and show me its RMS");
+            for (int i = 0; i < 200 && cp.getEngine().isBusy(); ++i) juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (600);
+            auto left = snap (mx, 1080, 900), right = snap (cp, 420, 900);
+            juce::Image both (juce::Image::RGB, 1500, 900, true);
+            { juce::Graphics g (both); g.drawImageAt (left, 0, 0); g.drawImageAt (right, 1080, 0); }
+            save (both, "chat");
+            if (cp.getEngine().chatFile.existsAsFile()) cp.getEngine().chatFile.deleteFile();
+            cp.getEngine().clear();
+        }
+        mock.stop(); mockThread.join();
+        Chat::KeyStore::forget (Chat::Provider::chatgpt);
+        if (auto f = Prefs::file()) { f->removeValue ("chat_apiBase"); f->removeValue ("chat_model_openai"); }
+        Prefs::set ("chat_provider", savedProvider.isNotEmpty() ? savedProvider : juce::String ("claude"));
+
+        // 2. The Channel Rack with a trap beat and a lead line
+        call ("new_session", R"({"name":"Chrome Trap"})");
+        call ("set_tempo", R"({"bpm":140})");
+        call ("rack", R"({"action":"add","type":"kit","what":"Trap"})");
+        call ("rack", R"({"action":"write","channel":"Kick","steps":"x.....x...x....."})");
+        call ("rack", R"({"action":"write","channel":"Snare","steps":"....x.......x..."})");
+        call ("rack", R"({"action":"write","channel":"Clap","steps":"....x.......x..x"})");
+        call ("rack", R"({"action":"write","channel":"Closed Hat","steps":"x.x.x.x.x.x3x.x4"})");
+        call ("rack", R"({"action":"write","channel":"Open Hat","steps":"......x.......x."})");
+        call ("rack", R"({"action":"write","channel":"Perc","steps":"...x......x....."})");
+        call ("rack", R"({"action":"write","channel":"Sub 808","steps":"x.....x...x....."})");
+        call ("rack", R"({"action":"lane","channel":"Kick","lane":"velocity","values":[118,100,100,100,100,100,104,100,100,100,96,100,100,100,100,100]})");
+        call ("rack", R"({"action":"add","type":"instrument","what":"Venom","name":"Lead"})");
+        call ("rack", R"({"action":"notes","channel":"Lead","replace":true,"notes":[
+            {"pitch":"F4","start_beat":0,"length_beats":0.75,"velocity":100},{"pitch":"G#4","start_beat":0.75,"length_beats":0.75,"velocity":96},
+            {"pitch":"C5","start_beat":1.5,"length_beats":1,"velocity":104},{"pitch":"A#4","start_beat":2.5,"length_beats":0.5,"velocity":92},
+            {"pitch":"G#4","start_beat":3,"length_beats":1,"velocity":100}]})");
+        {
+            ChannelRackComponent rk (*session);
+            rk.setGraphVisible (true);
+            save (snap (rk, 1240, 770), "rack");
+        }
+        scannerOwner.reset(); session.reset(); engine.reset();
+        return 0;
+    }
 
     std::cout << "== Squelchmoth MCP self-test ==\n";
     Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };   // the self-test runs as Complete; the editions section switches to the Demo itself
@@ -1821,6 +1917,13 @@ inline int runSelfTest()
             cgr = dyn["comp"]["gain_reduction_db"].toString().getDoubleValue();
         }
         check (cgr < -3.0, "gain reduction: Cocoon reports real GR on a hot signal (" + juce::String (cgr, 1) + " dB, threshold -30 dB, 4:1)");
+        call ("channel_dynamics", R"({"action":"set","track":"Gtr","comp":"Torque Comp","limit":"Summit Limiter"})");
+        {
+            auto dynS = juce::JSON::parse (call ("channel_dynamics", R"({"action":"get","track":"Gtr"})"));
+            check (dynS["comp"]["plugin"].toString() == "Torque Comp" && dynS["limit"]["plugin"].toString() == "Summit Limiter" && (dynS["comp"]["gain_reduction_db"].isDouble() || dynS["comp"]["gain_reduction_db"].isInt()) && (dynS["limit"]["gain_reduction_db"].isDouble() || dynS["limit"]["gain_reduction_db"].isInt()),
+                   "console slots: Torque Comp (COMP) and Summit Limiter (LIMIT) load and report gain reduction");
+            call ("channel_dynamics", R"({"action":"set","track":"Gtr","comp":"Cocoon Compressor","limit":"none"})");
+        }
         call ("channel_dynamics", R"({"action":"set","track":"Gtr","limit":"Apex Limiter"})");
         call ("bounce", "{\"path\":\"" + pathOf (fGr) + "\",\"tracks\":[\"Gtr\"],\"start_bar\":1,\"end_bar\":3,\"tail_seconds\":0}");
         dyn = juce::JSON::parse (call ("channel_dynamics", R"({"action":"get","track":"Gtr"})"));
