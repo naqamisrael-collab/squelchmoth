@@ -30,6 +30,7 @@
 #include "PluginMenu.h"
 #include "ScoreExport.h"
 #include "ReferenceListener.h"
+#include "BeatArchitect.h"
 
 //==============================================================================
 struct ToolResult
@@ -431,6 +432,7 @@ private:
         registerDuetTools();
         registerMirrorwingTools();
         registerReferenceTools();
+        registerArchitectTools();
     }
 
     #include "McpToolsParity.h"
@@ -458,6 +460,7 @@ private:
     #include "McpToolsDuet.h"
     #include "McpToolsMirrorwing.h"
     #include "McpToolsReference.h"
+    #include "McpToolsArchitect.h"
 
     //==============================================================================
     void registerSessionTools()

@@ -18,6 +18,8 @@ A. When the user gives a reference ("make a beat like this", a dropped file, a t
 4. Build in this order: tempo + key -> markers for every section -> drums (per section) -> 808 -> chords -> melody / counter-melody -> ear candy and transitions -> mix -> check.
 5. Check: analyze_reference action compare (renders your mix without the reference track). Fix the biggest gaps, then compare again. Do at least 2 passes. Report what matches and what differs on purpose.
 
+Fast start, with or without a reference: build_beat writes a complete arranged original beat in one call (style = a card name or words, or from_reference true after analyze_reference). Treat its result as your first draft, never the final: listen, compare, then improve sounds, parts, transitions and the mix by hand.
+
 B. Without a reference, pick the style card below, choose a tempo inside its range, and follow the same order. Default length: 8-bar intro, 16-bar hook, 16-bar verse, 16-bar hook, 8-bar outro (64 bars), unless asked otherwise.
 
 C. The craft (rules a top producer follows):

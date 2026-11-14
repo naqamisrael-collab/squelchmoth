@@ -4591,6 +4591,30 @@ inline int runSelfTest()
         const auto pl = call ("analyze_reference", R"({"action":"plan"})");
         check (pl.contains ("808") && pl.contains ("Drums"), "analyze_reference plan: the last reference's rebuild plan");
         check (ProducerBrain::guide().contains ("analyze_reference") && ProducerBrain::guide().contains ("Style cards"), "The producer guide (both assistants) carries the reference procedure and the style cards");
+        // ---- the Beat Architect: a whole beat from the reference's feel, then heard back by the Listener
+        {
+            const auto cards = call ("style_card", R"({"action":"list"})");
+            const auto drill = juce::JSON::parse (call ("style_card", R"({"style":"dark drill"})"));
+            check (cards.contains ("Modern Trap") && cards.contains ("Neo-Soul") && drill["name"].toString() == "Drill" && drill["hats"].toString().contains ("3+3+2"),
+                   "style_card: 14 cards listed; 'dark drill' finds Drill with its 3+3+2 hats");
+            const auto pv = call ("build_beat", R"({"style":"trap","key":"A","minor":true,"bpm":144,"seed":3,"preview":true})");
+            check (pv.contains ("144 BPM, A minor") && pv.contains ("Hook 16") && session->findTrack ("Chords") == nullptr, "build_beat preview: the plan (144 BPM, A minor, sections) without writing anything");
+            const auto bb = call ("build_beat", R"({"from_reference":true,"seed":2})");
+            te::AudioTrack* t808 = nullptr; for (auto tt : te::getAudioTracks (*session->edit)) if (tt->getName() == "808") t808 = tt;   // findTrack ("808") would read it as a track number
+            auto* tDr = session->findTrack ("Drums"); auto* tCh = session->findTrack ("Chords"); auto* tMel = session->findTrack ("Melody");
+            int subNotes = 0; if (t808 != nullptr) for (auto c : t808->getClips()) if (auto mc = dynamic_cast<te::MidiClip*> (c)) subNotes += mc->getSequence().getNumNotes();
+            int drumNotes = 0; if (tDr != nullptr) for (auto c : tDr->getClips()) if (auto mc = dynamic_cast<te::MidiClip*> (c)) drumNotes += mc->getSequence().getNumNotes();
+            check (bb.contains ("90 BPM, D minor") && bb.contains ("Written: tracks") && ! bb.contains ("Problems:") && tCh != nullptr && tMel != nullptr && subNotes > 20 && drumNotes > 200,
+                   "build_beat from the reference: 90 BPM, D minor, drums (" + juce::String (drumNotes) + " notes), 808 (" + juce::String (subNotes) + "), chords and melody written"
+                   + (bb.contains ("Problems:") ? " - " + bb.fromFirstOccurrenceOf ("Problems:", true, false).substring (0, 200) : juce::String()));
+            bool presetOk = false; if (tMel != nullptr) for (auto pl : tMel->pluginList) if (Signature::displayName (*pl).contains ("Pollen")) presetOk = true;
+            check (presetOk && std::abs (session->edit->tempoSequence.getTempo (0)->getBpm() - 90.0) < 0.01 && (int) session->edit->state.getProperty ("sqmKeyRoot") == 2,
+                   "build_beat: Pollen on the melody track, session tempo 90 and key D set");
+            const auto cmp2 = call ("analyze_reference", R"({"action":"compare","track":"Ref Beat"})");
+            const double mineBpm = cmp2.fromFirstOccurrenceOf ("tempo: ", false, false).fromFirstOccurrenceOf (" vs ", false, false).getDoubleValue();
+            const auto mineKey = cmp2.fromFirstOccurrenceOf ("key: ", false, false).fromFirstOccurrenceOf (" vs ", false, false).upToFirstOccurrenceOf ("\n", false, false).upToFirstOccurrenceOf ("  ->", false, false).trim();
+            check (std::abs (mineBpm - 90.0) < 1.0, "the built beat, rendered and heard back by the Listener, reads " + juce::String (mineBpm, 1) + " BPM against the reference's 90 (key heard: " + mineKey + ")");
+        }
         std::cout << "  (1.15 Reference section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
     }
 
