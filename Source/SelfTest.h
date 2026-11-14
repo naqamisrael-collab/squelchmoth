@@ -340,6 +340,72 @@ inline int runSelfTest()
             rk.setGraphVisible (true);
             save (snap (rk, 1240, 770), "rack");
         }
+
+        // 3. The Mastering window: a four-song EP made in the app (rack beats + synth chords), bounced, sequenced,
+        //    loudness-detected, with a Summit Limiter on the master; the meters fed by the record playing through the
+        //    master analyzer tap exactly as playback would.
+        {
+            struct Song { const char* title; int bpm; const char* kit; const char* genre; const char* synth; const char* chord; };
+            const Song songs[] = { { "Neon Nights", 92, "Boom Bap", "boom bap", "Mothsynth 2", "C4+D#4+G4+A#4" },
+                                   { "Afterglow", 140, "Trap", "trap", "Venom", "F4+G#4+C5" },
+                                   { "Moth Light", 124, "House", "house", "Mirrorwing", "A3+C4+E4+G4" },
+                                   { "Static Bloom", 100, "Lo-Fi", "lofi", "Hexwing", "D4+F4+A4+C5" } };
+            juce::StringArray files;
+            int n = 0;
+            for (auto& sg : songs)
+            {
+                call ("new_session", juce::String ("{\"name\":\"") + sg.title + "\"}");
+                call ("set_tempo", "{\"bpm\":" + juce::String (sg.bpm) + "}");
+                call ("rack", juce::String ("{\"action\":\"add\",\"type\":\"kit\",\"what\":\"") + sg.kit + "\"}");
+                call ("rack", juce::String ("{\"action\":\"starter\",\"genre\":\"") + sg.genre + "\"}");
+                call ("rack", juce::String ("{\"action\":\"add\",\"type\":\"instrument\",\"what\":\"") + sg.synth + "\",\"name\":\"Chords\"}");
+                juce::String notes;
+                for (auto& pitch : juce::StringArray::fromTokens (sg.chord, "+", ""))
+                    notes << (notes.isEmpty() ? "" : ",") << "{\"pitch\":\"" << pitch << "\",\"start_beat\":0,\"length_beats\":3.5,\"velocity\":90}";
+                call ("rack", "{\"action\":\"notes\",\"channel\":\"Chords\",\"replace\":true,\"notes\":[" + notes + "]}");
+                call ("pattern", R"({"action":"place","pattern":1,"bar":1,"repeats":8})");
+                auto f = dir.getChildFile ("ep_" + juce::String (++n) + ".wav"); f.deleteFile();
+                call ("bounce", "{\"path\":\"" + f.getFullPathName() + "\",\"start_bar\":1,\"end_bar\":9,\"tail_seconds\":1,\"normalize_lufs\":-16}");
+                if (f.existsAsFile()) files.add (f.getFullPathName());
+            }
+            call ("new_session", R"({"name":"Neon Nights EP session"})");
+            MasteringProject mp (*session);
+            tools.ui.mastering = [&] { return &mp; };
+            call ("mastering_new", R"({"name":"Neon Nights EP"})");
+            call ("mastering_set_album", R"({"album":"Neon Nights EP","artist":"Jamar Stewart","genre":"Hip-Hop","year":"2026"})");
+            juce::String paths; for (auto& f : files) paths << (paths.isEmpty() ? "" : ",") << "\"" << f << "\"";
+            call ("mastering_add_tracks", "{\"paths\":[" + paths + "]}");
+            for (int i = 0; i < 4; ++i)
+                call ("mastering_set_track", "{\"track\":" + juce::String (i + 1) + ",\"title\":\"" + songs[i].title + "\"" + (i > 0 ? ",\"pause_seconds\":0" : "") + "}");
+            call ("mastering_insert", R"({"target":"master","plugin":"Spectra EQ","preset":"Master | Gentle Polish"})");
+            call ("mastering_insert", R"({"target":"master","plugin":"Summit Limiter","preset":"Master | Streaming Ready"})");
+            call ("mastering_insert", R"({"target":1,"plugin":"Torque Comp"})");
+            for (int i = 1; i <= 4; ++i) call ("mastering_detect_loudness", "{\"track\":" + juce::String (i) + "}");
+            MasteringContent mc (mp);
+            mc.setSize (1280, 820);
+            for (int w = 0; w < 30; ++w)   // painting starts the waveform thumbnails; they build in the background
+            { mc.createComponentSnapshot (mc.getLocalBounds(), true, 0.25f); juce::MessageManager::getInstance()->runDispatchLoopUntil (200); }
+            if (mp.tap != nullptr && files.size() > 1)
+            {   // play song 2 through the analyzer tap for 6 seconds, as the transport would
+                juce::AudioFormatManager fm; fm.registerBasicFormats();
+                if (auto rd = std::unique_ptr<juce::AudioFormatReader> (fm.createReaderFor (juce::File (files[1]))))
+                {
+                    mp.tap->baseClassInitialise ({ te::TimePosition(), rd->sampleRate, 512 });
+                    juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                    const juce::int64 start = (juce::int64) (rd->sampleRate * 4.0), len = (juce::int64) (rd->sampleRate * 6.0);
+                    for (juce::int64 pos = start; pos + 512 <= start + len && pos + 512 <= rd->lengthInSamples; pos += 512)
+                    {
+                        rd->read (&buf, 0, 512, pos, true, true);
+                        buf.applyGain (juce::Decibels::decibelsToGain (2.0f));   // about where the limiter leaves it
+                        te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds ((double) pos / rd->sampleRate), te::TimePosition::fromSeconds ((double) (pos + 512) / rd->sampleRate)), true, false, true, false);
+                        mp.tap->applyToBuffer (fc);
+                        if ((pos / 512) % 24 == 0) juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+                    }
+                }
+            }
+            save (snap (mc, 1280, 820), "mastering");
+            tools.ui.mastering = nullptr;
+        }
         scannerOwner.reset(); session.reset(); engine.reset();
         return 0;
     }
