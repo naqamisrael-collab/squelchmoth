@@ -29,6 +29,7 @@
 #include "MonitorChain.h"
 #include "PluginMenu.h"
 #include "ScoreExport.h"
+#include "ReferenceListener.h"
 
 //==============================================================================
 struct ToolResult
@@ -429,6 +430,7 @@ private:
         registerFissureTools();
         registerDuetTools();
         registerMirrorwingTools();
+        registerReferenceTools();
     }
 
     #include "McpToolsParity.h"
@@ -455,6 +457,7 @@ private:
     #include "McpToolsFissure.h"
     #include "McpToolsDuet.h"
     #include "McpToolsMirrorwing.h"
+    #include "McpToolsReference.h"
 
     //==============================================================================
     void registerSessionTools()

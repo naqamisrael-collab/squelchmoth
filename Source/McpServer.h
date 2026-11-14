@@ -3,6 +3,7 @@
 // Claude connects to  http://127.0.0.1:<port>/mcp/<secret>  (locally, or through the tunnel).
 
 #include "McpTools.h"
+#include "ProducerBrain.h"
 
 #if JUCE_MAC
  #pragma clang diagnostic push
@@ -241,7 +242,8 @@ private:
                 "You are controlling Squelchmoth, a full DAW (digital audio workstation) running on the user's Mac. "
                 "Start with get_session to see the tracks. Tracks are addressed by number (1-based) or name; plugin inserts by slot (1-based) or name; "
                 "positions use bars (1-based, bar 1 = start) or seconds. Use screenshot to see the screen. "
-                "Third-party VST3/AU plugins appear after scan_plugins. Every edit is undoable with undo.");
+                "Third-party VST3/AU plugins appear after scan_plugins. Every edit is undoable with undo.\n"
+                + ProducerBrain::guide());
             return makeResult (id, juce::var (r));
         }
 

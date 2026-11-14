@@ -51,6 +51,17 @@ The link changes every time you press **CONNECT CLAUDE**. After restarting Squel
 Squelchmoth connector on claude.ai and paste the new link, or tick **Connect automatically** in the
 CLAUDE panel so the link is ready when the app opens.
 
+## B2b. Make a beat like a reference (1.15)
+
+1. Drop an instrumental (WAV, AIFF, FLAC, MP3 or OGG) on Squelchmoth Chat. The chat starts listening right away and
+   writes the request for you; or drag it onto an audio track and ask for "a beat like the instrumental on track 3".
+2. Press Return. Claude or ChatGPT calls the Reference Listener (`analyze_reference`) first: tempo and half-time feel,
+   key, swing, sections with bar numbers, the instruments in each section, the chord functions, the kick / snare / hat
+   grid, hat rolls, the 808 line and glides, and the mix balance.
+3. It builds original parts in that feel (drums, chords, 808, melody, arrangement, mix), bounces, compares the result
+   with the reference (`analyze_reference` action compare) and fixes the biggest gaps.
+4. Nothing of the reference is copied or stored: only measurements.
+
 ## B3. Connect ChatGPT from chatgpt.com (same link, same full control)
 
 1. Do steps 1-3 of B2 (connect, copy the link).

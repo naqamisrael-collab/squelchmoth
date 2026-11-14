@@ -4526,6 +4526,74 @@ inline int runSelfTest()
         std::cout << "  (1.14 Mirrorwing section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
     }
 
+    // ===================================================================== 1.15 Beat Intelligence L1: the Reference Listener
+    {
+        std::cout << "\n-- 1.15 Reference Listener (analyze_reference) --\n";
+        const double startedAt = juce::Time::getMillisecondCounterHiRes();
+        call ("new_session", R"({"name":"Selftest Reference"})");
+        // a 24-bar 90 BPM beat in D minor: Dm Bb F C pads, kick 1 + "and" of 2 + 3, snare 2 and 4, 8th hats, 808 on the roots;
+        // 8-bar intro (pad + hats), then 16 bars with everything
+        const double sr = 44100, bpm = 90, beat = 60.0 / bpm, bar = 4 * beat; const int bars = 24;
+        std::vector<float> L ((size_t) (sr * (bars * bar + 1.0)), 0.0f), R (L.size(), 0.0f);
+        const double tp = juce::MathConstants<double>::twoPi;
+        auto mtof = [] (double m) { return 440.0 * std::pow (2.0, (m - 69) / 12.0); };
+        juce::Random rnd (7);
+        auto hit = [&] (double t0, int kind)
+        {
+            const size_t a = (size_t) (t0 * sr); const size_t n = (size_t) (sr * (kind == 0 ? 0.35 : kind == 1 ? 0.2 : 0.05));
+            double ph = 0;
+            for (size_t i = 0; i < n && a + i < L.size(); ++i)
+            {
+                const double t = i / sr; float v = 0;
+                if (kind == 0) { ph += tp * (50 + 120 * std::exp (-t * 40)) / sr; v = (float) (0.8 * std::sin (ph) * std::exp (-t * 9)); }
+                else if (kind == 1) v = (float) ((rnd.nextFloat() * 2 - 1) * 0.45 * std::exp (-t * 22) + 0.3 * std::sin (tp * 190 * t) * std::exp (-t * 30));
+                else { v = (rnd.nextFloat() * 2 - 1) * 0.18f * (float) std::exp (-t * 90); }
+                L[a + i] += v; R[a + i] += v;
+            }
+        };
+        const int roots[4] = { 62, 58, 53, 60 }; const int thirds[4] = { 3, 4, 4, 4 };
+        for (int b = 0; b < bars; ++b)
+        {
+            const int ci = b % 4; const bool intro = b < 8; const double t0 = b * bar;
+            const size_t a = (size_t) (t0 * sr), n = (size_t) (bar * sr);
+            for (int tone : { 0, thirds[ci], 7 })
+                for (size_t i = 0; i < n && a + i < L.size(); ++i) { const double t = i / sr; const float v = (float) (0.045 * std::sin (tp * mtof (roots[ci] + tone) * t) * juce::jmin (1.0, t * 30)); L[a + i] += v; R[a + i] += v * 0.9f; }
+            for (int st = 0; st < 16; st += 2) hit (t0 + st * bar / 16, 2);
+            if (intro) continue;
+            for (int st : { 0, 6, 8 }) hit (t0 + st * bar / 16, 0);
+            for (int st : { 4, 12 }) hit (t0 + st * bar / 16, 1);
+            double ph = 0;
+            for (size_t i = 0; i < (size_t) (n * 0.9) && a + i < L.size(); ++i) { const double t = i / sr; ph += tp * mtof (roots[ci] - 24) / sr; const float v = (float) (0.45 * std::tanh (1.4 * std::sin (ph)) * std::exp (-t * 0.7) * juce::jmin (1.0, t * 300)); L[a + i] += v; R[a + i] += v; }
+        }
+        auto refF = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sqm_selftest_reference.wav");
+        { refF.deleteFile(); juce::AudioBuffer<float> b (2, (int) L.size()); b.copyFrom (0, 0, L.data(), (int) L.size()); b.copyFrom (1, 0, R.data(), (int) R.size()); b.applyGain (0.7f); juce::WavAudioFormat wav;
+          if (auto os = refF.createOutputStream()) if (auto w = std::unique_ptr<juce::AudioFormatWriter> (wav.createWriterFor (os.release(), sr, 2, 24, {}, 0))) w->writeFromAudioSampleBuffer (b, 0, b.getNumSamples()); }
+        call ("add_track", R"({"kind":"audio","name":"Ref Beat"})");
+        call ("import_audio", juce::String (R"({"track":"Ref Beat","path":")") + refF.getFullPathName().replace ("\\", "/") + R"(","start_bar":1})");
+        const auto rs = call ("analyze_reference", R"({"track":"Ref Beat"})");
+        const auto js = juce::JSON::parse (rs.fromFirstOccurrenceOf ("BLUEPRINT JSON:", false, false));
+        const double gotBpm = js["bpm"];
+        check (std::abs (gotBpm - 90.0) < 1.0 && js["key"].toString() == "D minor",
+               "analyze_reference from a track: " + juce::String (gotBpm, 1) + " BPM, " + js["key"].toString() + " (written 90 BPM, D minor)");
+        const auto secs = js["sections"];
+        bool introFirst = secs.isArray() && secs.size() >= 2 && (int) secs[1]["start_bar"] >= 8 && (int) secs[1]["start_bar"] <= 10;
+        check (introFirst, "analyze_reference: the 8-bar intro is its own section (" + juce::String (secs.isArray() ? secs.size() : 0) + " sections, the 2nd at bar "
+               + (secs.isArray() && secs.size() > 1 ? secs[1]["start_bar"].toString() : juce::String ("-")) + ")");
+        juce::String snareRow = secs.isArray() && secs.size() > 1 ? secs[1]["snare"].toString() : juce::String();
+        check (snareRow == "....x.......x...", "analyze_reference: snare on 2 and 4 only, the 8th hats kept out (" + snareRow + ")");
+        const auto kickRow = secs.isArray() && secs.size() > 1 ? secs[1]["kick"].toString() : juce::String();
+        check (kickRow == "x.....x.x.......", "analyze_reference: kick x.....x.x....... under a held 808 (" + kickRow + ")");
+        check ((int) js["808"]["glides"] == 0 && (double) js["mix"]["pump_db"] < 2.0, "analyze_reference: re-struck 808 notes are not glides, no pump without a sidechain ("
+               + js["808"]["glides"].toString() + " glides, " + js["mix"]["pump_db"].toString() + " dB)");
+        check (rs.contains ("REBUILD PLAN") && rs.contains ("set_tempo bpm 90"), "analyze_reference returns a rebuild plan in Squelchmoth's tools");
+        const auto cmp = call ("analyze_reference", juce::String (R"({"action":"compare","against_file":")") + refF.getFullPathName().replace ("\\", "/") + R"("})");
+        check (cmp.contains ("COMPARE") && cmp.contains ("D minor vs D minor"), "analyze_reference compare: the reference against itself matches (key D minor vs D minor)");
+        const auto pl = call ("analyze_reference", R"({"action":"plan"})");
+        check (pl.contains ("808") && pl.contains ("Drums"), "analyze_reference plan: the last reference's rebuild plan");
+        check (ProducerBrain::guide().contains ("analyze_reference") && ProducerBrain::guide().contains ("Style cards"), "The producer guide (both assistants) carries the reference procedure and the style cards");
+        std::cout << "  (1.15 Reference section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
+    }
+
     // ===================================================================== Phase Z: numbers on every generic face
     {
         std::cout << "\n-- Phase Z: range numbers and meters on every face --\n";
