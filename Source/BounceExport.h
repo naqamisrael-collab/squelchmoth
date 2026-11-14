@@ -269,7 +269,8 @@ namespace BounceExport
             goBtn.onClick = [this] { run(); };
             cancelBtn.onClick = [this] { close(); };
             lufs.setVisible (! stems);
-            setSize (520, stems ? 372 : 372);
+            for (auto* c : { &fmt, &depth, &rate, &range, &tail, &source }) c->onChange = [this] { repaint(); };   // keep the estimate live
+            setSize (520, stems ? 404 : 404);
         }
 
         void paint (juce::Graphics& g) override
@@ -277,6 +278,37 @@ namespace BounceExport
             g.fillAll (Theme::panel());
             g.setColour (Theme::dim()); g.setFont (Theme::font (10.0f, true));
             for (auto& l : labels) g.drawText (l.second, l.first.withWidth (150), juce::Justification::centredLeft);
+            // phase Z: what the file will be - length, format, and its size (per file / per stem)
+            if (! estimateArea.isEmpty() && session.edit != nullptr)
+            {
+                static const double tails[] = { 0, 1, 2, 4 };
+                double secs = (range.getSelectedId() == 2 && selection ? selection->getLength().inSeconds() : session.edit->getLength().inSeconds())
+                              + tails[juce::jlimit (1, 4, tail.getSelectedId()) - 1];
+                const double sr = rate.getSelectedId() <= 1 ? TimeFmt::sampleRate (*session.edit) : rates[rate.getSelectedId() - 2];
+                const int bits = depth.getSelectedId() == 1 ? 16 : depth.getSelectedId() == 2 ? 24 : 32;
+                const int f = fmt.getSelectedId();
+                static const double mp3Kbps[] = { 0, 0, 0, 320, 256, 192, 128, 245, 190, 165 };   // VBR: typical average rates
+                double bytes = f <= 2 ? secs * sr * 2.0 * bits / 8.0 : f == 3 ? secs * sr * 2.0 * bits / 8.0 * 0.58 : secs * mp3Kbps[juce::jlimit (1, 10, f) - 1] * 1000.0 / 8.0;
+                const auto mb = bytes / (1024.0 * 1024.0);
+                const int mins = (int) (secs / 60.0);
+                const auto len = juce::String (mins) + ":" + juce::String (secs - mins * 60.0, 1).paddedLeft ('0', 4);
+                const juce::String fmtTxt = f <= 3 ? juce::String (sr / 1000.0, 1) + " kHz  " + juce::String (bits) + (bits == 32 ? "-bit float" : "-bit") + "  stereo"
+                                                  : fmt.getText().replace ("MP3 ", "MP3  ");
+                auto e = estimateArea.toFloat();
+                g.setColour (juce::Colours::black.withAlpha (0.28f)); g.fillRoundedRectangle (e, 6.0f);
+                g.setColour (Theme::line()); g.drawRoundedRectangle (e.reduced (0.5f), 6.0f, 1.0f);
+                auto tx = estimateArea.reduced (12, 6);
+                g.setColour (Theme::dim()); g.setFont (Theme::font (9.5f, true));
+                g.drawText ("LENGTH", tx.removeFromLeft (52), juce::Justification::centredLeft);
+                g.setColour (Theme::text()); g.setFont (Theme::font (12.5f, true));
+                g.drawText (len, tx.removeFromLeft (64), juce::Justification::centredLeft);
+                g.setColour (Theme::dim()); g.setFont (Theme::font (9.5f, true));
+                g.drawText ("FORMAT", tx.removeFromLeft (56), juce::Justification::centredLeft);
+                g.setColour (Theme::text()); g.setFont (Theme::font (11.5f));
+                g.drawText (fmtTxt, tx.removeFromLeft (180), juce::Justification::centredLeft);
+                g.setColour (Theme::acid()); g.setFont (Theme::font (12.5f, true));
+                g.drawText ("~ " + juce::String (mb, mb < 10 ? 1 : 0) + " MB" + (stems ? " / stem" : ""), tx, juce::Justification::centredRight);
+            }
         }
 
         void resized() override
@@ -299,6 +331,8 @@ namespace BounceExport
             if (! stems) row ("NORMALISE", lufs);   // normalising stems one by one would break the mix balance
             auto t = r.removeFromTop (24); r.removeFromTop (4);
             dither.setBounds (t.removeFromLeft (170)); master.setBounds (t.removeFromLeft (190)); sendFx.setBounds (t);
+            r.removeFromTop (6);
+            estimateArea = r.removeFromTop (30);
             auto b = r.removeFromBottom (30);
             cancelBtn.setBounds (b.removeFromRight (100)); b.removeFromRight (8); goBtn.setBounds (b.removeFromRight (150));
         }
@@ -316,6 +350,7 @@ namespace BounceExport
         juce::ToggleButton dither { "Dither (16 / 24-bit)" }, master { "Through Master inserts" }, sendFx { "Include send effects" };
         juce::TextButton goBtn, cancelBtn { "Cancel" };
         std::vector<std::pair<juce::Rectangle<int>, juce::String>> labels;
+        juce::Rectangle<int> estimateArea;
 
         void close()    { if (auto dw = findParentComponentOfClass<juce::DialogWindow>()) dw->exitModalState (0); }
 

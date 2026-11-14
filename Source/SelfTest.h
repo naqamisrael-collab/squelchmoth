@@ -2198,6 +2198,18 @@ inline int runSelfTest()
             Chat::KeyStore::forget (Chat::Provider::chatgpt);
             if (auto f = Prefs::file()) f->removeValue ("chat_apiBase");
             check (! Chat::KeyStore::has (Chat::Provider::chatgpt), "chatgpt: Forget removes the OpenAI key");
+            {   // ChatGPT connecting over the MCP link (Developer mode) is named in the activity log
+                juce::String sid2; bool n2 = false;
+                server.handleBody (R"({"jsonrpc":"2.0","id":901,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"openai-mcp","version":"1.0"}}})", sid2, n2);
+                server.handleBody (R"({"jsonrpc":"2.0","id":902,"method":"tools/call","params":{"name":"get_session","arguments":{}}})", sid2, n2);
+                auto entries = session->log.getEntries();
+                const bool named = ! entries.empty() && entries.back().source == "ChatGPT" && entries.back().text.startsWith ("get_session");
+                juce::String sid3; bool n3 = false;
+                server.handleBody (R"({"jsonrpc":"2.0","id":903,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"claude-ai","version":"1.0"}}})", sid3, n3);
+                server.handleBody (R"({"jsonrpc":"2.0","id":904,"method":"tools/call","params":{"name":"get_session","arguments":{}}})", sid3, n3);
+                entries = session->log.getEntries();
+                check (named && entries.back().source == "Claude", "chatgpt: MCP calls from ChatGPT are logged as ChatGPT, from claude.ai as Claude");
+            }
         }
 
         std::cout << "  (1.10 section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)\n";
@@ -4408,6 +4420,21 @@ inline int runSelfTest()
         rk.setGraphVisible (true);
         rackOk = shoot (rk, 1400, 760, "rack_graph") && rackOk;
         check (rackOk && shoot (sc, 1600, 900, "score"), "Channel Rack (with and without the Graph Editor) and Score render offscreen with content");
+        // dialogs: Bounce, Export Stems, New Tracks, the EQ frequency chart and the Claude / ChatGPT connect panel
+        {
+            BounceExport::Dialog bd (*session, false, [] (te::Track*) { return true; }, true, std::nullopt);
+            BounceExport::Dialog sd (*session, true, [] (te::Track*) { return true; }, true, std::nullopt);
+            NewTracksContent nt (*session, nullptr);
+            EQChartContent eqc;
+            Tunnel tunnelForShot;
+            ClaudePanel cpn (*session, server, tunnelForShot, props);
+            const bool dOk = shoot (bd, bd.getWidth(), bd.getHeight(), "dlg_bounce")
+                          && shoot (sd, sd.getWidth(), sd.getHeight(), "dlg_stems")
+                          && shoot (nt, juce::jmax (620, nt.getWidth()), juce::jmax (300, nt.getHeight()), "dlg_newtracks")
+                          && shoot (eqc, 1400, 860, "dlg_eqchart")
+                          && shoot (cpn, 1500, 900, "dlg_connect");
+            check (dOk, "Bounce, Export Stems, New Tracks, EQ chart and the connect panel render offscreen");
+        }
     }
 
     auto unknown = rpc ("tools/call", juce::JSON::parse (R"({"name":"nope","arguments":{}})"));

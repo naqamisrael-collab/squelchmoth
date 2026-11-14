@@ -131,7 +131,7 @@ public:
         localLabel.setFont (Theme::font (11.5f));
         addAndMakeVisible (localLabel);
 
-        logTitle.setText ("WHAT CLAUDE IS DOING", juce::dontSendNotification);
+        logTitle.setText ("WHAT CLAUDE / CHATGPT IS DOING", juce::dontSendNotification);
         logTitle.setFont (Theme::font (12.0f, true));
         logTitle.setColour (juce::Label::textColourId, Theme::dim());
         addAndMakeVisible (logTitle);

@@ -215,6 +215,11 @@ private:
         if (method == "initialize")
         {
             sessionId = juce::Uuid().toString();
+            {   // ChatGPT (OpenAI) and Claude both connect here: remember which one this session is, for the activity log
+                const auto client = (msg["params"]["clientInfo"]["name"].toString() + " " + msg["params"]["clientInfo"]["title"].toString()).toLowerCase();
+                const std::lock_guard<std::mutex> lk (callerLock);
+                callerBySession[sessionId] = client.contains ("openai") || client.contains ("chatgpt") ? "ChatGPT" : "Claude";
+            }
             auto requested = msg["params"]["protocolVersion"].toString();
             static const juce::StringArray supported { "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05" };
 
@@ -263,7 +268,9 @@ private:
         {
             auto name = msg["params"]["name"].toString();
             auto args = msg["params"]["arguments"];
-            auto result = callOnMessageThread (name, args);
+            juce::String who = "Claude";
+            { const std::lock_guard<std::mutex> lk (callerLock); auto it = callerBySession.find (sessionId); if (it != callerBySession.end()) who = it->second; }
+            auto result = callOnMessageThread (name, args, who);
 
             juce::Array<juce::var> content;
             if (result.text.isNotEmpty() || result.imageBase64.isEmpty())
@@ -293,16 +300,20 @@ private:
         return makeError (id, -32601, "Method not found: " + method);
     }
 
-    ToolResult callOnMessageThread (const juce::String& name, const juce::var& args)
+    std::mutex callerLock;
+    std::map<juce::String, juce::String> callerBySession;
+
+    ToolResult callOnMessageThread (const juce::String& name, const juce::var& args, const juce::String& who = "Claude")
     {
         if (juce::MessageManager::getInstance()->isThisTheMessageThread())
-            return tools.call (name, args);
+        { tools.caller = who; return tools.call (name, args); }
 
         auto promise = std::make_shared<std::promise<ToolResult>>();
         auto future = promise->get_future();
 
-        juce::MessageManager::callAsync ([this, promise, name, args]
+        juce::MessageManager::callAsync ([this, promise, name, args, who]
         {
+            tools.caller = who;
             promise->set_value (tools.call (name, args));
         });
 

@@ -85,6 +85,9 @@ public:
 
     const std::vector<Tool>& getTools() const   { return tools; }
 
+    /** Who is driving: "Claude" or "ChatGPT" (the activity log names it). Set on the message thread just before a call. */
+    juce::String caller { "Claude" };
+
     ToolResult call (const juce::String& name, const juce::var& args)
     {
         for (auto& t : tools)
@@ -106,12 +109,12 @@ public:
                 try
                 {
                     auto r = t.handler (args.isObject() ? args : juce::var (new juce::DynamicObject()));
-                    session.log.add ("Claude", name + "  " + summariseArgs (args) + (r.isError ? "  -> ERROR: " + r.text.substring (0, 160) : juce::String()), ! r.isError);
+                    session.log.add (caller, name + "  " + summariseArgs (args) + (r.isError ? "  -> ERROR: " + r.text.substring (0, 160) : juce::String()), ! r.isError);
                     return r;
                 }
                 catch (std::exception& e)
                 {
-                    session.log.add ("Claude", name + " -> exception: " + e.what(), false);
+                    session.log.add (caller, name + " -> exception: " + e.what(), false);
                     return ToolResult::error (juce::String ("Internal error: ") + e.what());
                 }
             }

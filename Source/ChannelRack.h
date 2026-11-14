@@ -414,6 +414,16 @@ private:
                 const bool missing = Rack::instrumentOf (t) == nullptr && Rack::channelType (t) != "layer" && Rack::channelType (t) != "midiout";
                 const auto type = Rack::channelType (t);
                 RackLook::channelButton (g, nameR (r).toFloat(), t.getColour(), t.getName(), zip ? juce::String() : (type == "sample" ? "SMP" : type == "plugin" ? "VST" : type == "layer" ? "LAYER" : type == "midiout" ? "MIDI" : ""), sel, missing, zip ? 9.5f : 11.5f);
+                // phase Z: the hovered / dragged dial's value, in a pill over the target box and name
+                if (hoverKnobRow == i && (hoverKnob == Knob::pan || hoverKnob == Knob::vol))
+                {
+                    const juce::String txt = hoverKnob == Knob::vol ? "VOL " + (vol <= -59.9f ? juce::String ("-inf") : juce::String (vol, 1)) + " dB"
+                                                                     : "PAN " + (std::abs (pan) < 0.005f ? juce::String ("C") : (pan < 0 ? "L" : "R") + juce::String (juce::roundToInt (std::abs (pan) * 100.0f)));
+                    auto pill = targetR (r).getUnion (nameR (r)).toFloat().reduced (0.0f, 4.0f).withWidth (110.0f);
+                    g.setColour (juce::Colours::black.withAlpha (0.85f)); g.fillRoundedRectangle (pill, pill.getHeight() * 0.5f);
+                    g.setColour (Theme::amber()); g.drawRoundedRectangle (pill.reduced (0.5f), pill.getHeight() * 0.5f, 1.0f);
+                    g.setColour (Theme::text()); g.setFont (Theme::font (10.5f, true)); g.drawText (txt, pill, juce::Justification::centred);
+                }
                 // selector LED
                 RackLook::lamp (g, ledR (r).toFloat(), Theme::acid(), sel);
                 // steps or piano-roll preview

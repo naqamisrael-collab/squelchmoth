@@ -406,7 +406,7 @@ namespace Chat
             auto pending = std::make_shared<Pending>();
             juce::MessageManager::callAsync ([pending, name, input, alive = juce::WeakReference<Engine> (this)]
             {
-                if (alive != nullptr && ! alive->threadShouldExit()) pending->result = alive->tools.call (name, input);
+                if (alive != nullptr && ! alive->threadShouldExit()) { alive->tools.caller = providerName (alive->provider); pending->result = alive->tools.call (name, input); }
                 pending->done.signal();
             });
             while (! pending->done.wait (100))
