@@ -1,0 +1,103 @@
+// Squelchmoth 1.21 - Frame, stage 0: `video_import` and `video_export`. Included inside the McpTools class body.
+
+juce::File frameVideoFolder()
+{
+    juce::File base = session.edit != nullptr && session.getFile().existsAsFile() ? session.getFile().getParentDirectory() : juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("Squelchmoth");
+    return base.getChildFile ("Video Sound");
+}
+
+ToolResult frameExportStatus (const std::shared_ptr<Frame::Job>& j, double waitSeconds)
+{
+    if (waitSeconds > 0) j->done.wait ((int) (juce::jlimit (0.0, 240.0, waitSeconds) * 1000.0));
+    if (! j->finished) return ToolResult::ok ("Video export " + juce::String (j->id) + ": " + juce::String (juce::roundToInt (j->progress.load() * 100)) + " % - call video_export action status (wait_seconds up to 60) again");
+    if (j->error.isNotEmpty()) return ToolResult::error (j->error);
+    const auto& o = j->options;
+    return ToolResult::ok ("Video exported to " + o.out.getFullPathName() + " (" + juce::String (o.out.getSize() / (1024 * 1024)) + " MB, " + juce::RelativeTime::seconds (o.seconds).getDescription()
+                           + ", picture: " + o.picture + ", " + (o.picture == "source" && ! o.resize && std::abs (o.videoOffset) < 0.0005 ? juce::String ("original picture copied without re-encoding") : juce::String (o.width) + " x " + juce::String (o.height) + " " + j->encoder)
+                           + ", AAC 320 kb/s) in " + juce::String (j->tookSeconds, 1) + " s.");
+}
+
+void registerFrameTools()
+{
+    add ("video_import",
+         "Frame: brings a video file into the session. Its sound goes on a new audio track (24-bit, at the session rate) and the video is remembered as the session's picture, so video_export can put the new mix back under it. "
+         "path (MP4, MOV, MKV, WEBM, AVI...); start_seconds (where it sits on the timeline, default 0); sound false only reads the facts (length, size, frame rate) and remembers the picture. "
+         "There is no picture viewer on the timeline yet. When the computer has no FFmpeg, run video_export action install once. separate and vocal_remove also take video files directly.",
+         R"json({"type":"object","properties":{"path":{"type":"string"},"start_seconds":{"type":"number"},"sound":{"type":"boolean"}},"required":["path"]})json",
+         [this] (const juce::var& a) -> ToolResult
+         {
+             const juce::File f (str (a, "path")); if (! f.existsAsFile()) return ToolResult::error ("No file at " + f.getFullPathName());
+             if (! Frame::ffmpeg().existsAsFile()) return ToolResult::error (Frame::missingText());
+             const auto in = Frame::probe (f); if (! in.ok) return ToolResult::error (in.error);
+             auto& e = edit(); const double at = num (a, "start_seconds", 0.0);
+             juce::String s = f.getFileName() + ": " + in.text() + ".";
+             if (in.hasVideo) { e.state.setProperty ("frameVideo", f.getFullPathName(), nullptr); e.state.setProperty ("frameVideoAt", at, nullptr); s << "\nRemembered as the session's picture (video_export picture source)."; }
+             if (flag (a, "sound", true) && in.hasAudio)
+             {
+                 juce::String err; const auto wav = frameVideoFolder().getNonexistentChildFile (juce::File::createLegalFileName (f.getFileNameWithoutExtension()).substring (0, 60), ".wav", false);
+                 if (! Frame::extractAudio (f, wav, TimeFmt::sampleRate (e), err)) return ToolResult::error (err);
+                 juce::var t (new juce::DynamicObject()); set (t, "kind", "audio"); set (t, "name", f.getFileNameWithoutExtension().substring (0, 40));
+                 const int idx = firstNumber (call ("add_track", t).text); if (idx <= 0) return ToolResult::error ("Couldn't add a track for the video's sound");
+                 juce::var im (new juce::DynamicObject()); set (im, "track", idx); set (im, "path", wav.getFullPathName()); set (im, "start_seconds", at);
+                 auto r = call ("import_audio", im); if (r.isError) return r;
+                 if (ui.refresh) ui.refresh();
+                 s << "\nIts sound is on track " << idx << " at " << juce::String (at, 2) << " s (" << wav.getFileName() << ").";
+             }
+             else if (! in.hasAudio) s << "\nIt has no sound to import.";
+             return ToolResult::ok (s);
+         });
+
+    add ("video_export",
+         "Frame: exports the session's mix as an MP4 video (H.264 picture, AAC 320 kb/s sound). It bounces the mix first (master inserts included), then builds the video in the background.\n"
+         " picture: source (the picture of the video brought in with video_import, or video = a path; copied without re-encoding when the export starts at the video's start and no size is given), "
+         "image (image = a path to a cover; a still-picture video, the usual way to post a song or a long mix), waveform (a moving waveform), spectrum (a scrolling spectrogram), black. Default: source when the session has a picture, else waveform.\n"
+         " width / height (default 1920 x 1080; 1080 x 1920 for vertical), fps (default 30; 2 is enough for image), start/end in seconds or bars (default the whole session), name or path, wait_seconds (default 20).\n"
+         " action status: job (default the last), wait_seconds. It streams, so the length does not change the memory used.\n"
+         " action install: downloads the video tools (FFmpeg, about 80 MB, once) when the computer has none; action install_status: its progress. Not yet here: picture editing, titles, upload.",
+         R"json({"type":"object","properties":{"action":{"type":"string","enum":["start","status","install","install_status"]},"picture":{"type":"string","enum":["source","image","waveform","spectrum","black"]},"video":{"type":"string"},"image":{"type":"string"},
+            "width":{"type":"integer"},"height":{"type":"integer"},"fps":{"type":"number"},"start_seconds":{"type":"number"},"end_seconds":{"type":"number"},"start_bar":{"type":"number"},"end_bar":{"type":"number"},
+            "name":{"type":"string"},"path":{"type":"string"},"job":{"type":"integer"},"wait_seconds":{"type":"number"}}})json",
+         [this] (const juce::var& a) -> ToolResult
+         {
+             const auto action = str (a, "action", "start");
+             if (action == "install" || action == "install_status")
+             {
+                 auto& st = Frame::installState();
+                 if (Frame::ffmpeg().existsAsFile() && ! st.running) return ToolResult::ok ("Video is ready: FFmpeg at " + Frame::ffmpeg().getFullPathName());
+                 if (action == "install") Frame::startInstall();
+                 if (! st.running && ! st.finished) return ToolResult::ok ("The video tools are not installed. video_export action install downloads FFmpeg once (about " + juce::String (Frame::packItem().megabytes) + " MB).");
+                 st.done.wait ((int) (juce::jlimit (0.0, 240.0, num (a, "wait_seconds", 30.0)) * 1000.0));
+                 if (! st.finished) return ToolResult::ok ("Downloading the video tools: " + juce::String (juce::roundToInt (st.progress.load() * 100)) + " % - ask again with video_export action install_status");
+                 if (st.error.isNotEmpty()) return ToolResult::error (st.error);
+                 return ToolResult::ok ("Video is ready: FFmpeg installed in " + Frame::folder().getFullPathName());
+             }
+             if (action == "status")
+             {
+                 auto j = Frame::Store::get().find ((int) num (a, "job", 0)); if (j == nullptr) return ToolResult::error ("No video export has been started");
+                 return frameExportStatus (j, num (a, "wait_seconds", 10.0));
+             }
+             if (! Frame::ffmpeg().existsAsFile()) return ToolResult::error (Frame::missingText());
+             auto& e = edit(); Frame::ExportOptions o;
+             juce::File video (has (a, "video") ? str (a, "video") : e.state["frameVideo"].toString());
+             o.picture = str (a, "picture", video.existsAsFile() ? "source" : (has (a, "image") ? "image" : "waveform")).toLowerCase();
+             if (o.picture == "source") { if (! video.existsAsFile()) return ToolResult::error ("There is no picture in this session: bring a video in with video_import, pass video (a path), or use picture image / waveform / spectrum / black"); o.sourceVideo = video; }
+             if (o.picture == "image") { o.image = juce::File (str (a, "image")); if (! o.image.existsAsFile()) return ToolResult::error ("picture image needs image: the path of a PNG or JPEG"); }
+             o.resize = has (a, "width") || has (a, "height");
+             o.width = juce::jlimit (128, 7680, (int) num (a, "width", 1920.0)) & ~1; o.height = juce::jlimit (128, 4320, (int) num (a, "height", 1080.0)) & ~1;
+             o.fps = juce::jlimit (1.0, 120.0, num (a, "fps", 30.0));
+             const double startS = timeArg (a, "start").value_or (0s).inSeconds();
+             if (o.picture == "source") o.videoOffset = startS - (has (a, "video") ? 0.0 : (double) e.state.getProperty ("frameVideoAt", 0.0));
+             o.out = has (a, "path") ? juce::File (str (a, "path")) : session.bouncesDir.getNonexistentChildFile (juce::File::createLegalFileName (str (a, "name", session.getFile().getFileNameWithoutExtension() + " video")), ".mp4", false);
+             if (! o.out.hasFileExtension ("mp4;mov;mkv")) o.out = o.out.withFileExtension ("mp4");
+
+             // the mix, bounced the same way the bounce tool does it
+             o.audio = juce::File::getSpecialLocation (juce::File::tempDirectory).getNonexistentChildFile ("squelchmoth-video-mix", ".wav", false);
+             juce::var b (new juce::DynamicObject()); set (b, "path", o.audio.getFullPathName()); set (b, "format", "wav"); set (b, "bit_depth", 24);
+             for (auto* k : { "start_seconds", "end_seconds", "start_bar", "end_bar" }) if (has (a, k)) set (b, k, a[juce::Identifier (k)]);
+             auto r = call ("bounce", b); if (r.isError) return r;
+             if (! o.audio.existsAsFile()) return ToolResult::error ("The mix could not be bounced for the video");
+             if (auto reader = std::unique_ptr<juce::AudioFormatReader> (session.getEngine().getAudioFileFormatManager().readFormatManager.createReaderFor (o.audio)))
+                 o.seconds = (double) reader->lengthInSamples / juce::jmax (1.0, reader->sampleRate);
+             return frameExportStatus (Frame::Store::get().start (o, true), num (a, "wait_seconds", 20.0));
+         });
+}
