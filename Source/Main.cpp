@@ -18,6 +18,27 @@
  #define SQ_CMD "Ctrl"
  #define SQ_OPT "Alt"
 #endif
+#if JUCE_MAC
+ #include <crt_externs.h>
+ #include <cstring>
+ // Helper copies of this program (the plug-in scanner, the command-line modes) must never show a second Squelchmoth icon
+ // in the Dock. Waiting until the app object exists is too late: the icon is already there and only disappears a moment
+ // later, once per scanned plug-in. So the process is marked as a background helper here, before anything else runs.
+ namespace
+ {
+     struct HelperHasNoDockIcon
+     {
+         HelperHasNoDockIcon()
+         {
+             const int argc = *_NSGetArgc(); char** argv = *_NSGetArgv();
+             for (int i = 1; i < argc; ++i)
+                 for (auto* key : { "PluginScan", "--selftest", "--preset-audit", "--render-faces", "--site-shots", "--make-", "--check-key", "--dump-catalog" })
+                     if (argv[i] != nullptr && std::strstr (argv[i], key) != nullptr) { juce::Process::setDockIconVisible (false); return; }
+         }
+     };
+     static HelperHasNoDockIcon helperHasNoDockIcon;
+ }
+#endif
 #include "StereoPan.h"
 #include "Analyzer.h"
 #include "MainComponent.h"

@@ -4778,6 +4778,13 @@ inline int runSelfTest()
                 Frame::run ({ ff.getFullPathName(), "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=s=320x240:r=25:d=3", "-f", "lavfi", "-i", "sine=f=440:d=3",
                               "-c:v", Frame::videoEncoder(), "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", clip.getFullPathName() }, out);
                 check (clip.getSize() > 2000, "Frame: FFmpeg found (" + ff.getFullPathName() + ", encoder " + Frame::videoEncoder() + ") and a test clip made");
+               #if JUCE_MAC
+                {
+                    const auto nat = dir.getChildFile ("native.wav");
+                    const bool ok = Frame::nativeAudio (clip, nat);
+                    check (ok && nat.getSize() > 100000, "macOS reads the sound of an MP4 itself, without FFmpeg (" + juce::String (nat.getSize() / 1024) + " KB)");
+                }
+               #endif
                 const int tracksBefore = te::getAudioTracks (*session->edit).size();
                 const auto vi = call ("video_import", "{\"path\":" + juce::JSON::toString (juce::var (clip.getFullPathName())) + "}");
                 check (vi.contains ("320 x 240") && vi.contains ("25 fps") && te::getAudioTracks (*session->edit).size() == tracksBefore + 1, "video_import: facts read and the sound on a new track - " + vi.upToFirstOccurrenceOf ("\n", false, false));

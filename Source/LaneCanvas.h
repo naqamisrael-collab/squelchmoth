@@ -5,6 +5,7 @@
 // transient detection for Tab-to-Transient, drag & drop import and the clip / lane context menus.
 
 #include "EditOps.h"
+#include "Frame.h"
 #include "PluginMenu.h"
 #include "DrumKit.h"
 #include "QuickNew.h"
@@ -680,7 +681,7 @@ public:
     {
         for (auto& f : files)
             if (session.getEngine().getAudioFileFormatManager().readFormatManager.findFormatForFileExtension (juce::File (f).getFileExtension()) != nullptr
-                || f.endsWithIgnoreCase (".mid") || f.endsWithIgnoreCase (".midi"))
+                || f.endsWithIgnoreCase (".mid") || f.endsWithIgnoreCase (".midi") || Frame::isVideo (juce::File (f)))
                 return true;
         return false;
     }
@@ -693,6 +694,15 @@ public:
         for (int i = 0; i < files.size(); ++i)
         {
             juce::File f (files[i]);
+            if (Frame::isVideo (f) && ! te::AudioFile (session.getEngine(), f).isValid())
+            {
+                // a video: its sound goes on the track
+                juce::String verr;
+                const auto base = session.getFile().existsAsFile() ? session.getFile().getParentDirectory() : juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("Squelchmoth");
+                const auto wav = Frame::audioOf (f, base.getChildFile ("Video Sound"), 48000.0, verr);
+                if (! wav.existsAsFile()) { juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Video", verr.isNotEmpty() ? verr : "Couldn't read the sound of " + f.getFileName()); continue; }
+                f = wav;
+            }
             if (track == nullptr)
             {
                 // Pro Tools makes a mono or stereo track to match the file

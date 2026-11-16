@@ -4,6 +4,7 @@
 
 #include "SqSplitDsp.h"
 #include "SqNeuralSplit.h"
+#include "Frame.h"
 #include <memory>
 #include <mutex>
 #include <atomic>
@@ -58,20 +59,8 @@ namespace PrismSplit
 
         inline bool download (const juce::String& url, const juce::File& dest, double expectMb, float p0, float p1, juce::String& err)
         {
-            auto in = juce::URL (url).createInputStream (juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress).withConnectionTimeoutMs (20000).withNumRedirectsToFollow (8));
-            if (in == nullptr) { err = "Couldn't connect to download " + url.fromLastOccurrenceOf ("/", false, false); return false; }
-            dest.deleteFile(); juce::FileOutputStream out (dest);
-            if (! out.openedOk()) { err = "Couldn't write " + dest.getFullPathName(); return false; }
-            const double total = in->getTotalLength() > 0 ? (double) in->getTotalLength() : expectMb * 1048576.0;
-            juce::HeapBlock<char> buf (1 << 16); juce::int64 got = 0;
-            while (! in->isExhausted())
-            {
-                const int n = in->read (buf, 1 << 16); if (n <= 0) break;
-                if (! out.write (buf, (size_t) n)) { err = "The disk is full or not writable"; return false; }
-                got += n; state().progress = p0 + (p1 - p0) * (float) juce::jmin (1.0, (double) got / total);
-            }
-            out.flush();
-            return got > 0;
+            // resumes after a dropped connection instead of stopping (Frame::downloadTo)
+            return Frame::downloadTo (url, dest, [=] (double got, double total) { state().progress = p0 + (p1 - p0) * (float) juce::jmin (1.0, got / (total > 0 ? total : expectMb * 1048576.0)); }, err);
         }
 
         /** Pulls one regular file out of a .tgz (ustar) whose path ends with `inner`. */

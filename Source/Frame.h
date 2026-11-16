@@ -79,6 +79,66 @@ namespace Frame
         return (int) p.getExitCode();
     }
 
+    /** Downloads url to dest. Resumes where it stopped when the connection drops (HTTP range requests) and gives up only
+        after six tries in a row bring nothing new. onProgress gets (bytes so far, total bytes or 0). */
+    inline bool downloadTo (const juce::String& url, const juce::File& dest, const std::function<void (double, double)>& onProgress, juce::String& err)
+    {
+        dest.getParentDirectory().createDirectory(); dest.deleteFile();
+        juce::int64 got = 0, total = 0; int stalls = 0; bool everConnected = false;
+        for (int attempt = 0; attempt < 60; ++attempt)
+        {
+            int status = 0; const juce::int64 before = got; bool ended = false;
+            const auto opts = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress).withConnectionTimeoutMs (15000).withNumRedirectsToFollow (8).withStatusCode (&status)
+                                  .withExtraHeaders (got > 0 ? "Range: bytes=" + juce::String (got) + "-" : juce::String());
+            if (auto in = juce::URL (url).createInputStream (opts))
+            {
+                if (status == 200 || status == 206 || status == 0)
+                {
+                    everConnected = true;
+                    if (status != 206 && got > 0) { got = 0; dest.deleteFile(); }          // the server sent the whole file again
+                    const juce::int64 len = in->getTotalLength(); if (len > 0) total = got + len;
+                    juce::FileOutputStream out (dest);                                      // opens at the end: appends
+                    if (! out.openedOk()) { err = "Couldn't write " + dest.getFullPathName(); return false; }
+                    juce::HeapBlock<char> buf (1 << 17);
+                    while (! in->isExhausted())
+                    {
+                        const int n = in->read (buf, 1 << 17); if (n <= 0) break;
+                        if (! out.write (buf, (size_t) n)) { err = "The disk is full or not writable"; return false; }
+                        got += n; if (onProgress) onProgress ((double) got, (double) total);
+                    }
+                    out.flush(); ended = true;
+                }
+            }
+            if (total > 0 && got >= total) return true;
+            if (total <= 0 && ended && got > before) return true;                           // no length given: the stream ended
+            if (got > before) stalls = 0; else if (++stalls >= 6) break;
+            juce::Thread::sleep (juce::jmin (6000, 700 * (stalls + 1)));
+        }
+        err = everConnected ? "The download stopped at " + juce::String (got / 1048576) + " MB" + (total > 0 ? " of " + juce::String (total / 1048576) + " MB" : juce::String()) + " and could not be resumed. Check the internet connection and try again."
+                            : juce::String ("Couldn't connect to download. Check the internet connection and try again.");
+        return false;
+    }
+
+   #if JUCE_MAC
+    /** macOS reads the sound of MP4 / M4V (and many MOV) files itself: no FFmpeg needed for those. */
+    inline bool nativeAudio (const juce::File& video, const juce::File& destWav)
+    {
+        juce::CoreAudioFormat caf;
+        std::unique_ptr<juce::AudioFormatReader> r (caf.createReaderFor (new juce::FileInputStream (video), true));
+        if (r == nullptr || r->lengthInSamples <= 0 || r->numChannels == 0) return false;
+        destWav.getParentDirectory().createDirectory(); destWav.deleteFile();
+        juce::WavAudioFormat wav; auto os = std::make_unique<juce::FileOutputStream> (destWav);
+        if (! os->openedOk()) return false;
+        std::unique_ptr<juce::AudioFormatWriter> w (wav.createWriterFor (os.get(), r->sampleRate, juce::jmin (2u, r->numChannels), 24, {}, 0));
+        if (w == nullptr) return false;
+        os.release();
+        const bool ok = w->writeFromAudioReader (*r, 0, r->lengthInSamples);
+        w.reset();
+        if (! ok || destWav.getSize() < 1024) { destWav.deleteFile(); return false; }
+        return true;
+    }
+   #endif
+
     //==============================================================================
     // The one-time download: a ready-made FFmpeg 6.1.1 program for this computer, checked against its SHA-256 before use.
     // It is a GPL build made by FFmpeg's own community builders; Squelchmoth does not contain it, it downloads it at the
@@ -97,7 +157,7 @@ namespace Frame
        #endif
     }
 
-    struct Install { std::atomic<float> progress { 0.0f }; std::atomic<bool> running { false }, finished { false }; juce::String error; juce::WaitableEvent done { true }; };
+    struct Install { std::atomic<float> progress { 0.0f }; std::atomic<int> megabytes { 0 }; std::atomic<bool> running { false }, finished { false }; juce::String error; juce::WaitableEvent done { true }; };
     inline Install& installState() { static Install s; return s; }
 
     inline void startInstall()
@@ -115,24 +175,7 @@ namespace Frame
            #endif
             folder().createDirectory();
             const auto tmp = folder().getChildFile ("ffmpeg.download"); tmp.deleteFile();
-            {
-                auto in = juce::URL (it.url).createInputStream (juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress).withConnectionTimeoutMs (20000).withNumRedirectsToFollow (8));
-                juce::FileOutputStream out (tmp);
-                if (in == nullptr) err = "Couldn't connect to download the video tools";
-                else if (! out.openedOk()) err = "Couldn't write " + tmp.getFullPathName();
-                else
-                {
-                    const double total = in->getTotalLength() > 0 ? (double) in->getTotalLength() : it.megabytes * 1048576.0;
-                    juce::HeapBlock<char> buf (1 << 16); juce::int64 got = 0;
-                    while (! in->isExhausted())
-                    {
-                        const int n = in->read (buf, 1 << 16); if (n <= 0) break;
-                        if (! out.write (buf, (size_t) n)) { err = "The disk is full or not writable"; break; }
-                        got += n; s.progress = 0.97f * (float) juce::jmin (1.0, (double) got / total);
-                    }
-                    out.flush();
-                }
-            }
+            downloadTo (it.url, tmp, [&s, it] (double got, double total) { s.megabytes = (int) (got / 1048576.0); s.progress = 0.97f * (float) juce::jmin (1.0, got / (total > 0 ? total : it.megabytes * 1048576.0)); }, err);
             if (err.isEmpty() && ! juce::SHA256 (tmp).toHexString().equalsIgnoreCase (it.sha256)) err = "The video tools download did not match its checksum (try again)";
             if (err.isEmpty()) { dest.deleteFile(); if (! tmp.moveFileTo (dest)) err = "Couldn't put the video tools in " + folder().getFullPathName(); else dest.setExecutePermission (true); }
             if (err.isEmpty())
@@ -238,6 +281,9 @@ namespace Frame
         if (! isVideo (f)) return f;
         const auto wav = intoFolder.getChildFile (juce::File::createLegalFileName (f.getFileNameWithoutExtension()).substring (0, 60) + " (sound).wav");
         if (wav.existsAsFile() && wav.getLastModificationTime() >= f.getLastModificationTime() && wav.getSize() > 1024) return wav;
+       #if JUCE_MAC
+        if (nativeAudio (f, wav)) return wav;          // no FFmpeg needed
+       #endif
         return extractAudio (f, wav, sampleRate, err) ? wav : juce::File();
     }
 

@@ -85,8 +85,10 @@ public:
         if (! f.existsAsFile())
         {
             if (! Frame::ffmpeg().existsAsFile())
-                juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon, "Vocal Remover", "Video files need the video tools (FFmpeg, about " + juce::String (Frame::packItem().megabytes) + " MB, downloaded once). Download them now? Drop the video again when it is done (about a minute).",
-                                                    "Download", "Cancel", nullptr, juce::ModalCallbackFunction::create ([] (int r) { if (r == 1) Frame::startInstall(); }));
+            {
+                // this video needs the video tools: fetch them now and carry on with the same file when they arrive
+                pendingVideo = dropped; Frame::startInstall(); startTimerHz (10); repaint();
+            }
             else juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Vocal Remover", videoErr);
             return;
         }
@@ -122,10 +124,10 @@ public:
             juce::Path p; p.addRoundedRectangle (dz.reduced (10.0f), 12.0f);
             const float dashes[] = { 8.0f, 6.0f }; juce::Path dashed; juce::PathStrokeType (1.6f).createDashedStroke (dashed, p, dashes, 2); g.fillPath (dashed);
             g.setColour (L::text()); g.setFont (L::caps (18.0f));
-            g.drawText ("DROP A SONG HERE", dropZone.withTrimmedBottom (dropZone.getHeight() / 2 + 6), juce::Justification::centredBottom);
+            g.drawText ("DROP A SONG OR A VIDEO HERE", dropZone.withTrimmedBottom (dropZone.getHeight() / 2 + 6), juce::Justification::centredBottom);
             g.setColour (L::dim()); g.setFont (Theme::font (13.0f));
             g.drawText ("You get two tracks back: the music without the voice, and the voice alone.", dropZone.withTrimmedTop (dropZone.getHeight() / 2 + 46), juce::Justification::centredTop);
-            g.drawText ("WAV, AIFF, FLAC, MP3 or OGG. Nothing leaves your computer.", dropZone.withTrimmedTop (dropZone.getHeight() / 2 + 66), juce::Justification::centredTop);
+            g.drawText ("WAV, AIFF, FLAC, MP3, OGG, or a video (MP4, MOV). Nothing leaves your computer.", dropZone.withTrimmedTop (dropZone.getHeight() / 2 + 66), juce::Justification::centredTop);
             return;
         }
         if (! loaded)
@@ -179,6 +181,9 @@ private:
 
     juce::String statusLine() const
     {
+        auto& vi = Frame::installState();
+        if (vi.running) return "Getting the video tools (once): " + juce::String (vi.megabytes.load()) + " of " + juce::String (Frame::packItem().megabytes) + " MB  -  " + juce::String (juce::roundToInt (vi.progress.load() * 100)) + " %"
+                               + (pendingVideo.existsAsFile() ? "  -  " + pendingVideo.getFileName() + " starts by itself after" : juce::String());
         auto& st = PrismSplit::StudioPack::state();
         if (st.running) return "Installing Studio quality: " + st.stage + "  " + juce::String (juce::roundToInt (st.progress.load() * 100)) + " %";
         if (st.finished && st.error.isNotEmpty()) return "Install failed: " + st.error;
@@ -218,7 +223,7 @@ private:
 
     void chooseFile()
     {
-        chooser = std::make_unique<juce::FileChooser> ("Choose a song", juce::File(), "*.wav;*.aif;*.aiff;*.flac;*.mp3;*.ogg");
+        chooser = std::make_unique<juce::FileChooser> ("Choose a song", juce::File(), "*.wav;*.aif;*.aiff;*.flac;*.mp3;*.ogg;*.mp4;*.mov;*.m4v;*.mkv;*.webm;*.avi");
         chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc) { if (fc.getResult().existsAsFile()) start (fc.getResult()); });
     }
 
@@ -325,11 +330,17 @@ private:
 
     void timerCallback() override
     {
+        if (pendingVideo != juce::File() && ! Frame::installState().running && Frame::installState().finished)
+        {
+            const auto v = pendingVideo; pendingVideo = juce::File();
+            if (Frame::installState().error.isNotEmpty()) juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Vocal Remover", Frame::installState().error);
+            else start (v);
+        }
         if (job != nullptr && job->finished && ! loaded && job->error.isEmpty()) loadResult();
         if (playing && ! lanes.empty() && ! lanes.front()->src.isPlaying()) { stopAudio(); refreshButtons(); }
         if (listen != nullptr && listen->finished && keyTempo.isEmpty()) { keyTempo = listen->result.ok ? juce::String (juce::roundToInt (listen->result.bpm)) + " BPM  -  " + listen->result.keyName : juce::String (" "); repaint(); }
         refreshButtons();
-        if (isWorking() || playing || PrismSplit::StudioPack::state().running) repaint();
+        if (isWorking() || playing || PrismSplit::StudioPack::state().running || Frame::installState().running) repaint();
     }
 
     void changeListenerCallback (juce::ChangeBroadcaster*) override { repaint(); }
@@ -341,6 +352,7 @@ private:
     juce::TextButton chooseBtn { "Choose a song" }, playBtn { "Play" }, saveBtn { "Save..." }, sendBtn { "Send to session" },
                      installBtn { "Install Studio quality (165 MB)" }, newBtn { "New song" }, modeBtn { "4 stems" };
     std::unique_ptr<juce::FileChooser> chooser;
+    juce::File pendingVideo;
     std::shared_ptr<PrismSplit::Job> job; std::shared_ptr<RefListen::Job> listen; juce::String keyTempo; juce::File song;
     bool loaded = false, playing = false, hover = false, studio = false, stemsMode = false;
     juce::Rectangle<int> header, dropZone, progressBar, lanesArea, timeArea;
