@@ -86,3 +86,4 @@ jobs:
           git config user.name "windows-test"; git config user.email "actions@github.com"
           git add -A; git commit -qm "Windows test results for ${{ github.sha }}"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" test-results
+# the self-test also runs the one-time video tools download (SQUELCH_TEST_VIDEO_INSTALL)
