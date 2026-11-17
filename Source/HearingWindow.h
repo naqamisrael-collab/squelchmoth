@@ -30,9 +30,52 @@ public:
         visionBtn.setColour (juce::TextButton::buttonColourId, L::well()); visionBtn.setColour (juce::TextButton::textColourOffId, L::text());
         visionBtn.onClick = [this] { vision = vision == SqHear::Vision::normal ? SqHear::Vision::protan : vision == SqHear::Vision::protan ? SqHear::Vision::deutan : SqHear::Vision::normal; updateVisionText(); repaint(); };
         updateVisionText();
+        for (auto* b : { &trackA, &trackB })
+        {
+            addAndMakeVisible (*b); b->setTextWhenNothingSelected ("choose a track"); b->setTextWhenNoChoicesAvailable ("no tracks yet");
+            b->setColour (juce::ComboBox::backgroundColourId, L::well()); b->setColour (juce::ComboBox::textColourId, L::text()); b->setColour (juce::ComboBox::outlineColourId, L::faint());
+            b->onChange = [this] { view = {}; refreshUnmaskButtons(); repaint(); };
+        }
+        for (auto* b : { &measureBtn, &carveBtn })
+        {
+            addAndMakeVisible (*b); b->setColour (juce::TextButton::textColourOffId, L::text());
+            b->setColour (juce::TextButton::buttonColourId, b == &carveBtn ? L::cyan().withAlpha (0.22f) : L::well());
+        }
+        measureBtn.onClick = [this] { measure (false); };
+        carveBtn.onClick = [this] { measure (true); };
+        refreshUnmaskButtons();
         setWantsKeyboardFocus (true);
-        setSize (980, 640);
+        setSize (980, 836);
     }
+
+    //========================================================================== unmask: two tracks in the same place
+    struct UnmaskView { bool ok = false; juce::String message, nameA, nameB; SqHear::BarkSpectrum a, b; SqHear::Overlap overlap; };
+    std::function<juce::StringArray()> listTracks;                                            // the session's tracks, in order
+    std::function<UnmaskView (int trackA, int trackB, bool apply)> runUnmask;                 // track numbers, 1-based
+
+    void refreshTracks()
+    {
+        const auto names = listTracks ? listTracks() : juce::StringArray();
+        if (names == trackNames) return;
+        const auto a = trackA.getText(), b = trackB.getText();
+        trackNames = names; trackA.clear (juce::dontSendNotification); trackB.clear (juce::dontSendNotification);
+        for (int i = 0; i < names.size(); ++i) { trackA.addItem (juce::String (i + 1) + "  " + names[i], i + 1); trackB.addItem (juce::String (i + 1) + "  " + names[i], i + 1); }
+        for (int i = 0; i < names.size(); ++i) { if (trackA.getItemText (i) == a) trackA.setSelectedId (i + 1, juce::dontSendNotification); if (trackB.getItemText (i) == b) trackB.setSelectedId (i + 1, juce::dontSendNotification); }
+        refreshUnmaskButtons();
+    }
+    void chooseTracks (int a, int b) { refreshTracks(); trackA.setSelectedId (a, juce::dontSendNotification); trackB.setSelectedId (b, juce::dontSendNotification); view = {}; refreshUnmaskButtons(); repaint(); }
+    void measure (bool apply)
+    {
+        refreshTracks();
+        const int a = trackA.getSelectedId(), b = trackB.getSelectedId();
+        if (a <= 0 || b <= 0)   { view = {}; view.message = "Choose two tracks first."; }
+        else if (a == b)        { view = {}; view.message = "Choose two different tracks."; }
+        else if (! runUnmask)   { view = {}; view.message = "Open a session first."; }
+        else view = runUnmask (a, b, apply);
+        refreshUnmaskButtons(); repaint();
+    }
+    const UnmaskView& unmaskView() const { return view; }
+    void visibilityChanged() override { if (isShowing()) refreshTracks(); }
 
     //==========================================================================
     /** Sets the note everything shows (also what the assistant's tool calls). */
@@ -62,6 +105,7 @@ public:
         paintHarmonics (g);
         paintBeats (g);
         paintRoom (g);
+        paintUnmask (g);
     }
 
     void resized() override
@@ -70,6 +114,14 @@ public:
         header = r.removeFromTop (46);
         visionBtn.setBounds (header.getRight() - 196, header.getY() + 9, 180, 28);
         r.reduce (14, 4); r.removeFromBottom (10);
+        unmaskArea = r.removeFromBottom (186); r.removeFromBottom (10);
+        {
+            auto row = unmaskArea.withTrimmedTop (30).withHeight (26).reduced (14, 0);
+            trackA.setBounds (row.removeFromLeft (200)); row.removeFromLeft (8);
+            trackB.setBounds (row.removeFromLeft (200)); row.removeFromLeft (10);
+            measureBtn.setBounds (row.removeFromLeft (96)); row.removeFromLeft (8);
+            carveBtn.setBounds (row.removeFromLeft (96));
+        }
         auto left = r.removeFromLeft (juce::jmin (r.getHeight(), r.getWidth() * 42 / 100));
         wheelArea = left.reduced (4);
         r.removeFromLeft (12);
@@ -250,13 +302,90 @@ private:
             const int cx = x + (i / rows) * colW, cy = y + (i % rows) * 17;
             g.setColour (colourOf (n.midi)); g.fillRoundedRectangle ((float) cx, (float) cy + 3.0f, 10.0f, 10.0f, 2.0f);
             g.setColour (L::text()); g.setFont (Theme::font (12.0f, true)); g.drawText (juce::String (mode.hz, 1) + " Hz", cx + 16, cy, 60, 16, juce::Justification::centredLeft);
-            g.setColour (L::dim()); g.setFont (Theme::font (11.5f)); g.drawText (n.name + "  " + (juce::String (mode.kind) == "tangential" ? juce::String ("tangent.") : juce::String (mode.kind)), cx + 78, cy, colW - 80, 16, juce::Justification::centredLeft);
+            g.setColour (L::dim()); g.setFont (Theme::font (11.5f)); g.drawText (n.name + "  " + (juce::String (mode.kind) == "tangential" ? juce::String ("tang.") : juce::String (mode.kind)), cx + 78, cy, colW - 80, 16, juce::Justification::centredLeft);
         }
     }
 
+    void refreshUnmaskButtons()
+    {
+        measureBtn.setEnabled (trackA.getSelectedId() > 0 && trackB.getSelectedId() > 0);
+        carveBtn.setEnabled (view.ok && view.overlap.found);
+    }
+
+    void paintUnmask (juce::Graphics& g)
+    {
+        namespace L = Console::Look;
+        const auto first = view.message.upToFirstOccurrenceOf ("\n", false, false);
+        const auto last = view.message.contains ("Done:") ? view.message.fromFirstOccurrenceOf ("Done:", true, false).upToFirstOccurrenceOf ("\n", false, false)
+                        : view.message.contains ("Starting point:") ? view.message.fromFirstOccurrenceOf ("Starting point:", true, false).upToFirstOccurrenceOf ("\n", false, false) : juce::String();
+        panel (g, unmaskArea, "UNMASK  -  TWO TRACKS IN THE SAME PLACE",
+               view.message.isEmpty() ? juce::String ("Pick two tracks and press Measure: see where they overlap. Carve puts a cut on the quieter one; one undo removes it.")
+                                      : (last.isNotEmpty() ? last : first));
+        const auto ca = L::cyan(), cb = L::pink();
+        auto plot = unmaskArea.reduced (14, 0).withTrimmedTop (64).withTrimmedBottom (50);
+        g.setColour (L::well()); g.fillRoundedRectangle (plot.toFloat(), 4.0f);
+        const float bw = (float) plot.getWidth() / 24.0f, H = (float) plot.getHeight();
+        auto height = [H] (double db) { return (float) juce::jlimit (0.0, 1.0, (db + 72.0) / 72.0) * (H - 4.0f); };
+        if (view.ok && view.overlap.found)
+        {
+            const float x0 = (float) plot.getX() + bw * (float) view.overlap.firstBand, x1 = (float) plot.getX() + bw * (float) (view.overlap.lastBand + 1);
+            g.setColour (L::yellow().withAlpha (0.16f)); g.fillRect (x0, (float) plot.getY(), x1 - x0, H);
+            g.setColour (L::yellow()); g.drawRect (x0, (float) plot.getY(), x1 - x0, H, 1.0f);
+        }
+        for (int b = 0; b < 24; ++b)
+        {
+            const float x = (float) plot.getX() + bw * (float) b;
+            if (view.ok)
+            {
+                const float ha = height (view.a.db (b)), hb = height (view.b.db (b));
+                g.setColour (ca.withAlpha (0.9f)); g.fillRect (x + 2.0f, (float) plot.getBottom() - ha, bw * 0.5f - 2.5f, ha);
+                g.setColour (cb.withAlpha (0.9f)); g.fillRect (x + bw * 0.5f + 0.5f, (float) plot.getBottom() - hb, bw * 0.5f - 2.5f, hb);
+            }
+            g.setColour (L::faint().withAlpha (0.5f)); g.drawVerticalLine ((int) x, (float) plot.getY(), (float) plot.getBottom());
+        }
+        // frequency scale: the lower edge of every third critical band
+        g.setFont (Theme::font (10.0f)); g.setColour (L::dim());
+        for (int b = 0; b <= 24; b += 3)
+        {
+            const double hz = b == 0 ? 20.0 : SqHear::barkEdges[b];
+            const auto t = hz >= 1000.0 ? juce::String (hz / 1000.0, hz >= 10000.0 || std::fmod (hz, 1000.0) == 0.0 ? 0 : 1).trimCharactersAtEnd (".") + "k" : juce::String (juce::roundToInt (hz));
+            g.drawText (t, (int) ((float) plot.getX() + bw * (float) b) - 20, plot.getBottom() + 1, 40, 12, b == 0 ? juce::Justification::centredRight : b == 24 ? juce::Justification::centredLeft : juce::Justification::centred);
+        }
+        // legend, at the right of the controls row
+        auto leg = juce::Rectangle<int> (carveBtn.getRight() + 16, carveBtn.getY(), unmaskArea.getRight() - carveBtn.getRight() - 30, 26);
+        g.setFont (Theme::font (12.0f, true));
+        if (view.ok)
+        {
+            g.setColour (ca); g.fillRect (leg.getX(), leg.getCentreY() - 5, 10, 10); g.setColour (L::text()); g.drawText (view.nameA, leg.getX() + 15, leg.getY(), leg.getWidth() / 2 - 20, 26, juce::Justification::centredLeft);
+            const int x2 = leg.getX() + leg.getWidth() / 2;
+            g.setColour (cb); g.fillRect (x2, leg.getCentreY() - 5, 10, 10); g.setColour (L::text()); g.drawText (view.nameB, x2 + 15, leg.getY(), leg.getWidth() / 2 - 20, 26, juce::Justification::centredLeft);
+            if (! view.overlap.found) { g.setColour (L::green()); g.setFont (Theme::font (12.0f)); g.drawText ("No overlap: nothing to carve.", plot, juce::Justification::centredTop); }
+        }
+        else { g.setColour (L::dim()); g.setFont (Theme::font (12.0f)); g.drawText (view.message.isNotEmpty() ? first : juce::String ("The ear's 24 critical bands, low to high. Level of each track in each band."), plot, juce::Justification::centred); }
+    }
+
+    juce::ComboBox trackA, trackB; juce::TextButton measureBtn { "Measure" }, carveBtn { "Carve it" };
+    juce::StringArray trackNames; UnmaskView view; juce::Rectangle<int> unmaskArea;
     juce::TextEditor noteEdit, secondEdit, lenEdit, widEdit, heiEdit;
     juce::TextButton visionBtn;
     juce::Rectangle<int> header, wheelArea, noteArea, harmArea, beatArea, roomArea;
     double freq = 440.0, second = 443.0, roomL = 5.0, roomW = 4.0, roomH = 2.5;
     SqHear::Vision vision = SqHear::Vision::normal;
 };
+
+/** Connects the Hearing window's Unmask panel to the session and its tools (the app and the self-test both use this). */
+template <typename Tools, typename Sess>
+void attachHearing (HearingContent& c, Tools& tools, Sess& session)
+{
+    c.listTracks = [&session] { juce::StringArray n; if (session.edit != nullptr) for (auto* t : session.getTracks()) n.add (t->getName()); return n; };
+    c.runUnmask = [&tools] (int a, int b, bool apply)
+    {
+        juce::var args (new juce::DynamicObject());
+        args.getDynamicObject()->setProperty ("track_a", a); args.getDynamicObject()->setProperty ("track_b", b); args.getDynamicObject()->setProperty ("apply", apply);
+        const auto r = tools.call ("unmask", args);
+        HearingContent::UnmaskView v; v.message = r.text;
+        if (! r.isError && tools.lastUnmask.valid) { v.ok = true; v.nameA = tools.lastUnmask.nameA; v.nameB = tools.lastUnmask.nameB; v.a = tools.lastUnmask.a; v.b = tools.lastUnmask.b; v.overlap = tools.lastUnmask.overlap; }
+        return v;
+    };
+    c.refreshTracks();
+}

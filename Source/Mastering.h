@@ -16,6 +16,7 @@
 // Everything is driven by Claude too (mastering_* commands).
 
 #include "Session.h"
+#include "RenderGuard.h"
 #include "MonitorChain.h"
 #include "Analyzer.h"
 #include "PluginMenu.h"
@@ -215,7 +216,7 @@ public:
         p.useMasterPlugins = true; p.usePlugins = true; p.canRenderInMono = false;
         p.tracksToDo = te::toBitSet (te::getAllTracks (e));
         MonitorChain::PrintGuard guard (session);
-        auto f = te::Renderer::renderToFile ("Mastering bounce", p);
+        auto f = SqRender::renderToFile ("Mastering bounce", p);
         return f.existsAsFile() ? f : juce::File();
     }
 
@@ -295,7 +296,7 @@ public:
         juce::Array<te::Track*> ts;
         for (auto t : tracks()) if (enabledOf (*t) && (only == nullptr || t == only)) ts.add (t);
         p.tracksToDo = te::toBitSet (ts);
-        auto f = te::Renderer::renderToFile ("Mastering render", p);
+        auto f = SqRender::renderToFile ("Mastering render", p);
         return f.existsAsFile();
     }
 
@@ -441,7 +442,7 @@ public:
         if (edit == nullptr) return false;
         folder.createDirectory();
         auto wav = folder.getChildFile (juce::File::createLegalFileName (album ("mAlbum", projectName())) + ".wav");
-        if (! renderRange (wav, 0.0, totalLength(), 16, 44100.0)) { report << "Render failed\n"; return false; }
+        if (! renderRange (wav, 0.0, totalLength(), 16, 44100.0)) { report << "Render failed" << (SqRender::lastProblem().isNotEmpty() ? ": " + SqRender::lastProblem() : juce::String()) << "\n"; return false; }
         auto cue = wav.withFileExtension ("cue");
         cue.replaceWithText (cueSheet (wav.getFileName(), "WAVE"));
         report << wav.getFileName() << " + " << cue.getFileName() << "\n";
@@ -571,7 +572,7 @@ public:
 
         // 1. render the program to a temp WAV and convert to raw 16-bit 44.1 kHz sectors
         auto temp = folder.getChildFile ("_render.wav");
-        if (! renderRange (temp, 0.0, totalLength(), 16, 44100.0)) { report << "Render failed\n"; return false; }
+        if (! renderRange (temp, 0.0, totalLength(), 16, 44100.0)) { report << "Render failed" << (SqRender::lastProblem().isNotEmpty() ? ": " + SqRender::lastProblem() : juce::String()) << "\n"; return false; }
         juce::AudioFormatManager afm; afm.registerBasicFormats();
         std::unique_ptr<juce::AudioFormatReader> reader (afm.createReaderFor (temp));
         if (reader == nullptr) { report << "Could not read the render\n"; return false; }

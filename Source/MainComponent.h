@@ -1542,7 +1542,7 @@ private:
             c->onEditPalette = [this] { menuItemSelected (229, 0); };
             w = std::make_unique<SqWindow> ("Color Palette", name); w->setContentOwned (c, true);
         }
-        else if (name == "hearing") { w = std::make_unique<SqWindow> ("Hearing", name); w->setContentOwned (new HearingContent(), true); }
+        else if (name == "hearing") { auto c = new HearingContent(); attachHearing (*c, tools, session); w = std::make_unique<SqWindow> ("Hearing", name); w->setContentOwned (c, true); }
         else if (name == "snapshots") { w = std::make_unique<SqWindow> ("Mix Snapshots", name); w->setContentOwned (new MixSnapshotsContent (session), true); }
         else if (name == "vocalremover")
         {

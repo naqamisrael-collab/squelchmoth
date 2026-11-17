@@ -4800,6 +4800,23 @@ inline int runSelfTest()
             check (u3.contains ("same track"), "unmask refuses one track against itself");
             const auto c1 = call ("hearing", R"({"action":"colour_notes","on":true})"), c2 = call ("hearing", R"({"action":"colour_notes","on":false})");
             check (c1.contains ("coloured by pitch") && c2.contains ("coloured by velocity"), "piano-roll note colours switch between pitch and velocity, and back to the standard look");
+            // the Hearing window's Unmask panel, wired the way the app wires it
+            {
+                HearingContent hv; attachHearing (hv, tools, *session); hv.setSize (980, 836);
+                hv.chooseTracks (ia, ib); hv.measure (false);
+                const auto& v = hv.unmaskView();
+                check (v.ok && v.overlap.found && v.overlap.firstBand == 2 && v.nameA == "Unmask A" && v.nameB == "Unmask B" && v.message.contains ("overlap from 200 to 300 Hz"),
+                       "Hearing window > Unmask: picks the two tracks, measures, and holds the same overlap the tool reports");
+                const auto shot = hv.createComponentSnapshot (hv.getLocalBounds(), true, 1.0f);
+                { const juce::File png ("/tmp/main_hearing_unmask.png"); png.deleteFile(); juce::FileOutputStream os (png); if (os.openedOk()) juce::PNGImageFormat().writeImageToStream (shot, os); }
+                int cyan = 0, pink = 0; const auto ca = Console::Look::cyan(), cb = Console::Look::pink();
+                for (int y = hv.getHeight() - 190; y < hv.getHeight() - 50; ++y) for (int x = 20; x < hv.getWidth() - 20; ++x)
+                { const auto px = shot.getPixelAt (x, y); if (std::abs (px.getRed() - ca.getRed()) < 40 && std::abs (px.getGreen() - ca.getGreen()) < 40 && std::abs (px.getBlue() - ca.getBlue()) < 40) ++cyan;
+                  if (std::abs (px.getRed() - cb.getRed()) < 40 && std::abs (px.getGreen() - cb.getGreen()) < 40 && std::abs (px.getBlue() - cb.getBlue()) < 40) ++pink; }
+                check (cyan > 300 && pink > 300, "Hearing window > Unmask: both tracks are drawn across the critical bands (" + juce::String (cyan) + " and " + juce::String (pink) + " pixels)");
+                hv.chooseTracks (ia, ia); hv.measure (false);
+                check (hv.unmaskView().message == "Choose two different tracks.", "Hearing window > Unmask: the same track twice is refused in plain words");
+            }
             // the two test files stay on disk: the session's tracks still play them
         }
         // ---- the advisor: measured advice on the mix and on one take
@@ -4862,6 +4879,33 @@ inline int runSelfTest()
                 check (sv.contains ("done"), "separate takes a video file: its sound is separated");
                 dir.deleteRecursively();
             }
+        }
+        // ---- a missing audio file: renders say so instead of waiting for ever
+        {
+            const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sq-missing-selftest"); dir.deleteRecursively(); dir.createDirectory();
+            const auto f = dir.getChildFile ("Gone Later.wav");
+            {
+                juce::AudioBuffer<float> b (1, 48000); for (int i = 0; i < 48000; ++i) b.getWritePointer (0)[i] = (float) (0.2 * std::sin (2.0 * juce::MathConstants<double>::pi * 330.0 * i / 48000.0));
+                juce::WavAudioFormat wav;
+                if (auto os = std::make_unique<juce::FileOutputStream> (f); os->openedOk())
+                    if (auto w = std::unique_ptr<juce::AudioFormatWriter> (wav.createWriterFor (os.get(), 48000.0, 1, 24, {}, 0))) { os.release(); w->writeFromAudioSampleBuffer (b, 0, 48000); }
+            }
+            const auto r = call ("add_track", R"({"kind":"audio","name":"Gone Later"})"); int idx = 0;
+            for (int i = 0; i < r.length(); ++i) if (juce::CharacterFunctions::isDigit (r[i])) { idx = r.substring (i).getIntValue(); break; }
+            call ("import_audio", "{\"track\":" + juce::String (idx) + ",\"start_seconds\":0,\"path\":" + juce::JSON::toString (juce::var (f.getFullPathName())) + "}");
+            const bool gone = f.deleteFile();
+            const auto b1 = call ("bounce", R"({"name":"st missing","start_seconds":0,"end_seconds":2})", false);
+            check (gone && b1.contains ("is missing") && b1.contains ("Gone Later.wav"), "bounce with a missing audio file stops and names the file - " + b1.substring (0, 110));
+            const auto b2 = call ("session_advice", R"({"start_seconds":0,"end_seconds":2})", false);
+            check (b2.contains ("is missing") && b2.contains ("Gone Later"), "session_advice does the same");
+            const auto b3 = call ("analyze_mix", R"({"start_seconds":0,"end_seconds":2})", false);
+            check (b3.contains ("is missing"), "analyze_mix does the same");
+            const auto b4 = call ("video_export", R"({"picture":"black","start_seconds":0,"end_seconds":2})", false);
+            check (b4.contains ("is missing") || b4.contains ("action install"), "video_export does the same (or reports that the video tools are not installed)");
+            call ("delete_track", "{\"track\":" + juce::String (idx) + "}");
+            const auto b5 = call ("analyze_mix", R"({"start_seconds":0,"end_seconds":2})");
+            check (b5.contains ("peak_dbfs"), "with the clip removed, measuring works again");
+            dir.deleteRecursively();
         }
         std::cout << "  (1.15 Reference section took " << juce::String ((juce::Time::getMillisecondCounterHiRes() - startedAt) / 1000.0, 1) << " s)" << std::endl;
     }

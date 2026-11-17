@@ -1,5 +1,11 @@
 // Squelchmoth 1.25 - `hearing`: notes as colour and number. Included inside the McpTools class body.
 
+public:
+    /** What the last `unmask` measured: read by the Hearing window to draw it. */
+    struct UnmaskResult { bool valid = false; juce::String nameA, nameB; SqHear::BarkSpectrum a, b; SqHear::Overlap overlap; };
+    UnmaskResult lastUnmask;
+private:
+
 void registerHearingTools()
 {
     add ("hearing",
@@ -77,6 +83,7 @@ void registerHearingTools()
          {
              using namespace SqHear;
              auto& e = edit();
+             lastUnmask.valid = false;
              auto* ta = session.findTrack (a["track_a"]); auto* tb = session.findTrack (a["track_b"]);
              if (ta == nullptr || tb == nullptr) return ToolResult::error ("unmask needs track_a and track_b: two tracks that exist (names or numbers)");
              if (ta == tb) return ToolResult::error ("track_a and track_b are the same track");
@@ -99,8 +106,10 @@ void registerHearingTools()
              if (sa.silent()) return ToolResult::error (ta->getName() + " is silent in that range");
              if (sb.silent()) return ToolResult::error (tb->getName() + " is silent in that range");
              auto o = findOverlap (sa, sb);
+             lastUnmask = { true, ta->getName(), tb->getName(), sa, sb, o };
              if (! o.found) return ToolResult::ok (ta->getName() + " and " + tb->getName() + " do not overlap: no critical band matters to both of them (each one's strong bands are at least 18 dB down in the other). Nothing to carve.");
              if (has (a, "keep")) o.keepA = str (a, "keep").toLowerCase() != "b";
+             lastUnmask.overlap = o;
              auto* keep = o.keepA ? ta : tb; auto* cut = o.keepA ? tb : ta;
              const double cutLevel = o.keepA ? o.levelB : o.levelA, keepLevel = o.keepA ? o.levelA : o.levelB;
              const auto n = nearestNote (o.centreHz);
@@ -119,6 +128,7 @@ void registerHearingTools()
              eq->midQ1->setParameter ((float) o.q, juce::sendNotification);
              BarkSpectrum after; if (! spectrumOf (*cut, after, err)) return ToolResult::error (err);
              const double now = after.regionDb (o.firstBand, o.lastBand);
+             (o.keepA ? lastUnmask.b : lastUnmask.a) = after;
              if (ui.refresh) ui.refresh();
              s << "\nDone: a Prism EQ is first in " << cut->getName() << "'s inserts with that cut. " << cut->getName() << " now measures " << juce::String (now, 1) << " dBFS in that range (was " << juce::String (cutLevel, 1) << "), "
                << juce::String (keepLevel - now, 1) << " dB under " << keep->getName() << ". Listen, then adjust the EQ or undo.";

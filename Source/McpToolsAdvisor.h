@@ -4,23 +4,13 @@
 bool adviseRenderAudio (const juce::Array<te::Track*>& tracks, te::TimeRange range, bool masterInserts, std::vector<float>& L, std::vector<float>& R, double& fs, juce::String& err)
 {
     L.clear(); R.clear(); fs = 0;
-    // a clip whose audio file has gone missing would stall the offline render: say which file instead
-    for (auto* t : te::getAudioTracks (*session.edit))
-    {
-        if (! tracks.isEmpty() && ! tracks.contains (t)) continue;
-        for (auto* c : t->getClips())
-            if (auto* wc = dynamic_cast<te::WaveAudioClip*> (c))
-                if (c->getEditTimeRange().overlaps (range))
-                    if (const auto f = wc->getOriginalFile(); f != juce::File() && ! f.existsAsFile())
-                    { err = "The audio file for a clip on " + t->getName() + " is missing (" + f.getFileName() + "). Put it back or remove the clip, then measure again."; return false; }
-    }
     BounceExport::Options o; o.format = "wav"; o.bitDepth = 32; o.dither = false; o.masterInserts = masterInserts; o.range = range;
     const auto tmp = juce::File::getSpecialLocation (juce::File::tempDirectory).getNonexistentChildFile ("squelchmoth-advice", ".wav", false);
     auto p = BounceExport::params (session, o, tmp);
     p.tracksToDo = te::toBitSet (tracks.isEmpty() ? te::getAllTracks (*session.edit) : tracks);
     juce::File f;
     { MonitorChain::PrintGuard guard (session); f = BounceExport::render ("Advice", p, o, err); }
-    if (! f.existsAsFile()) return true;
+    if (! f.existsAsFile()) return err.isEmpty();      // nothing audible there is fine; a missing audio file is not
     juce::String e2;
     const bool ok = RefListen::readStereo (f, 0.0, 0.0, L, R, fs, e2);
     f.deleteFile(); tmp.deleteFile();
@@ -76,7 +66,7 @@ void registerAdvisorTools()
                  if (! any || t->isMuted (true)) continue;
                  if ((int) named.size() >= 24) { ++skipped; continue; }
                  SqAdvise::Stats st; juce::Array<te::Track*> set1; for (auto x : BounceExport::renderSetFor (session, *t, false)) set1.addIfNotAlreadyThere (x);
-                 if (! adviseRender (set1, range, false, st, err)) continue;
+                 if (! adviseRender (set1, range, false, st, err)) return ToolResult::error (err);
                  if (! st.silent) named.push_back ({ t->getName(), st });
              }
              const auto adv = SqAdvise::mixAdvice (mix, named);

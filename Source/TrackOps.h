@@ -4,6 +4,7 @@
 // Commit, Bounce, Split into Mono, Duplicate with options, Move to New Folder.
 
 #include "IORouting.h"
+#include "RenderGuard.h"
 
 namespace TrackOps
 {
@@ -410,10 +411,10 @@ namespace TrackOps
         p.canRenderInMono = false;
         juce::Array<te::Track*> ts { &t };
         p.tracksToDo = te::toBitSet (ts);
-        auto f = te::Renderer::renderToFile ("Commit", p);
+        auto f = SqRender::renderToFile ("Commit", p);
         if (vp) { vp->setVolumeDb (oldVol); vp->setPan (oldPan); }
         t.setMute (wasMuted);
-        if (! f.existsAsFile()) err = "Nothing to render on " + t.getName();
+        if (! f.existsAsFile()) err = SqRender::lastProblem().isNotEmpty() ? SqRender::lastProblem() : "Nothing to render on " + t.getName();
         return f;
     }
 

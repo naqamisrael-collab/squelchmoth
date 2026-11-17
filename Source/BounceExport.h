@@ -5,6 +5,7 @@
 // named from a template ({n} {track} {session} {bpm} {date} {sr}).
 
 #include "Session.h"
+#include "RenderGuard.h"
 #include "TimeFormat.h"
 #include "Theme.h"
 #include "MonitorChain.h"
@@ -34,8 +35,11 @@ namespace BounceExport
     using SqMp3::encodeMp3;
 
     /** Renders with these parameters to 'dest', going through a temporary WAV when the format is MP3. */
+    inline juce::String missingAudioFile (te::Edit& edit, const juce::BigInteger& tracksToDo, te::TimeRange range) { return SqRender::missingAudioFile (edit, tracksToDo, range); }
+
     inline juce::File render (const juce::String& desc, te::Renderer::Parameters p, const Options& o, juce::String& err)
     {
+        if (p.edit != nullptr) { const auto missing = missingAudioFile (*p.edit, p.tracksToDo, p.time); if (missing.isNotEmpty()) { err = missing; return {}; } }
         if (o.format != "mp3") return te::Renderer::renderToFile (desc, p);
         const auto finalDest = p.destFile;
         auto tmp = finalDest.getSiblingFile (finalDest.getFileNameWithoutExtension() + " (mp3 source).wav");

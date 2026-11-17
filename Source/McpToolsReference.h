@@ -116,8 +116,8 @@ void registerReferenceTools()
                      auto dest = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("Squelchmoth compare mix.wav");
                      auto p = BounceExport::params (session, o, dest);
                      p.tracksToDo = te::toBitSet (render);
-                     auto f = te::Renderer::renderToFile ("Compare mix", p);
-                     if (! f.existsAsFile()) return ToolResult::error ("Couldn't render the session mix to compare");
+                     auto f = SqRender::renderToFile ("Compare mix", p);
+                     if (! f.existsAsFile()) return ToolResult::error (SqRender::lastProblem().isNotEmpty() ? SqRender::lastProblem() : juce::String ("Couldn't render the session mix to compare"));
                      mine = RefListen::Store::get().start (f, 0, 0, "your mix");
                  }
                  if (! waitFor (mine, err)) return ToolResult::error ("Your beat: " + err);

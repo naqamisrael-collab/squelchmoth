@@ -1564,7 +1564,7 @@ private:
                      auto p = BounceExport::params (session, o, dest);
                      p.tracksToDo = te::toBitSet (ts);
                      MonitorChain::PrintGuard guard (session); f = BounceExport::render ("Bounce", p, o, err);
-                     if (! f.existsAsFile()) err = "Bounce failed - is there any audio on those tracks in that range?";
+                     if (! f.existsAsFile() && err.isEmpty()) err = "Bounce failed - is there any audio on those tracks in that range?";
                  }
                  else f = BounceExport::bounceMix (session, o, dest, err);
                  if (! f.existsAsFile()) return ToolResult::error (err.isNotEmpty() ? err : "Bounce failed.");
@@ -1590,6 +1590,7 @@ private:
                  juce::Array<te::Track*> ts;
                  if (auto arr = a["tracks"].getArray()) { for (auto& tv : *arr) if (auto t = session.findTrack (tv)) ts.add (t); }
                  else ts = te::getAllTracks (e);
+                 if (const auto missing = BounceExport::missingAudioFile (e, te::toBitSet (ts), { start, end }); missing.isNotEmpty()) return ToolResult::error (missing);
                  auto stats = te::Renderer::measureStatistics ("Analyse", e, { start, end }, te::toBitSet (ts), 512);
                  auto o = obj();
                  set (o, "peak_dbfs", juce::Decibels::gainToDecibels (stats.peak));

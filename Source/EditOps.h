@@ -4,6 +4,7 @@
 // Repeat, Fade, Trim to selection, Nudge, Strip Silence, Consolidate, Normalise, Heal, Spot...
 
 #include "EditState.h"
+#include "RenderGuard.h"
 
 namespace EditOps
 {
@@ -615,8 +616,8 @@ namespace EditOps
             p.canRenderInMono = false;
             p.tracksToDo = te::toBitSet (juce::Array<te::Track*> { t });
 
-            auto f = te::Renderer::renderToFile ("Consolidate", p);
-            if (! f.existsAsFile()) { error = "Render failed on " + t->getName(); continue; }
+            auto f = SqRender::renderToFile ("Consolidate", p);
+            if (! f.existsAsFile()) { error = SqRender::lastProblem().isNotEmpty() ? SqRender::lastProblem() : "Render failed on " + t->getName(); continue; }
 
             t->deleteRegion (*range, nullptr);
             if (auto nc = t->insertWaveClip (t->getName() + " consolidated", f, { *range, {} }, false))
