@@ -34,6 +34,7 @@
 #include "PrismSplit.h"
 #include "Frame.h"
 #include "SqAdvisor.h"
+#include "SqHearing.h"
 
 //==============================================================================
 struct ToolResult
@@ -63,6 +64,7 @@ struct UiHooks
     std::function<MasteringProject*()> mastering;
     std::function<juce::var()> menuTree;                                  // every menu command: path, enabled, checked
     std::function<juce::String (const juce::String& path)> menuCommand;   // run one by path; returns error text or {}
+    std::function<void (double hz, double secondHz, double roomL, double roomW, double roomH)> openHearing;   // the Hearing window; zeros leave a value as it is
     std::function<void (const juce::File& song)> openVocalRemover;          // the Vocal Remover window, optionally starting on a song
     std::function<juce::StringArray()> listWindows;                       // floating windows currently open
     std::function<juce::var()> perfStats;                                 // overload monitor counters (System Usage)
@@ -441,6 +443,7 @@ private:
         registerNotesTools();
         registerFrameTools();
         registerAdvisorTools();
+        registerHearingTools();
     }
 
     #include "McpToolsParity.h"
@@ -473,6 +476,7 @@ private:
     #include "McpToolsNotes.h"
     #include "McpToolsFrame.h"
     #include "McpToolsAdvisor.h"
+    #include "McpToolsHearing.h"
 
     //==============================================================================
     void registerSessionTools()

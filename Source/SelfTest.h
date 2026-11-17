@@ -7,6 +7,7 @@
 #include "Licence.h"
 #include "ChatPanel.h"
 #include "VocalRemover.h"
+#include "HearingWindow.h"
 #include "MixerView.h"
 #include "SqEngine111.h"
 #include "ScoreWindow.h"
@@ -4740,6 +4741,31 @@ inline int runSelfTest()
                    "audio_to_midi: " + juce::String (k) + " kicks (48 played), " + juce::String (sn) + " snares (32), " + juce::String (bn) + " bass notes (16 played; a kick over a held 808 splits it); the first kick lands at "
                    + juce::String (firstKick, 3) + " s (played at " + juce::String (want, 3) + " s)");
             juce::ignoreUnused (am);
+        }
+        // ---- hearing in colour and number
+        {
+            const auto n1 = call ("hearing", R"({"hz":445})");
+            check (n1.contains ("A4 +19.6 cents") && n1.contains ("Colour: #") && n1.contains ("Bark") && n1.contains ("ERB number"), "hearing (note): 445 Hz is A4 +19.6 cents, with its colour and critical band - " + n1.upToFirstOccurrenceOf ("\n", false, false));
+            const auto n2 = call ("hearing", R"({"action":"harmonics","note":"A2","count":7})");
+            check (n2.contains ("3: 330.0 Hz  E4 +2.0 cents  ratio 3:2  (perfect fifth)") && n2.contains ("7: 770.0 Hz  G5 -31.2 cents  ratio 7:4"), "hearing (harmonics): the overtones of A2 with their notes, cents and ratios");
+            const auto n3 = call ("hearing", R"({"action":"beats","hz":440,"second_hz":443})");
+            check (n3.contains ("beat 3.00 times a second"), "hearing (beats): 440 and 443 Hz beat 3 times a second");
+            const auto n4 = call ("hearing", R"({"action":"room","length":5,"width":4,"height":2.5})");
+            check (n4.contains ("34.3 Hz") && n4.contains ("42.9 Hz") && n4.contains ("axial (1,0,0)"), "hearing (room): a 5 x 4 x 2.5 m room starts at 34.3 Hz along its length");
+            const auto bad = call ("hearing", R"({"note":"hello"})", false);
+            check (bad.contains ("Give hz"), "hearing refuses something that is neither a note nor a frequency");
+            HearingContent hc; hc.setSize (980, 640);
+            hc.setFrequency (445.0);
+            const auto shot = hc.createComponentSnapshot (hc.getLocalBounds(), true, 1.0f);
+            { const juce::File png ("/tmp/main_hearing.png"); png.deleteFile(); juce::FileOutputStream os (png); if (os.openedOk()) juce::PNGImageFormat().writeImageToStream (shot, os); }
+            const auto a4 = SqHear::noteColour (69, -6.0); int found = 0;
+            for (int y = 0; y < shot.getHeight(); y += 2) for (int x = 0; x < shot.getWidth(); x += 2) { const auto px = shot.getPixelAt (x, y); if (std::abs (px.getRed() - a4.r) <= 2 && std::abs (px.getGreen() - a4.g) <= 2 && std::abs (px.getBlue() - a4.b) <= 2) ++found; }
+            check (hc.readout().startsWith ("A4 +19.6 cents, 445.00 Hz, colour #") && found > 400, "Hearing window: shows A4 +19.6 cents and paints the note in its colour (" + juce::String (found) + " sampled pixels of " + a4.hex() + ")");
+            hc.setVision (SqHear::Vision::deutan);
+            const auto shot2 = hc.createComponentSnapshot (hc.getLocalBounds(), true, 1.0f);
+            const auto seen = SqHear::seenAs (a4, SqHear::Vision::deutan); int found2 = 0;
+            for (int y = 0; y < shot2.getHeight(); y += 2) for (int x = 0; x < shot2.getWidth(); x += 2) { const auto px = shot2.getPixelAt (x, y); if (std::abs (px.getRed() - seen.r) <= 2 && std::abs (px.getGreen() - seen.g) <= 2 && std::abs (px.getBlue() - seen.b) <= 2) ++found2; }
+            check (found2 > 400, "Hearing window: the green-blind view repaints the same note as that viewer sees it (" + seen.hex() + ")");
         }
         // ---- the advisor: measured advice on the mix and on one take
         {

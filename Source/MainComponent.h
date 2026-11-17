@@ -30,6 +30,7 @@
 #include "AutoSave.h"
 #include "MixSnapshots.h"
 #include "VocalRemover.h"
+#include "HearingWindow.h"
 #include "BounceExport.h"
 
 class MainComponent : public juce::Component,
@@ -89,6 +90,12 @@ public:
         tools.ui.fitHeights = [this] (juce::Array<te::Track*> ts) { timeline.fitHeights (ts); };
         tools.ui.setTool = [this] (int tl) { timeline.setTool ((EditTool) juce::jlimit (0, 6, tl)); };
         tools.ui.showWindow = [this] (const juce::String& w, bool show) { if (w == "beat") showView ("beat"); else toggleWindow (w, show); };
+        tools.ui.openHearing = [this] (double hz, double secondHz, double l, double w, double h)
+        {
+            toggleWindow ("hearing", true);
+            if (auto* win = findWindow ("hearing")) if (auto* c = dynamic_cast<HearingContent*> (win->getContentComponent()))
+            { if (hz > 0) c->setFrequency (hz); if (secondHz > 0) c->setSecond (secondHz); if (l > 0 && w > 0 && h > 0) c->setRoom (l, w, h); }
+        };
         tools.ui.openVocalRemover = [this] (const juce::File& song)
         {
             toggleWindow ("vocalremover", true);
@@ -410,6 +417,7 @@ public:
         }
         if (code == juce::KeyPress::F12Key || code == juce::KeyPress::numberPad3 || (cmd && shift && code == 'R')) { transportCtl.toggleRecord(); return true; }
         if (cmd && shift && code == 'M') { toggleWindow ("mastering", true); return true; }
+        if (cmd && shift && code == 'H') { toggleWindow ("hearing", ! isWindowVisible ("hearing")); return true; }
         if (cmd && shift && code == 'C') { toggleChat(); return true; }
         if (k == juce::KeyPress::returnKey && plain)   { transportCtl.returnToZero(); return true; }
         if (plain && code == juce::KeyPress::numberPad1) { transportCtl.skipBars (-1); return true; }
@@ -816,6 +824,7 @@ public:
             m.addItem (916, "Claude Panel", true, currentView == "claude");
             m.addItem (923, "Channel Rack  (" SQ_CMD "+6)", hasEdit, isWindowVisible ("rack"));
             m.addItem (929, "Vocal Remover", true, isWindowVisible ("vocalremover"));
+            m.addItem (930, "Hearing - notes as colour and number  (" SQ_CMD "+Shift+H)", true, isWindowVisible ("hearing"));
             m.addItem (924, "Cut Lab - audio editor  (" SQ_CMD "+Shift+E)", true, cutLab != nullptr && cutLab->isVisible());
             m.addItem (926, "Score - notation  (" SQ_CMD "+" SQ_OPT "+N)", hasEdit, isWindowVisible ("score"));
             {
@@ -1137,6 +1146,7 @@ public:
         else if (id == 922) toggleWindow ("snapshots", true);
         else if (id == 923) toggleWindow ("rack", true);
         else if (id == 929) toggleWindow ("vocalremover", true);
+        else if (id == 930) toggleWindow ("hearing", ! isWindowVisible ("hearing"));
         else if (id == 924) openCutLabGated ({});
 
         // ---- Claude
@@ -1532,6 +1542,7 @@ private:
             c->onEditPalette = [this] { menuItemSelected (229, 0); };
             w = std::make_unique<SqWindow> ("Color Palette", name); w->setContentOwned (c, true);
         }
+        else if (name == "hearing") { w = std::make_unique<SqWindow> ("Hearing", name); w->setContentOwned (new HearingContent(), true); }
         else if (name == "snapshots") { w = std::make_unique<SqWindow> ("Mix Snapshots", name); w->setContentOwned (new MixSnapshotsContent (session), true); }
         else if (name == "vocalremover")
         {
