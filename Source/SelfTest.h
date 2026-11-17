@@ -4767,6 +4767,41 @@ inline int runSelfTest()
             for (int y = 0; y < shot2.getHeight(); y += 2) for (int x = 0; x < shot2.getWidth(); x += 2) { const auto px = shot2.getPixelAt (x, y); if (std::abs (px.getRed() - seen.r) <= 2 && std::abs (px.getGreen() - seen.g) <= 2 && std::abs (px.getBlue() - seen.b) <= 2) ++found2; }
             check (found2 > 400, "Hearing window: the green-blind view repaints the same note as that viewer sees it (" + seen.hex() + ")");
         }
+        // ---- unmask: two tracks in the same critical band, found and carved
+        {
+            const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sq-unmask-selftest"); dir.deleteRecursively(); dir.createDirectory();
+            auto writeTones = [&] (const juce::String& name, std::initializer_list<std::pair<double, double>> parts)
+            {
+                const double fs = 48000.0; const int n = 48000 * 4; juce::AudioBuffer<float> b (1, n); b.clear();
+                for (auto& p : parts) for (int i = 0; i < n; ++i) b.getWritePointer (0)[i] += (float) (p.second * std::sin (2.0 * juce::MathConstants<double>::pi * p.first * i / fs));
+                const auto f = dir.getChildFile (name + ".wav"); juce::WavAudioFormat wav;
+                if (auto os = std::make_unique<juce::FileOutputStream> (f); os->openedOk())
+                    if (auto w = std::unique_ptr<juce::AudioFormatWriter> (wav.createWriterFor (os.get(), fs, 1, 24, {}, 0))) { os.release(); w->writeFromAudioSampleBuffer (b, 0, n); }
+                return f;
+            };
+            const auto fa = writeTones ("Unmask A", { { 230.0, 0.4 }, { 3000.0, 0.1 } }), fb = writeTones ("Unmask B", { { 260.0, 0.2 }, { 800.0, 0.1 } });
+            auto addWith = [&] (const juce::String& name, const juce::File& f)
+            {
+                const auto r = call ("add_track", "{\"kind\":\"audio\",\"name\":\"" + name + "\"}"); int idx = 0;
+                for (int i = 0; i < r.length(); ++i) if (juce::CharacterFunctions::isDigit (r[i])) { idx = r.substring (i).getIntValue(); break; }
+                call ("import_audio", "{\"track\":" + juce::String (idx) + ",\"start_seconds\":0,\"path\":" + juce::JSON::toString (juce::var (f.getFullPathName())) + "}");
+                return idx;
+            };
+            const int ia = addWith ("Unmask A", fa), ib = addWith ("Unmask B", fb);
+            const auto args = "\"track_a\":" + juce::String (ia) + ",\"track_b\":" + juce::String (ib) + ",\"start_seconds\":0,\"end_seconds\":4";
+            const auto u1 = call ("unmask", "{" + args + "}");
+            check (u1.contains ("overlap from 200 to 300 Hz") && u1.contains ("keep Unmask A") && u1.contains ("cut Unmask B") && u1.contains ("at 245 Hz") && u1.contains ("Nothing was changed"),
+                   "unmask finds the shared 200-300 Hz band of two test tracks and proposes the cut - " + u1.fromFirstOccurrenceOf ("Starting point: ", false, false).upToFirstOccurrenceOf ("\n", false, false));
+            const auto u2 = call ("unmask", "{" + args + ",\"apply\":true}");
+            const double was = u2.fromFirstOccurrenceOf ("(was ", false, false).getDoubleValue(), now = u2.fromFirstOccurrenceOf ("now measures ", false, false).getDoubleValue();
+            bool hasEq = false; if (auto tb2 = session->findTrack (juce::var (ib))) for (auto p : tb2->pluginList) if (dynamic_cast<te::EqualiserPlugin*> (p) != nullptr) hasEq = true;
+            check (hasEq && u2.contains ("Done: a Prism EQ") && now < was - 1.5 && now > was - 8.0, "unmask apply: the EQ is on the quieter track and that band came down from " + juce::String (was, 1) + " to " + juce::String (now, 1) + " dBFS");
+            const auto u3 = call ("unmask", "{\"track_a\":" + juce::String (ia) + ",\"track_b\":" + juce::String (ia) + "}", false);
+            check (u3.contains ("same track"), "unmask refuses one track against itself");
+            const auto c1 = call ("hearing", R"({"action":"colour_notes","on":true})"), c2 = call ("hearing", R"({"action":"colour_notes","on":false})");
+            check (c1.contains ("coloured by pitch") && c2.contains ("coloured by velocity"), "piano-roll note colours switch between pitch and velocity, and back to the standard look");
+            // the two test files stay on disk: the session's tracks still play them
+        }
         // ---- the advisor: measured advice on the mix and on one take
         {
             const auto adv = call ("session_advice", R"({"start_seconds":0,"end_seconds":12})");

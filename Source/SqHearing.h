@@ -113,6 +113,81 @@ namespace SqHear
         return v;
     }
 
+    //============================================================================== two sounds in the same place
+    /** A sound's energy in each of the 24 critical bands (mean square of the mono sum). */
+    struct BarkSpectrum
+    {
+        double power[24] = {};
+        double db (int b) const   { return 10.0 * std::log10 (power[b] + 1e-20); }
+        double peakDb() const     { double m = -200.0; for (int b = 0; b < 24; ++b) m = std::max (m, db (b)); return m; }
+        bool silent() const       { return peakDb() < -80.0; }
+        double regionDb (int first, int last) const { double p = 0; for (int b = first; b <= last; ++b) p += power[b]; return 10.0 * std::log10 (p + 1e-20); }
+    };
+
+    inline BarkSpectrum barkSpectrum (const float* L, const float* R, int n, double fs)
+    {
+        BarkSpectrum s; if (n <= 0 || fs <= 0) return s;
+        if (R == nullptr) R = L;
+        const int order = 13, N = 1 << order, hop = N / 2;
+        juce::dsp::FFT fft (order);
+        std::vector<float> win ((size_t) N), buf ((size_t) (2 * N));
+        double wsum = 0; for (int i = 0; i < N; ++i) { win[(size_t) i] = 0.5f - 0.5f * std::cos (juce::MathConstants<float>::twoPi * (float) i / (float) N); wsum += (double) win[(size_t) i] * win[(size_t) i]; }
+        int frames = 0;
+        for (int p = 0; p < n; p += hop)
+        {
+            std::fill (buf.begin(), buf.end(), 0.0f);
+            const int have = std::min (N, n - p);
+            for (int i = 0; i < have; ++i) buf[(size_t) i] = 0.5f * (L[p + i] + R[p + i]) * win[(size_t) i];
+            fft.performRealOnlyForwardTransform (buf.data(), true);
+            int band = 0;
+            for (int k = 1; k < N / 2; ++k)
+            {
+                const double f = k * fs / N; if (f >= barkEdges[24]) break;
+                while (band < 23 && f >= barkEdges[band + 1]) ++band;
+                s.power[band] += ((double) buf[(size_t) (2 * k)] * buf[(size_t) (2 * k)] + (double) buf[(size_t) (2 * k + 1)] * buf[(size_t) (2 * k + 1)]) * 2.0 / (N * wsum);
+            }
+            ++frames;
+            if (p + N >= n) break;
+        }
+        if (frames > 0) for (auto& v : s.power) v /= frames;
+        return s;
+    }
+
+    /** Where two sounds sit on top of each other, and a starting point for moving one out of the way. */
+    struct Overlap
+    {
+        bool found = false; int firstBand = 0, lastBand = 0;
+        double lowHz = 0, highHz = 0, centreHz = 0, q = 1.0;
+        double levelA = -200, levelB = -200;      // each sound's level inside the region, dBFS
+        bool keepA = true;                        // the louder one there keeps the range
+        double cutDb = 3.0;                       // suggested cut on the other
+    };
+
+    /** The critical bands that matter to BOTH sounds (within 18 dB of each one's own strongest band); the region where
+        that is most true, up to three bands wide. Energy overlap on the Bark scale - not a masked-threshold model. */
+    inline Overlap findOverlap (const BarkSpectrum& a, const BarkSpectrum& b)
+    {
+        Overlap o; if (a.silent() || b.silent()) return o;
+        const double pa = a.peakDb(), pb = b.peakDb();
+        bool relevant[24]; int best = -1; double bestScore = -1e9;
+        for (int i = 0; i < 24; ++i)
+        {
+            const double ra = a.db (i) - pa, rb = b.db (i) - pb;
+            relevant[i] = ra >= -18.0 && rb >= -18.0 && a.db (i) > -70.0 && b.db (i) > -70.0;
+            if (relevant[i] && std::min (ra, rb) > bestScore) { bestScore = std::min (ra, rb); best = i; }
+        }
+        if (best < 0) return o;
+        o.found = true; o.firstBand = o.lastBand = best;
+        if (best > 0 && relevant[best - 1]) o.firstBand = best - 1;
+        if (best < 23 && relevant[best + 1]) o.lastBand = best + 1;
+        o.lowHz = std::max (20.0, barkEdges[o.firstBand]); o.highHz = barkEdges[o.lastBand + 1];
+        o.centreHz = std::sqrt (o.lowHz * o.highHz); o.q = juce::jlimit (0.7, 6.0, o.centreHz / (o.highHz - o.lowHz));
+        o.levelA = a.regionDb (o.firstBand, o.lastBand); o.levelB = b.regionDb (o.firstBand, o.lastBand);
+        o.keepA = o.levelA >= o.levelB;
+        o.cutDb = juce::jlimit (2.0, 6.0, 6.0 - 0.5 * std::abs (o.levelA - o.levelB));
+        return o;
+    }
+
     //============================================================================== colour
     struct RGB
     {

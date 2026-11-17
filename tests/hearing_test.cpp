@@ -37,6 +37,20 @@ int main()
         check (sorted && hasHeight, "modes come lowest first; the floor-to-ceiling mode is 68.6 Hz");
     }
 
+    std::printf ("== Hearing: two sounds in the same place ==\n");
+    {
+        const double fs = 48000.0; const int n = 48000 * 3;
+        auto tones = [&] (std::initializer_list<std::pair<double, double>> parts) { std::vector<float> v ((size_t) n, 0.0f); for (auto& p : parts) for (int i = 0; i < n; ++i) v[(size_t) i] += (float) (p.second * std::sin (2.0 * juce::MathConstants<double>::pi * p.first * i / fs)); return v; };
+        const auto A = tones ({ { 230.0, 0.4 }, { 3000.0, 0.1 } }), B = tones ({ { 260.0, 0.2 }, { 800.0, 0.1 } }), C = tones ({ { 100.0, 0.3 } }), D = tones ({ { 5000.0, 0.3 } });
+        const auto sa = barkSpectrum (A.data(), A.data(), n, fs), sb = barkSpectrum (B.data(), B.data(), n, fs), sc = barkSpectrum (C.data(), C.data(), n, fs), sd = barkSpectrum (D.data(), D.data(), n, fs);
+        check (near (sa.db (2), -11.0, 0.3) && sa.db (2) > sa.db (1) + 30.0 && near (sa.db (15), -23.0, 0.3), "a 230 Hz tone at 0.4 reads -11 dBFS in the 200-300 Hz band and nowhere else nearby (" + juce::String (sa.db (2), 1) + ")");
+        const auto o = findOverlap (sa, sb);
+        check (o.found && o.firstBand == 2 && o.lastBand == 2 && near (o.lowHz, 200.0, 1e-9) && near (o.highHz, 300.0, 1e-9) && near (o.centreHz, 244.95, 0.01), "two sounds that both live at 200-300 Hz: that is the overlap found (centre " + juce::String (o.centreHz, 0) + " Hz, Q " + juce::String (o.q, 1) + ")");
+        check (o.keepA && near (o.levelA - o.levelB, 6.02, 0.1) && near (o.cutDb, 2.99, 0.06), "the louder one there keeps the range; the other is cut " + juce::String (o.cutDb, 1) + " dB (levels " + juce::String (o.levelA, 1) + " and " + juce::String (o.levelB, 1) + " dBFS)");
+        check (! findOverlap (sc, sd).found, "a 100 Hz sound and a 5 kHz sound do not overlap");
+        const std::vector<float> z ((size_t) n, 0.0f);
+        check (! findOverlap (sa, barkSpectrum (z.data(), z.data(), n, fs)).found, "nothing overlaps with silence");
+    }
     std::printf ("== Hearing: colour ==\n");
     check (fifthsPosition (60) == 0 && fifthsPosition (67) == 1 && fifthsPosition (62) == 2 && fifthsPosition (65) == 11 && fifthsPosition (66) == 6, "pitch classes sit on the circle of fifths: C, G, D ... F");
     {

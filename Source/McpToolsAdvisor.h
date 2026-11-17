@@ -1,19 +1,38 @@
 // Squelchmoth 1.23 - `session_advice`: the engineer at your shoulder. Included inside the McpTools class body.
 
-bool adviseRender (const juce::Array<te::Track*>& tracks, te::TimeRange range, bool masterInserts, SqAdvise::Stats& out, juce::String& err)
+/** Renders tracks (all when empty) over a range to memory. ok with empty L = nothing audible there. */
+bool adviseRenderAudio (const juce::Array<te::Track*>& tracks, te::TimeRange range, bool masterInserts, std::vector<float>& L, std::vector<float>& R, double& fs, juce::String& err)
 {
+    L.clear(); R.clear(); fs = 0;
+    // a clip whose audio file has gone missing would stall the offline render: say which file instead
+    for (auto* t : te::getAudioTracks (*session.edit))
+    {
+        if (! tracks.isEmpty() && ! tracks.contains (t)) continue;
+        for (auto* c : t->getClips())
+            if (auto* wc = dynamic_cast<te::WaveAudioClip*> (c))
+                if (c->getEditTimeRange().overlaps (range))
+                    if (const auto f = wc->getOriginalFile(); f != juce::File() && ! f.existsAsFile())
+                    { err = "The audio file for a clip on " + t->getName() + " is missing (" + f.getFileName() + "). Put it back or remove the clip, then measure again."; return false; }
+    }
     BounceExport::Options o; o.format = "wav"; o.bitDepth = 32; o.dither = false; o.masterInserts = masterInserts; o.range = range;
     const auto tmp = juce::File::getSpecialLocation (juce::File::tempDirectory).getNonexistentChildFile ("squelchmoth-advice", ".wav", false);
     auto p = BounceExport::params (session, o, tmp);
     p.tracksToDo = te::toBitSet (tracks.isEmpty() ? te::getAllTracks (*session.edit) : tracks);
     juce::File f;
     { MonitorChain::PrintGuard guard (session); f = BounceExport::render ("Advice", p, o, err); }
-    if (! f.existsAsFile()) { out = {}; return true; }          // nothing audible on these tracks in the range: silent
-    std::vector<float> L, R; double fs = 0; juce::String e2;
+    if (! f.existsAsFile()) return true;
+    juce::String e2;
     const bool ok = RefListen::readStereo (f, 0.0, 0.0, L, R, fs, e2);
     f.deleteFile(); tmp.deleteFile();
     if (! ok) { err = e2; return false; }
-    out = SqAdvise::measure (L.data(), R.data(), (int) L.size(), fs);
+    return true;
+}
+
+bool adviseRender (const juce::Array<te::Track*>& tracks, te::TimeRange range, bool masterInserts, SqAdvise::Stats& out, juce::String& err)
+{
+    std::vector<float> L, R; double fs = 0;
+    if (! adviseRenderAudio (tracks, range, masterInserts, L, R, fs, err)) return false;
+    out = L.empty() ? SqAdvise::Stats() : SqAdvise::measure (L.data(), R.data(), (int) L.size(), fs);
     return true;
 }
 

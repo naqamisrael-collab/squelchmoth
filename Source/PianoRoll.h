@@ -18,6 +18,8 @@
 #include "Behaviours.h"
 #include "MidiTools.h"
 #include "KeyLabels.h"
+#include "SqHearing.h"
+#include "Prefs.h"
 #include "ChordTool.h"
 
 class PianoRollGrid : public juce::Component
@@ -124,6 +126,12 @@ public:
             if (! r.intersects (clipArea.toFloat())) continue;
             const bool sel = selection.contains (n);
             auto c = Theme::acid().interpolatedWith (Theme::magenta(), 1.0f - n->getVelocity() / 127.0f);
+            if (pitchColours)
+            {
+                // the Hearing colours: pitch class = hue, octave = lightness, velocity = how vivid
+                const auto hc = SqHear::noteColour (n->getNoteNumber(), -30.0 + 30.0 * n->getVelocity() / 127.0);
+                c = juce::Colour (hc.r, hc.g, hc.b);
+            }
             if (n->isMute()) c = Theme::dim();
             g.setColour (sel ? Theme::text() : c);
             g.fillRoundedRectangle (r, 2.0f);
@@ -306,6 +314,8 @@ public:
         juce::Component::mouseWheelMove (e, w);
     }
     std::function<void()> onZoom;
+    bool pitchColours = Prefs::getBool ("pr_pitchColours", false);      // notes in the Hearing colours instead of velocity colours
+    void setPitchColours (bool on) { pitchColours = on; Prefs::set ("pr_pitchColours", on); repaint(); }
 
     bool keyPressed (const juce::KeyPress& k) override
     {
@@ -315,6 +325,7 @@ public:
         if (k == juce::KeyPress ('z', cmd, 0))                                           { undo.undo(); setSelection ({}); return true; }
         if (k == juce::KeyPress ('z', cmd | juce::ModifierKeys::shiftModifier, 0))      { undo.redo(); setSelection ({}); return true; }
         if (k == juce::KeyPress ('a', cmd, 0))  { juce::Array<te::MidiNote*> all; for (auto* n : clip.getSequence().getNotes()) all.add (n); setSelection (all); return true; }
+        if (k == juce::KeyPress ('h', juce::ModifierKeys::altModifier, 0)) { setPitchColours (! pitchColours); return true; }
         if (k == juce::KeyPress ('c', cmd, 0))  { copySelection(); return true; }
         if (k == juce::KeyPress ('v', cmd, 0))  { paste(); return true; }
         if (k == juce::KeyPress ('d', cmd, 0))  { duplicateSelection(); return true; }
@@ -823,6 +834,8 @@ private:
             m.addItem (183, "Flip (mirror pitches)", any);
             m.addSeparator();
             m.addItem (184, "Riff starter: random melody in key over the clip");
+            m.addSeparator();
+            m.addItem (187, "Colour notes by pitch - the Hearing colours  (" SQ_OPT "+H)", true, grid.pitchColours);
             m.addItem (185, "Select all");
             m.addItem (186, "Delete selected", ! grid.selection.isEmpty());
             m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (toolsBtn), [this] (int r) { runTool (r); });
@@ -888,6 +901,7 @@ private:
                     grid.setSelection (made);
                     break;
                 }
+                case 187: grid.setPitchColours (! grid.pitchColours); break;
                 case 185: { juce::Array<te::MidiNote*> all; for (auto* n : c.getSequence().getNotes()) all.add (n); grid.setSelection (all); break; }
                 case 186: for (auto* n : sel) c.getSequence().removeNote (*n, &c.edit.getUndoManager()); grid.setSelection ({}); break;
                 default: break;
