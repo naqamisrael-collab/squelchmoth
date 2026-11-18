@@ -111,6 +111,8 @@ namespace Frame
             }
             if (total > 0 && got >= total) return true;
             if (total <= 0 && ended && got > before) return true;                           // no length given: the stream ended
+            if (status >= 400 && status < 500 && status != 408 && status != 429)            // not there: trying again will not help
+            { err = "The download is not available from its source right now (answer " + juce::String (status) + ")."; return false; }
             if (got > before) stalls = 0; else if (++stalls >= 6) break;
             juce::Thread::sleep (juce::jmin (6000, 700 * (stalls + 1)));
         }

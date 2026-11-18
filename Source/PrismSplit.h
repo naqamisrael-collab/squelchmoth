@@ -39,6 +39,22 @@ namespace PrismSplit
             return { "https://github.com/microsoft/onnxruntime/releases/download/v1.17.3/onnxruntime-linux-x64-1.17.3.tgz", "f2f11f9da1e3e19b22a8b378b9af57a58433f40e3db6a803e75c0ec0eba97a20", "lib/libonnxruntime.so.1.17.3", "libonnxruntime.so.1.17.3", 6 };
            #endif
         }
+        /** The same runtime from Microsoft's package feed (one package with every platform inside): used when the
+            release page does not serve the smaller per-platform download. */
+        inline Item runtimeAltItem()
+        {
+            const char* url = "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.17.3/microsoft.ml.onnxruntime.1.17.3.nupkg";
+            const char* sha = "e7fecf6fe6ae54d5e43664c4e2354138b5b86d4f0ccf946fbab1ef48650524e3";
+           #if JUCE_WINDOWS
+            return { url, sha, "runtimes/win-x64/native/onnxruntime.dll", runtimeItem().saveAs, 80 };
+           #elif JUCE_MAC && JUCE_ARM
+            return { url, sha, "runtimes/osx-arm64/native/libonnxruntime.dylib", runtimeItem().saveAs, 80 };
+           #elif JUCE_MAC
+            return { url, sha, "runtimes/osx-x64/native/libonnxruntime.dylib", runtimeItem().saveAs, 80 };
+           #else
+            return { url, sha, "runtimes/linux-x64/native/libonnxruntime.so", runtimeItem().saveAs, 80 };
+           #endif
+        }
         inline Item model6Item() { return { "https://huggingface.co/StemSplitio/htdemucs-6s-onnx/resolve/main/htdemucs_6s_fp16weights.onnx", "7ce55792e2231c93fbf92de95f5fd5b3a5e6c89f7db690dfd693e8f1dce56869", "", "prism-split-6.onnx", 130 }; }
         inline Item modelItem() { return { "https://huggingface.co/StemSplitio/htdemucs-onnx/resolve/main/htdemucs_fp16weights.onnx", "d05c269d0178d2a72ad484b10b11dd370193fc923201c3b27a99f848745db70a", "", "prism-split-4.onnx", 158 }; }
 
@@ -96,7 +112,7 @@ namespace PrismSplit
             if (! juce::SHA256 (tmp).toHexString().equalsIgnoreCase (it.sha256)) { tmp.deleteFile(); err = juce::String (it.saveAs) + ": the download did not match its checksum (try again)"; return false; }
             bool ok = false;
             if (juce::String (it.inner).isEmpty()) ok = tmp.moveFileTo (finalFile);
-            else if (juce::String (it.url).endsWith (".zip"))
+            else if (juce::String (it.url).endsWith (".zip") || juce::String (it.url).endsWith (".nupkg"))
             {
                 juce::ZipFile zip (tmp);
                 for (int i = 0; i < zip.getNumEntries(); ++i)
@@ -120,6 +136,7 @@ namespace PrismSplit
                 auto& s = state(); juce::String err;
                 s.stage = "separation runtime";
                 bool ok = fetch (runtimeItem(), 0.0f, runtimeOnly ? 1.0f : 0.15f, err);
+                if (! ok) { s.stage = "separation runtime (second source)"; err = {}; ok = fetch (runtimeAltItem(), 0.0f, runtimeOnly ? 1.0f : 0.15f, err); }
                 if (ok && ! runtimeOnly && ! sixStems) { s.stage = "separation model (158 MB)"; ok = fetch (modelItem(), 0.15f, 1.0f, err); }
                 if (ok && ! runtimeOnly && sixStems) { s.stage = "6-stem model with guitar and piano (130 MB)"; ok = fetch (model6Item(), 0.15f, 1.0f, err); }
                 s.error = ok ? juce::String() : err; s.progress = 1.0f; s.finished = true; s.running = false; s.done.signal();

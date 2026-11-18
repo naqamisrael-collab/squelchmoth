@@ -4896,11 +4896,16 @@ inline int runSelfTest()
                 // ---- the picture: exact frames, and the Video window following a clock
                 {
                     // a clip whose brightness rises frame by frame, so the frame on screen can be read back from the picture
-                    const auto ramp = dir.getChildFile ("ramp.mp4"); juce::String o2;
-                    Frame::run ({ ff.getFullPathName(), "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=white:s=64x64:r=25:d=4,fade=t=in:st=0:d=4", "-f", "lavfi", "-i", "sine=f=330:d=4",
-                                  "-c:v", Frame::videoEncoder(), "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", ramp.getFullPathName() }, o2);
+                    // (the frames are written here, grey level 4 + 2.5 per frame, so no FFmpeg filter decides what they contain)
+                    const auto ramp = dir.getChildFile ("ramp.mp4"), rawFrames = dir.getChildFile ("ramp.rgb"); juce::String o2;
+                    {
+                        juce::FileOutputStream os (rawFrames); juce::HeapBlock<juce::uint8> fr (64 * 64 * 3);
+                        for (int k = 0; k < 100; ++k) { std::memset (fr, juce::roundToInt (4.0 + 2.5 * k), 64 * 64 * 3); os.write (fr, 64 * 64 * 3); }
+                    }
+                    Frame::run ({ ff.getFullPathName(), "-y", "-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", "64x64", "-r", "25", "-i", rawFrames.getFullPathName(),
+                                  "-f", "lavfi", "-i", "sine=f=330:d=4", "-c:v", Frame::videoEncoder(), "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", ramp.getFullPathName() }, o2);
                     const auto in = Frame::probe (ramp);
-                    auto frameOf = [] (const juce::Image& img) { return img.isValid() ? (double) img.getPixelAt (img.getWidth() / 2, img.getHeight() / 2).getGreen() / 2.52 : -100.0; };
+                    auto frameOf = [] (const juce::Image& img) { return img.isValid() ? ((double) img.getPixelAt (img.getWidth() / 2, img.getHeight() / 2).getGreen() - 4.0) / 2.5 : -100.0; };
                     juce::String gerr; bool exact = in.ok && std::abs (in.fps - 25.0) < 0.01; juce::String seen;
                     for (double t : { 0.02, 1.0, 2.52, 3.9 })
                     {
