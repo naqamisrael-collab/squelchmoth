@@ -265,6 +265,22 @@ inline int runSelfTest()
         };
         auto snap = [&] (juce::Component& c, int w, int h) { c.setSize (w, h); juce::MessageManager::getInstance()->runDispatchLoopUntil (400); return c.createComponentSnapshot (c.getLocalBounds(), true, 1.0f); };
 
+        // 0. The Hearing window on a real beat: the note panels, and Unmask measuring two of the beat's own tracks
+        {
+            call ("new_session", R"({"name":"Hearing"})");
+            const auto built = call ("build_beat", R"({"style":"trap","bpm":140,"seed":7})");
+            HearingContent hc; attachHearing (hc, tools, *session);
+            int a = 0, b = 0, n = 0; juce::StringArray names;
+            for (auto* t : session->getTracks()) { ++n; names.add (t->getName()); const auto nm = t->getName().toLowerCase(); if (a == 0 && (nm.contains ("808") || nm.contains ("bass") || nm.contains ("sub"))) a = n; else if (b == 0 && (nm.contains ("drum") || nm.contains ("kick"))) b = n; }
+            std::cout << "  hearing shot: build_beat -> " << built.upToFirstOccurrenceOf ("\n", false, false).substring (0, 160) << "\n  tracks: " << names.joinIntoString (" | ") << "\n";
+            if (a == 0 || b == 0) { a = juce::jmax (1, n - 1); b = n; }
+            hc.setFrequency (SqHear::midiToHz (53)); hc.setSecond (SqHear::midiToHz (53) + 2.0);
+            hc.chooseTracks (a, b); hc.measure (false);
+            std::cout << "  hearing shot: " << hc.unmaskView().message.upToFirstOccurrenceOf ("\n", false, false) << "\n";
+            save (snap (hc, 980, 836), "hearing");
+            if (juce::SystemStats::getEnvironmentVariable ("SQUELCH_SHOTS_ONLY", {}) == "hearing") { scannerOwner.reset(); session.reset(); engine.reset(); return 0; }
+        }
+
         // 1. The mixer with ChatGPT working in Squelchmoth Chat
         call ("new_session", R"({"name":"Late Night Drive"})");
         call ("set_tempo", R"({"bpm":92})");
@@ -4877,6 +4893,60 @@ inline int runSelfTest()
                 check (e2.contains ("exported") && p2.ok && p2.width == 640 && p2.height == 360 && p2.hasAudio && std::abs (p2.seconds - 3.0) < 0.35, "video_export picture waveform 640 x 360 - " + p2.text());
                 const auto sv = call ("separate", "{\"quality\":\"draft\",\"import\":false,\"wait_seconds\":120,\"file\":" + asJson (clip) + ",\"folder\":" + asJson (dir) + "}");
                 check (sv.contains ("done"), "separate takes a video file: its sound is separated");
+                // ---- the picture: exact frames, and the Video window following a clock
+                {
+                    // a clip whose brightness rises frame by frame, so the frame on screen can be read back from the picture
+                    const auto ramp = dir.getChildFile ("ramp.mp4"); juce::String o2;
+                    Frame::run ({ ff.getFullPathName(), "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=white:s=64x64:r=25:d=4,fade=t=in:st=0:d=4", "-f", "lavfi", "-i", "sine=f=330:d=4",
+                                  "-c:v", Frame::videoEncoder(), "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", ramp.getFullPathName() }, o2);
+                    const auto in = Frame::probe (ramp);
+                    auto frameOf = [] (const juce::Image& img) { return img.isValid() ? (double) img.getPixelAt (img.getWidth() / 2, img.getHeight() / 2).getGreen() / 2.52 : -100.0; };
+                    juce::String gerr; bool exact = in.ok && std::abs (in.fps - 25.0) < 0.01; juce::String seen;
+                    for (double t : { 0.02, 1.0, 2.52, 3.9 })
+                    {
+                        const auto img = Frame::grabFrame (ramp, in, t, 64, gerr); const double got = frameOf (img), want = (double) Frame::frameIndexAt (t, 25.0);
+                        seen << juce::String (t, 2) << " s -> frame " << juce::String (got, 1) << " (" << juce::String ((int) want) << ")  ";
+                        if (std::abs (got - want) > 1.2) exact = false;
+                    }
+                    check (exact, "Frame: the frame fetched for a time is the one on screen then - " + seen.trim());
+                    call ("new_session", R"({"name":"Selftest Video"})");
+                    const auto vi2 = call ("video_import", "{\"path\":" + asJson (ramp) + ",\"start_seconds\":2}");
+                    const auto png = dir.getChildFile ("frame.png");
+                    const auto vf = call ("video_frame", "{\"seconds\":3.0,\"path\":" + asJson (png) + "}");
+                    const auto saved = juce::ImageFileFormat::loadFrom (png);
+                    check (vi2.contains ("64 x 64") && vf.contains ("frame 25 of ramp.mp4") && vf.contains ("00:00:01:00 in the video") && saved.isValid() && std::abs (frameOf (saved) - 25.0) <= 1.2,
+                           "video_frame: 3.0 s of the session is frame 25 of a video placed at 2 s, and the saved picture is that frame - " + vf.upToFirstOccurrenceOf ("\n", false, false));
+                    const auto before = call ("video_frame", R"({"seconds":1.0})"), after = call ("video_frame", R"({"seconds":7.5})");
+                    check (before.contains ("has not started") && after.contains ("has ended"), "video_frame says so before the picture starts and after it ends");
+
+                    VideoContent vc; double clock = 2.0; bool playing = false;
+                    vc.readState = [&] { VideoContent::State s; s.video = ramp; s.videoStartsAt = 2.0; s.playhead = clock; s.playing = playing; return s; };
+                    vc.setSize (880, 560);
+                    auto pump = [&] (int ms) { const auto end = juce::Time::getMillisecondCounter() + (juce::uint32) ms; while (juce::Time::getMillisecondCounter() < end) { vc.update(); juce::Thread::sleep (15); } };
+                    clock = 4.0; pump (100); for (int i = 0; i < 200 && vc.frameShown() != 50; ++i) pump (30);
+                    check (vc.frameShown() == 50 && std::abs (frameOf (vc.imageShown()) - 50.0) <= 1.2, "Video window, stopped: the playhead at 4.0 s shows frame 50 exactly (the picture reads " + juce::String (frameOf (vc.imageShown()), 1) + ")");
+                    { const auto shot = vc.createComponentSnapshot (vc.getLocalBounds(), true, 1.0f); const juce::File sp ("/tmp/main_video.png"); sp.deleteFile(); juce::FileOutputStream os (sp); if (os.openedOk()) juce::PNGImageFormat().writeImageToStream (shot, os); }
+                    // play from 2.4 s for a second and a half of real time: the picture must keep up with the clock
+                    playing = true; const double t0 = 2.4; const auto started = juce::Time::getMillisecondCounterHiRes();
+                    int samples = 0, close = 0, distinct = 0; juce::int64 last = -1; bool backwards = false; double worst = 0;
+                    while (juce::Time::getMillisecondCounterHiRes() - started < 1500.0)
+                    {
+                        clock = t0 + (juce::Time::getMillisecondCounterHiRes() - started) / 1000.0; vc.update();
+                        const auto shown = vc.frameShown(), want = Frame::frameIndexAt (clock - 2.0, 25.0);
+                        if (juce::Time::getMillisecondCounterHiRes() - started > 600.0 && shown >= 0)
+                        {
+                            ++samples; const double off = (double) std::abs (shown - want); worst = std::max (worst, off); if (off <= 2.0) ++close;
+                            if (shown != last) { if (shown < last) backwards = true; ++distinct; last = shown; }
+                        }
+                        juce::Thread::sleep (12);
+                    }
+                    playing = false; vc.update();
+                    check (samples > 20 && distinct >= 12 && ! backwards && close >= samples * 8 / 10,
+                           "Video window, playing: the picture follows the clock - " + juce::String (distinct) + " frames in order over 0.9 s, " + juce::String (close) + " of " + juce::String (samples) + " looks within two frames (worst " + juce::String (worst, 0) + ")");
+                    clock = 9.0; pump (150);
+                    check (vc.frameShown() == -1 && ! vc.imageShown().isValid(), "Video window: past the end of the video there is no picture, and it says so");
+                    vc.getPlayer().stopStream();
+                }
                 dir.deleteRecursively();
             }
         }

@@ -117,6 +117,7 @@ void registerHearingTools()
                               + (o.firstBand == o.lastBand ? " " + juce::String (o.firstBand + 1) : "s " + juce::String (o.firstBand + 1) + " to " + juce::String (o.lastBand + 1)) + ", around " + n.name + "): "
                               + keep->getName() + " is at " + juce::String (keepLevel, 1) + " dBFS there, " + cut->getName() + " at " + juce::String (cutLevel, 1) + " dBFS.";
              s << "\nStarting point: keep " << keep->getName() << " there and cut " << cut->getName() << " by " << juce::String (o.cutDb, 1) << " dB at " << juce::String (juce::roundToInt (o.centreHz)) << " Hz, Q " << juce::String (o.q, 1) << ".";
+             if (o.centreHz < 150.0) s << "\nThis is the bottom of the mix: a fixed cut there thins the part all the time. Ducking " << cut->getName() << " only while " << keep->getName() << " hits (a sidechain compressor) usually keeps more of both; use the cut when the two play different notes.";
              if (! flag (a, "apply")) return ToolResult::ok (s + "\nNothing was changed. Call again with apply true to make the cut, or keep a / b to choose the other way round.");
 
              juce::String why; auto np = session.createPluginByName ("Prism EQ", why);

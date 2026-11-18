@@ -33,6 +33,7 @@
 #include "BeatArchitect.h"
 #include "PrismSplit.h"
 #include "Frame.h"
+#include "VideoWindow.h"
 #include "SqAdvisor.h"
 #include "SqHearing.h"
 
@@ -65,6 +66,7 @@ struct UiHooks
     std::function<juce::var()> menuTree;                                  // every menu command: path, enabled, checked
     std::function<juce::String (const juce::String& path)> menuCommand;   // run one by path; returns error text or {}
     std::function<void (double hz, double secondHz, double roomL, double roomW, double roomH)> openHearing;   // the Hearing window; zeros leave a value as it is
+    std::function<void()> openVideo;                                        // the Video window
     std::function<void (const juce::File& song)> openVocalRemover;          // the Vocal Remover window, optionally starting on a song
     std::function<juce::StringArray()> listWindows;                       // floating windows currently open
     std::function<juce::var()> perfStats;                                 // overload monitor counters (System Usage)

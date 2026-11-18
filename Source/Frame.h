@@ -421,4 +421,174 @@ namespace Frame
     private:
         juce::CriticalSection lock; std::vector<std::shared_ptr<Job>> jobs; int lastId = 0;
     };
+
+    //============================================================================== the picture
+    /** Runs a program and collects its standard output as bytes (the errors are not mixed in). */
+    inline bool runBinary (const juce::StringArray& args, juce::MemoryBlock& out, size_t maxBytes)
+    {
+        juce::ChildProcess p; out.reset();
+        if (! p.start (args, juce::ChildProcess::wantStdOut)) return false;
+        juce::HeapBlock<char> buf (1 << 16);
+        for (;;)
+        {
+            const int n = p.readProcessOutput (buf, 1 << 16);
+            if (n > 0) { out.append (buf, (size_t) n); if (out.getSize() >= maxBytes) { p.kill(); break; } }
+            else if (! p.isRunning()) break;
+            else juce::Thread::sleep (5);
+        }
+        return out.getSize() > 0;
+    }
+
+    /** The size a picture is shown at: no wider than maxWidth, same shape, even numbers. */
+    inline void fitSize (const Info& in, int maxWidth, int& w, int& h)
+    {
+        w = juce::jmax (16, juce::jmin (maxWidth, in.width)) & ~1;
+        h = juce::jmax (16, juce::roundToInt ((double) w * in.height / juce::jmax (1, in.width))) & ~1;
+    }
+
+    inline juce::Image imageFromRgb (const juce::uint8* rgb, int w, int h)
+    {
+        juce::Image img (juce::Image::RGB, w, h, false);
+        juce::Image::BitmapData bd (img, juce::Image::BitmapData::writeOnly);
+        for (int y = 0; y < h; ++y)
+        {
+            const juce::uint8* src = rgb + (size_t) y * (size_t) w * 3;
+            for (int x = 0; x < w; ++x, src += 3) ((juce::PixelRGB*) bd.getPixelPointer (x, y))->setARGB (255, src[0], src[1], src[2]);
+        }
+        return img;
+    }
+
+    /** Which frame is on screen at a time: frame k shows from k / fps up to (k + 1) / fps. */
+    inline juce::int64 frameIndexAt (double seconds, double fps) { return (juce::int64) std::floor (juce::jmax (0.0, seconds) * fps + 1.0e-6); }
+
+    /** One frame of a video, exactly the one on screen at that time. */
+    inline juce::Image grabFrame (const juce::File& video, const Info& in, double seconds, int maxWidth, juce::String& err)
+    {
+        const auto ff = ffmpeg(); if (! ff.existsAsFile()) { err = missingText(); return {}; }
+        if (! in.hasVideo || in.fps <= 0 || in.width <= 0) { err = video.getFileName() + " has no picture"; return {}; }
+        int w = 0, h = 0; fitSize (in, maxWidth, w, h);
+        const double at = juce::jmax (0.0, ((double) frameIndexAt (seconds, in.fps) - 0.25) / in.fps);
+        juce::MemoryBlock raw; const size_t need = (size_t) w * (size_t) h * 3;
+        runBinary ({ ff.getFullPathName(), "-hide_banner", "-loglevel", "error", "-ss", juce::String (at, 6), "-i", video.getFullPathName(), "-frames:v", "1",
+                     "-vf", "scale=" + juce::String (w) + ":" + juce::String (h), "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1" }, raw, need);
+        if (raw.getSize() < need) { err = seconds >= in.seconds ? "That is past the end of the video" : "Couldn't read a frame of " + video.getFileName(); return {}; }
+        return imageFromRgb ((const juce::uint8*) raw.getData(), w, h);
+    }
+
+    /** Plays a video's picture against a clock it is told about. While the clock runs, frames are decoded ahead in a
+        background thread; when it stops or jumps, the exact frame for that moment is fetched. Constant memory: a few
+        frames are held at a time, whatever the length of the video. */
+    class Player : private juce::Thread
+    {
+    public:
+        Player() : juce::Thread ("Squelchmoth video") {}
+        ~Player() override { stopStream(); }
+
+        void setSource (const juce::File& f, int maxWidth = 960)
+        {
+            if (f == file && maxWidth == width) return;
+            stopStream(); file = f; width = maxWidth; info = f.existsAsFile() ? probe (f) : Info();
+            const juce::ScopedLock sl (lock); current = {}; currentIndex = -1; stillWanted = -1;
+        }
+        const juce::File& source() const { return file; }
+        const Info& facts() const { return info; }
+        bool ready() const { return info.ok && info.hasVideo && info.fps > 0; }
+
+        /** Call from a timer. seconds: position inside the video; playing: the clock is running. Returns the frame to show
+            (possibly the previous one while the right one is on its way) and its frame number in shownIndex. */
+        juce::Image frameFor (double seconds, bool playing, juce::int64* shownIndex = nullptr)
+        {
+            if (! ready() || seconds < 0 || seconds >= info.seconds + 1.0 / info.fps) { if (shownIndex) *shownIndex = -1; return {}; }
+            const auto want = frameIndexAt (seconds, info.fps);
+            {
+                const juce::ScopedLock sl (lock);
+                if (playing)
+                {
+                    // drop what is already past; restart the decoder when the clock is outside what it is producing
+                    while (queue.size() > 1 && queue[1].first <= want) queue.erase (queue.begin());
+                    const bool outside = (! streaming.load() && ! ended.load()) || want < streamFirst || want > streamNext + (juce::int64) (info.fps * 0.75);
+                    if (! queue.empty() && queue.front().first <= want) { current = queue.front().second; currentIndex = queue.front().first; }
+                    if (outside) restartAt = want;
+                }
+                else restartAt = -1;
+                wantPlaying = playing;
+                if (! playing && want != currentIndex) stillWanted = want;
+                if (shownIndex) *shownIndex = currentIndex;
+            }
+            if (! isThreadRunning()) startThread();
+            notify();
+            const juce::ScopedLock sl (lock);
+            return current;
+        }
+
+        void stopStream() { signalThreadShouldExit(); notify(); { const juce::ScopedLock sl (procLock); if (proc) proc->kill(); } stopThread (4000); proc.reset(); streaming = false; }
+
+    private:
+        void run() override
+        {
+            int w = 0, h = 0; fitSize (info, width, w, h);
+            const size_t frameBytes = (size_t) w * (size_t) h * 3;
+            juce::MemoryBlock acc; juce::HeapBlock<char> buf (1 << 16);
+            while (! threadShouldExit())
+            {
+                juce::int64 startAt = -1, still = -1; bool play = false;
+                { const juce::ScopedLock sl (lock); startAt = restartAt; restartAt = -1; still = stillWanted; play = wantPlaying; }
+
+                if (! play)
+                {
+                    if (streaming.load()) { const juce::ScopedLock sl (procLock); if (proc) proc->kill(); proc.reset(); streaming = false; const juce::ScopedLock s2 (lock); queue.clear(); }
+                    if (still >= 0)
+                    {
+                        juce::String err; auto img = grabFrame (file, info, ((double) still + 0.5) / info.fps, width, err);
+                        const juce::ScopedLock sl (lock);
+                        if (img.isValid()) { current = img; currentIndex = still; }
+                        if (stillWanted == still) stillWanted = -1;
+                        continue;
+                    }
+                    wait (40); continue;
+                }
+
+                if (startAt >= 0 || (! streaming.load() && ! ended.load()))
+                {
+                    if (startAt < 0) { wait (10); continue; }
+                    const auto ff = ffmpeg(); if (! ff.existsAsFile()) { wait (200); continue; }
+                    { const juce::ScopedLock sl (procLock); if (proc) proc->kill(); proc = std::make_unique<juce::ChildProcess>(); }
+                    { const juce::ScopedLock sl (lock); queue.clear(); streamFirst = streamNext = startAt; }
+                    acc.reset(); ended = false;
+                    const double at = juce::jmax (0.0, ((double) startAt - 0.25) / info.fps);
+                    const bool ok = proc->start ({ ff.getFullPathName(), "-hide_banner", "-loglevel", "error", "-ss", juce::String (at, 6), "-i", file.getFullPathName(),
+                                                    "-vf", "scale=" + juce::String (w) + ":" + juce::String (h), "-r", juce::String (info.fps, 4), "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1" }, juce::ChildProcess::wantStdOut);
+                    streaming = ok; if (! ok) { wait (200); continue; }
+                }
+
+                // keep about half a second decoded ahead; the decoder waits on its pipe while we hold back
+                bool full = false;
+                { const juce::ScopedLock sl (lock); full = (int) queue.size() >= juce::jmax (6, (int) (info.fps * 0.5)); }
+                if (full) { wait (8); continue; }
+                if (! streaming.load()) { wait (20); continue; }
+                const int n = proc->readProcessOutput (buf, 1 << 16);
+                if (n > 0)
+                {
+                    acc.append (buf, (size_t) n);
+                    while (acc.getSize() >= frameBytes)
+                    {
+                        auto img = imageFromRgb ((const juce::uint8*) acc.getData(), w, h);
+                        acc.removeSection (0, frameBytes);
+                        const juce::ScopedLock sl (lock); queue.push_back ({ streamNext++, img });
+                    }
+                }
+                else if (! proc->isRunning()) { streaming = false; ended = true; wait (30); }      // the end of the video
+                else wait (4);
+            }
+            { const juce::ScopedLock sl (procLock); if (proc) proc->kill(); }
+            streaming = false;
+        }
+
+        juce::File file; Info info; int width = 960;
+        juce::CriticalSection lock, procLock;
+        std::vector<std::pair<juce::int64, juce::Image>> queue;
+        juce::Image current; juce::int64 currentIndex = -1, stillWanted = -1, restartAt = -1, streamFirst = 0, streamNext = 0;
+        bool wantPlaying = false; std::atomic<bool> streaming { false }, ended { false };
+        std::unique_ptr<juce::ChildProcess> proc;
+    };
 }

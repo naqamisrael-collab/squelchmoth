@@ -100,4 +100,36 @@ void registerFrameTools()
                  o.seconds = (double) reader->lengthInSamples / juce::jmax (1.0, reader->sampleRate);
              return frameExportStatus (Frame::Store::get().start (o, true), num (a, "wait_seconds", 20.0));
          });
+    add ("video_frame",
+         "Frame: the picture at a moment of the session. Gives the exact frame of the session's video (the one brought in with video_import) that is on screen at seconds (session time; default the playhead), "
+         "with its frame number and timecode, and saves it as a PNG when path is given (width up to 1920, default 960). window true opens the Video window, which shows the picture following the playhead "
+         "(Window menu > Video). Use it to check what is on screen at a cut, a marker or a hit.",
+         R"json({"type":"object","properties":{"seconds":{"type":"number"},"path":{"type":"string"},"width":{"type":"integer"},"window":{"type":"boolean"}}})json",
+         [this] (const juce::var& a) -> ToolResult
+         {
+             auto& e = edit();
+             if (flag (a, "window") && ui.openVideo) ui.openVideo();
+             const juce::File video (e.state["frameVideo"].toString());
+             if (! video.existsAsFile()) return ToolResult::error ("This session has no picture yet: bring a video in with video_import (or drop one on the Video window)");
+             if (! Frame::ffmpeg().existsAsFile()) return ToolResult::error (Frame::missingText());
+             const auto in = Frame::probe (video); if (! in.ok || ! in.hasVideo) return ToolResult::error (video.getFileName() + " has no picture");
+             const double at = (double) e.state.getProperty ("frameVideoAt", 0.0);
+             const double t = has (a, "seconds") ? num (a, "seconds") : e.getTransport().getPosition().inSeconds();
+             const double inVideo = t - at;
+             if (inVideo < 0) return ToolResult::ok ("At " + juce::String (t, 3) + " s the picture has not started: " + video.getFileName() + " begins at " + juce::String (at, 3) + " s on the timeline.");
+             if (inVideo >= in.seconds) return ToolResult::ok ("At " + juce::String (t, 3) + " s the picture has ended: " + video.getFileName() + " runs from " + juce::String (at, 3) + " to " + juce::String (at + in.seconds, 3) + " s.");
+             const auto idx = Frame::frameIndexAt (inVideo, in.fps);
+             juce::String s = "At " + juce::String (t, 3) + " s of the session: frame " + juce::String (idx) + " of " + video.getFileName() + " (" + VideoContent::timecode (inVideo, in.fps) + " in the video, " + juce::String (in.width) + " x " + juce::String (in.height) + ", "
+                              + juce::String (in.fps, in.fps == std::floor (in.fps) ? 0 : 2) + " fps).";
+             if (has (a, "path"))
+             {
+                 juce::String err; const auto img = Frame::grabFrame (video, in, inVideo, juce::jlimit (64, 1920, (int) num (a, "width", 960.0)), err);
+                 if (! img.isValid()) return ToolResult::error (err);
+                 auto out = juce::File (str (a, "path")); if (! out.hasFileExtension ("png")) out = out.withFileExtension ("png");
+                 out.getParentDirectory().createDirectory(); out.deleteFile();
+                 juce::FileOutputStream os (out); if (! os.openedOk() || ! juce::PNGImageFormat().writeImageToStream (img, os)) return ToolResult::error ("Couldn't write " + out.getFullPathName());
+                 s << "\nSaved to " << out.getFullPathName() << " (" << img.getWidth() << " x " << img.getHeight() << ").";
+             }
+             return ToolResult::ok (s);
+         });
 }
