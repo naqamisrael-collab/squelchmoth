@@ -1,5 +1,5 @@
 #pragma once
-// Squelchmoth 1.29 - the maths of the video thumbnail strip, frame stepping and the contact sheet. Pure: no engine, no UI.
+// Squelchmoth 1.29 / 1.30 - the maths of the video thumbnail strip, frame stepping and the contact sheet. Pure: no engine, no UI.
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -59,4 +59,26 @@ namespace SqStrip
         s.width = s.gap + s.cols * (s.cellW + s.gap); s.height = s.gap + s.rows * (s.imageH + s.labelH + s.gap);
         return s;
     }
+    /** The stills drawn along a video's block on the timeline. The block runs from x1 to x2 (pixels, may be off screen);
+        tiles are tileW wide, anchored to the block's start so they stay put while the view scrolls; only the ones that
+        show between visL and visR are returned. Each names the still (of count) nearest its middle. */
+    struct Tile { double x = 0, w = 0; int thumb = 0; };
+    inline std::vector<Tile> tiles (double x1, double x2, double visL, double visR, double tileW, int count)
+    {
+        std::vector<Tile> out;
+        if (! (x2 > x1) || tileW < 1.0 || count < 1 || visR <= visL) return out;
+        const long long first = std::max (0LL, (long long) std::floor ((std::max (x1, visL) - x1) / tileW));
+        const long long last = (long long) std::ceil ((std::min (x2, visR) - x1) / tileW) - 1;
+        for (long long i = first; i <= last && out.size() < 4096; ++i)
+        {
+            Tile t; t.x = x1 + (double) i * tileW; t.w = std::min (tileW, x2 - t.x);
+            if (t.w <= 0) break;
+            t.thumb = slotAt (t.x + t.w * 0.5 - x1, x2 - x1, count);
+            out.push_back (t);
+        }
+        return out;
+    }
+
+    /** Where a video ends up when its start is moved: never before the start of the session. */
+    inline double movedStart (double newStart) { return std::max (0.0, newStart); }
 }

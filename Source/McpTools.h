@@ -34,6 +34,7 @@
 #include "PrismSplit.h"
 #include "Frame.h"
 #include "VideoWindow.h"
+#include "VideoLane.h"
 #include "SqAdvisor.h"
 #include "SqHearing.h"
 

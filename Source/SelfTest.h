@@ -4998,6 +4998,70 @@ inline int runSelfTest()
                         const auto noPath = call ("video_frame", R"({"sheet":6})", false);
                         check (noPath.contains ("needs path"), "video_frame sheet without a path says what is missing");
                     }
+                    // ---- 1.30: the video on the timeline - moving it (tool, drag, keys) and the lane of stills
+                    if (session->edit != nullptr)
+                    {
+                        auto& ed = *session->edit;
+                        auto at = [&] { return (double) ed.state.getProperty ("frameVideoAt", -1.0); };
+                        auto snd = [&] { auto* c = VideoMove::soundClip (ed); return c != nullptr ? c->getPosition().getStart().inSeconds() : -1.0; };
+                        const double at0 = at(), snd0 = snd();
+                        const auto mv = call ("video_move", R"({"start_seconds":5})");
+                        const auto vf5 = call ("video_frame", R"({"seconds":6.0})");
+                        check (std::abs (at0 - 2.0) < 1.0e-9 && std::abs (snd0 - 2.0) < 1.0e-6 && std::abs (at() - 5.0) < 1.0e-9 && std::abs (snd() - 5.0) < 1.0e-6 && mv.contains ("now starts at 5.000 s") && vf5.contains ("frame 25 of ramp.mp4"),
+                               "video_move to 5 s: the picture and its sound clip both start at 5 s, and 6.0 s of the session is now frame 25");
+                        ed.getUndoManager().undo(); const double atU = at(), sndU = snd();
+                        ed.getUndoManager().redo();
+                        check (std::abs (atU - 2.0) < 1.0e-9 && std::abs (sndU - 2.0) < 1.0e-6 && std::abs (at() - 5.0) < 1.0e-9 && std::abs (snd() - 5.0) < 1.0e-6, "video_move is one undo step: undo puts picture and sound back at 2 s (" + juce::String (atU, 2) + " / " + juce::String (sndU, 2) + "), redo returns them to 5 s");
+                        call ("video_move", R"({"by_frames":-25})"); const double atF = at(), sndF = snd();
+                        const auto slip = call ("video_move", R"({"by_seconds":0.5,"sound":false})");
+                        check (std::abs (atF - 4.0) < 1.0e-9 && std::abs (sndF - 4.0) < 1.0e-6 && std::abs (at() - 4.5) < 1.0e-9 && std::abs (snd() - 4.0) < 1.0e-6 && slip.contains ("left where it is"),
+                               "video_move by -25 frames is one second back (4 s); sound false slips only the picture (4.5 s, sound still at 4 s)");
+                        call ("video_move", R"({"start_seconds":-3})"); const double atNeg = at();
+                        const auto noArg = call ("video_move", "{}", false);
+                        check (std::abs (atNeg) < 1.0e-9 && noArg.contains ("Say where"), "video_move never goes before the start of the session, and says what it needs when given nothing");
+                        call ("video_move", R"({"start_seconds":1,"sound":false})");
+
+                        TimelineState ts; ts.viewStart = 0.0; ts.secondsPerPixel = 0.01;
+                        VideoLane lane (*session, ts); lane.setBounds (0, 0, headerWidthNow() + 900, VideoLane::laneH); lane.setVisible (true);
+                        for (int i = 0; i < 800 && ! (lane.getStrip().size() > 0 && lane.getStrip().finished()); ++i) { lane.refresh(); juce::Thread::sleep (40); }
+                        lane.refresh();
+                        const double secs = lane.facts().seconds; const int n = lane.getStrip().size(); const auto bx = lane.blockX();
+                        const auto shot = lane.createComponentSnapshot (lane.getLocalBounds(), true, 1.0f);
+                        { const juce::File sp ("/tmp/main_video_lane.png"); sp.deleteFile(); juce::FileOutputStream os (sp); if (os.openedOk()) juce::PNGImageFormat().writeImageToStream (shot, os); }
+                        const double tileW = (double) VideoLane::laneH - 7.0;
+                        const auto tl = SqStrip::tiles ((double) bx.getStart(), (double) bx.getEnd(), (double) headerWidthNow(), (double) lane.getWidth(), tileW, n);
+                        int tilesRight = 0;
+                        for (auto& t : tl)
+                        {
+                            const double got = ((double) shot.getPixelAt (juce::roundToInt (t.x + t.w * 0.5), VideoLane::laneH / 2).getGreen() - 4.0) / 2.5;
+                            if (std::abs (got - (double) Frame::frameIndexAt (SqStrip::slotTime (t.thumb, n, secs), 25.0)) <= 1.5) ++tilesRight;
+                        }
+                        const auto outside = shot.getPixelAt (juce::roundToInt (bx.getStart()) - 20, VideoLane::laneH / 2);
+                        check (lane.wanted() && n >= 50 && std::abs (bx.getStart() - ((float) headerWidthNow() + 100.0f)) < 0.6f && std::abs (bx.getLength() - (float) (secs * 100.0)) < 0.6f && tl.size() >= 8 && tilesRight == (int) tl.size()
+                               && outside == Theme::bg(),
+                               "Video lane: the block sits at 1 s and is as long as the video; " + juce::String (tilesRight) + " of " + juce::String ((int) tl.size()) + " stills along it are the frames for their place; nothing is drawn before it");
+                        lane.dragBy (150, true); const auto dropped = lane.dropDrag(); const double atDrag = at();
+                        const bool kr = lane.keyPressed (juce::KeyPress (juce::KeyPress::rightKey)); const double atKey = at();
+                        lane.keyPressed (juce::KeyPress (juce::KeyPress::leftKey, juce::ModifierKeys::shiftModifier, 0)); const double atShift = at();
+                        lane.dragBy (-100000, true); lane.dropDrag(); const double atFarLeft = at();
+                        check (std::abs (atDrag - 2.5) < 1.0e-9 && dropped.contains ("now starts at 2.500 s") && kr && std::abs (atKey - 2.54) < 1.0e-9 && std::abs (atShift - 1.54) < 1.0e-9 && std::abs (atFarLeft) < 1.0e-9,
+                               "Video lane: dragging the block 150 px at 100 px a second moves the video 1.5 s; right arrow one frame, Shift+left one second; a drag far left stops at 0");
+                        Prefs::set ("ed_videoLane", 0); const bool hidden = ! lane.wanted(); Prefs::set ("ed_videoLane", 1);
+                        check (hidden && lane.wanted(), "View > Video Lane hides the lane and brings it back");
+                        // the lane inside the real timeline: under the rulers, above the tracks
+                        {
+                            call ("video_move", R"({"start_seconds":1})");
+                            TimelineView tlv (*session); tlv.setSize (1400, 620);
+                            auto& vl = tlv.getVideoLane();
+                            for (int i = 0; i < 800 && ! (vl.getStrip().size() > 0 && vl.getStrip().finished()); ++i) { vl.refresh(); juce::Thread::sleep (40); }
+                            vl.refresh();
+                            const auto shotT = tlv.createComponentSnapshot (tlv.getLocalBounds(), true, 1.0f);
+                            { const juce::File sp ("/tmp/main_timeline_video.png"); sp.deleteFile(); juce::FileOutputStream os (sp); if (os.openedOk()) juce::PNGImageFormat().writeImageToStream (shotT, os); }
+                            const bool shown = vl.isVisible() && vl.getHeight() == VideoLane::laneH && vl.getWidth() == 1400;
+                            Prefs::set ("ed_videoLane", 0); tlv.resized(); const bool gone = ! vl.isVisible(); Prefs::set ("ed_videoLane", 1); tlv.resized();
+                            check (shown && gone && vl.isVisible(), "Timeline: the video lane takes its place under the rulers when the session has a video, and leaves when hidden (lane at y " + juce::String (vl.getY()) + ")");
+                        }
+                    }
                     vc.getPlayer().stopStream();
                 }
                 dir.deleteRecursively();

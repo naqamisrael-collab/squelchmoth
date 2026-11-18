@@ -22,7 +22,7 @@ void registerFrameTools()
     add ("video_import",
          "Frame: brings a video file into the session. Its sound goes on a new audio track (24-bit, at the session rate) and the video is remembered as the session's picture, so video_export can put the new mix back under it. "
          "path (MP4, MOV, MKV, WEBM, AVI...); start_seconds (where it sits on the timeline, default 0); sound false only reads the facts (length, size, frame rate) and remembers the picture. "
-         "There is no picture viewer on the timeline yet. When the computer has no FFmpeg, run video_export action install once. separate and vocal_remove also take video files directly.",
+         "The picture shows in the Video window and as a lane of stills on the timeline; video_move moves it. When the computer has no FFmpeg, run video_export action install once. separate and vocal_remove also take video files directly.",
          R"json({"type":"object","properties":{"path":{"type":"string"},"start_seconds":{"type":"number"},"sound":{"type":"boolean"}},"required":["path"]})json",
          [this] (const juce::var& a) -> ToolResult
          {
@@ -40,10 +40,37 @@ void registerFrameTools()
                  const int idx = firstNumber (call ("add_track", t).text); if (idx <= 0) return ToolResult::error ("Couldn't add a track for the video's sound");
                  juce::var im (new juce::DynamicObject()); set (im, "track", idx); set (im, "path", wav.getFullPathName()); set (im, "start_seconds", at);
                  auto r = call ("import_audio", im); if (r.isError) return r;
+                 // remember which clip is the video's own sound, so moving the video can move it too
+                 if (auto* tr = dynamic_cast<te::AudioTrack*> (session.findTrack (juce::var (idx))))
+                 { te::Clip* last = nullptr; for (auto c : tr->getClips()) last = c; if (last != nullptr) e.state.setProperty ("frameVideoClip", last->itemID.toString(), nullptr); }
                  if (ui.refresh) ui.refresh();
                  s << "\nIts sound is on track " << idx << " at " << juce::String (at, 2) << " s (" << wav.getFileName() << ").";
              }
              else if (! in.hasAudio) s << "\nIt has no sound to import.";
+             return ToolResult::ok (s);
+         });
+
+    add ("video_move",
+         "Frame: moves the session's video along the timeline (the same as dragging its block in the video lane). start_seconds puts its start there; by_seconds or by_frames (frames of the video) "
+         "moves it from where it is. Its own sound clip moves with it unless sound is false (use that to slip the picture against the sound). Never before the start of the session. One undo step.",
+         R"json({"type":"object","properties":{"start_seconds":{"type":"number"},"by_seconds":{"type":"number"},"by_frames":{"type":"number"},"sound":{"type":"boolean"}}})json",
+         [this] (const juce::var& a) -> ToolResult
+         {
+             auto& e = edit();
+             if (e.state["frameVideo"].toString().isEmpty()) return ToolResult::error ("This session has no video yet: bring one in with video_import");
+             const double at = (double) e.state.getProperty ("frameVideoAt", 0.0); double to = at;
+             if (has (a, "start_seconds")) to = num (a, "start_seconds");
+             else if (has (a, "by_seconds")) to = at + num (a, "by_seconds");
+             else if (has (a, "by_frames"))
+             {
+                 const juce::File video (e.state["frameVideo"].toString());
+                 if (! Frame::ffmpeg().existsAsFile()) return ToolResult::error (Frame::missingText());
+                 const auto in = Frame::probe (video); if (! in.ok || in.fps <= 0) return ToolResult::error ("Couldn't read the video's frame rate; use by_seconds");
+                 to = at + num (a, "by_frames") / in.fps;
+             }
+             else return ToolResult::error ("Say where: start_seconds, by_seconds or by_frames");
+             const auto s = VideoMove::moveTo (e, to, flag (a, "sound", true));
+             if (ui.refresh) ui.refresh();
              return ToolResult::ok (s);
          });
 

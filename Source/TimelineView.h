@@ -5,6 +5,7 @@
 
 #include "TrackHeader.h"
 #include "LaneCanvas.h"
+#include "VideoLane.h"
 
 //==============================================================================
 class PlayheadOverlay : public juce::Component
@@ -552,6 +553,7 @@ public:
     explicit TimelineView (Session& s) : session (s)
     {
         addAndMakeVisible (ruler);
+        addChildComponent (videoLane);
         addAndMakeVisible (viewport);
         viewport.setViewedComponent (&body, false);
         viewport.setScrollBarsShown (true, false);
@@ -595,6 +597,7 @@ public:
     std::function<void()> onNewTracks;
     TimelineState state;
     LaneCanvas& getCanvas()     { return canvas; }
+    VideoLane& getVideoLane()   { return videoLane; }
 
     //==========================================================================
     /** Pro Tools edit-mode switching: plain = that mode alone; Shift-click Grid while in Shuffle or Slip (or Shift-click
@@ -883,6 +886,9 @@ public:
         layoutToolbar (r.removeFromTop (toolbarHeight));
         ruler.setBounds (r.removeFromTop (Ruler::totalHeight()));
         lastRulerHeight = Ruler::totalHeight();
+        // the video lane sits under the rulers, only when the session has a video
+        videoLane.setVisible (videoLane.wanted());
+        if (videoLane.isVisible()) videoLane.setBounds (r.removeFromTop (VideoLane::laneH));
         hScroll.setBounds (r.removeFromBottom (14).withTrimmedLeft (headerWidthNow()));
         viewport.setBounds (r);
         layoutBody();
@@ -928,6 +934,7 @@ private:
     static constexpr int toolbarHeight = 92;
     Session& session;
     Ruler ruler { session, state };
+    VideoLane videoLane { session, state };
     juce::Viewport viewport;
     juce::Component body;
     LaneCanvas canvas { session, state };
@@ -1504,6 +1511,8 @@ private:
     void timerCallback() override
     {
         if (session.edit == nullptr) return;
+        videoLane.refresh();
+        if (videoLane.wanted() != videoLane.isVisible()) { resized(); repaintAll(); }
         auto& tr = session.edit->getTransport();
         auto pos = tr.getPosition();
         auto& edit = *session.edit;

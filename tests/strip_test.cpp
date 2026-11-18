@@ -33,6 +33,19 @@ int main()
         const auto one = sheet (1, 6, 100, 16, 9);
         check (one.cols == 1 && one.rows == 1, "one still is one cell");
     }
+    {
+        // a block from 100 to 500 px, tiles 80 wide, 10 stills, all visible: 5 tiles; the first shows still 1 (middle at 40 of 400)
+        const auto t = tiles (100, 500, 0, 1000, 80, 10);
+        check (t.size() == 5 && near (t[0].x, 100) && near (t[0].w, 80) && t[0].thumb == 1 && t[4].thumb == 9 && near (t[4].x + t[4].w, 500), "timeline tiles: a 400 px block in 80 px tiles is 5 tiles, the first shows still 1 of 10, the last still 9");
+        const auto cut = tiles (100, 450, 0, 1000, 80, 10);
+        check (cut.size() == 5 && near (cut[4].w, 30), "the last tile is cut to the block's end (30 px)");
+        const auto vis = tiles (-10000, 90000, 0, 800, 80, 120);
+        check (vis.size() == 10 && near (vis[0].x, 0.0) && vis[0].thumb == 12 && near (vis[9].x, 720.0), "a block far wider than the screen gives only the tiles on screen (10), and they do not swim: tile edges stay on the block's own grid");
+        const auto scrolled = tiles (-10030, 89970, 0, 800, 80, 120);
+        check (scrolled.size() == 11 && near (scrolled[0].x, -30.0), "scrolled by 30 px, the same tiles move 30 px left (11 partly on screen)");
+        check (tiles (500, 100, 0, 1000, 80, 10).empty() && tiles (100, 500, 600, 1000, 80, 10).empty() && tiles (100, 500, 0, 1000, 80, 0).empty(), "no tiles for an empty block, an off-screen block or no stills");
+        check (near (movedStart (-3.0), 0.0) && near (movedStart (7.25), 7.25), "a video cannot be moved before the start of the session");
+    }
     std::printf ("\n== %d passed, %d failed ==\n", passed, failed);
     return failed == 0 ? 0 : 1;
 }

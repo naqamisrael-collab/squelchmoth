@@ -91,6 +91,7 @@ public:
         tools.ui.setTool = [this] (int tl) { timeline.setTool ((EditTool) juce::jlimit (0, 6, tl)); };
         tools.ui.showWindow = [this] (const juce::String& w, bool show) { if (w == "beat") showView ("beat"); else toggleWindow (w, show); };
         tools.ui.openVideo = [this] { toggleWindow ("video", true); };
+        timeline.getVideoLane().onOpenWindow = [this] { toggleWindow ("video", true); };
         tools.ui.openHearing = [this] (double hz, double secondHz, double l, double w, double h)
         {
             toggleWindow ("hearing", true);
@@ -605,6 +606,7 @@ public:
             wave.addItem (8841, "Rectified (louder parts easier to see)", true, wv == 1);
             wave.addItem (8842, "Power (log scale - quiet detail visible)", true, wv == 2);
             m.addSubMenu ("Waveform View", wave);
+            m.addItem (8845, "Video Lane (the session's video under the rulers)", true, VideoLane::enabled());
             juce::PopupMenu ev;
             ev.addItem (250, "I/O", true, EditViews::io());
             ev.addItem (251, "Inserts A-E", true, EditViews::insAE());
@@ -1001,6 +1003,7 @@ public:
         else if (id >= 8820 && id < 8820 + (int) TimelineState::heightPresets().size()) timeline.setTrackHeightsAll (TimelineState::heightPresets()[(size_t) (id - 8820)].px);
         else if (id == 8830) timeline.fitHeights (session.getRows (&st.collapsedFolders));
         else if (id >= 8840 && id <= 8842) { Prefs::set ("ed_waveView", id - 8840); timeline.repaint(); }
+        else if (id == 8845) { Prefs::set ("ed_videoLane", VideoLane::enabled() ? 0 : 1); timeline.resized(); timeline.repaint(); }
         else if (id == 216) { Prefs::set ("ed_clipNames", ! Prefs::clipNamesVisible()); repaintViews(); }
         else if (id == 217) { Prefs::set ("ed_clipGainLine", ! Prefs::clipGainLineVisible()); repaintViews(); }
         else if (id == 218) Prefs::set ("mx_narrow", ! Prefs::narrowStrips());
