@@ -455,7 +455,10 @@ namespace Frame
         for (int y = 0; y < h; ++y)
         {
             const juce::uint8* src = rgb + (size_t) y * (size_t) w * 3;
-            for (int x = 0; x < w; ++x, src += 3) ((juce::PixelRGB*) bd.getPixelPointer (x, y))->setARGB (255, src[0], src[1], src[2]);
+            // macOS keeps an "RGB" picture with four bytes a pixel, so write in whatever layout the picture really has
+            if (bd.pixelFormat == juce::Image::RGB) for (int x = 0; x < w; ++x, src += 3) ((juce::PixelRGB*) bd.getPixelPointer (x, y))->setARGB (255, src[0], src[1], src[2]);
+            else if (bd.pixelFormat == juce::Image::ARGB) for (int x = 0; x < w; ++x, src += 3) ((juce::PixelARGB*) bd.getPixelPointer (x, y))->setARGB (255, src[0], src[1], src[2]);
+            else for (int x = 0; x < w; ++x, src += 3) bd.setPixelColour (x, y, juce::Colour (src[0], src[1], src[2]));
         }
         return img;
     }
