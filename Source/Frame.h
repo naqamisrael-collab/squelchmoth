@@ -9,6 +9,8 @@
 
 #include <JuceHeader.h>
 #include "SqStrip.h"
+#include "SqProxy.h"
+#include <map>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -467,12 +469,187 @@ namespace Frame
     /** Which frame is on screen at a time: frame k shows from k / fps up to (k + 1) / fps. */
     inline juce::int64 frameIndexAt (double seconds, double fps) { return (juce::int64) std::floor (juce::jmax (0.0, seconds) * fps + 1.0e-6); }
 
-    /** One frame of a video, exactly the one on screen at that time. */
-    inline juce::Image grabFrame (const juce::File& video, const Info& in, double seconds, int maxWidth, juce::String& err)
+
+    //============================================================================== proxies
+    /** Small copies of videos, made in parts in the background and kept in the Frame folder, so a still can be fetched
+        in the same short time anywhere in a video of any length. A part is a whole number of frames, so frame k of the
+        video is frame k of the proxy. Parts already made are found again in a later session. */
+    class Proxies : private juce::Thread
+    {
+    public:
+        static Proxies& get() { static Proxies p; return p; }
+        static constexpr int maxWidth = 640;
+        struct Status { bool known = false, wanted = false, working = false; int parts = 0, made = 0, width = 0, height = 0; juce::int64 bytes = 0; juce::String error;
+                        bool complete() const { return known && parts > 0 && made == parts; } };
+
+        ~Proxies() override { stopNow(); }
+        void stopNow() { signalThreadShouldExit(); notify(); stopThread (8000); }
+
+        /** Tests only: the length of a part, for proxies opened after this call. */
+        void setPartSecondsForTests (double s) { partSeconds = s; }
+        /** While the session plays, making parts waits (the part in hand is finished first). */
+        void setPaused (bool p) { if (paused.exchange (p) != p) notify(); }
+
+        /** Starts following a video: finds the parts already on disk. make true asks for the rest to be made. */
+        Status open (const juce::File& video, const Info& in, bool make)
+        {
+            if (! in.ok || ! in.hasVideo || in.fps <= 0 || ! video.existsAsFile()) return {};
+            {
+                const juce::ScopedLock sl (lock);
+                auto& e = entries[video.getFullPathName()];
+                const auto dir = dirFor (video, in);
+                if (e == nullptr || e->dir != dir)
+                {
+                    e = std::make_shared<Entry>(); e->video = video; e->info = in; e->dir = dir;
+                    e->frames = SqStrip::frameCount (in.seconds, in.fps); e->perPart = SqProxy::partFrames (in.fps, partSeconds);
+                    SqProxy::size (in.width, in.height, maxWidth, e->w, e->h);
+                    e->have.assign ((size_t) SqProxy::partCount (e->frames, e->perPart), 0);
+                    for (size_t i = 0; i < e->have.size(); ++i) e->have[i] = partFile (*e, (int) i).existsAsFile() ? 1 : 0;
+                }
+                if (make) { e->wanted = true; e->failures = 0; e->error.clear(); }
+                if (e->dir.isDirectory()) e->dir.getChildFile ("used").replaceWithText (juce::Time::getCurrentTime().toISO8601 (true));
+            }
+            if (make) { if (! isThreadRunning()) startThread (juce::Thread::Priority::low); notify(); }
+            return status (video);
+        }
+
+        Status status (const juce::File& video) const
+        {
+            Status st; const juce::ScopedLock sl (lock);
+            const auto it = entries.find (video.getFullPathName()); if (it == entries.end() || it->second == nullptr) return st;
+            const auto& e = *it->second;
+            st.known = true; st.wanted = e.wanted; st.parts = (int) e.have.size(); st.made = SqProxy::made (e.have); st.width = e.w; st.height = e.h; st.error = e.error;
+            st.working = e.wanted && st.made < st.parts && isThreadRunning();
+            for (size_t i = 0; i < e.have.size(); ++i) if (e.have[i]) st.bytes += partFile (e, (int) i).getSize();
+            return st;
+        }
+
+        /** Stops making a video's proxy and deletes its parts. */
+        void remove (const juce::File& video)
+        {
+            std::shared_ptr<Entry> e;
+            { const juce::ScopedLock sl (lock); const auto it = entries.find (video.getFullPathName()); if (it == entries.end()) return; e = it->second; entries.erase (it); if (e) e->wanted = false; }
+            { const juce::ScopedLock sl (procLock); if (current == e && proc) proc->kill(); }
+            for (int i = 0; i < 400 && isBusyWith (e); ++i) juce::Thread::sleep (10);
+            if (e) e->dir.deleteRecursively();
+        }
+
+        /** Where a part of a video's proxy is kept (empty when the video is not being followed). */
+        juce::File partPath (const juce::File& video, int part) const
+        { const juce::ScopedLock sl (lock); const auto it = entries.find (video.getFullPathName()); return it != entries.end() && it->second ? partFile (*it->second, part) : juce::File(); }
+
+        /** Forgets a video without touching its parts on disk (they are found again by open). */
+        void forget (const juce::File& video) { const juce::ScopedLock sl (lock); entries.erase (video.getFullPathName()); }
+
+        bool ready (const juce::File& video, juce::int64 frame) const
+        {
+            const juce::ScopedLock sl (lock);
+            const auto it = entries.find (video.getFullPathName()); if (it == entries.end() || it->second == nullptr) return false;
+            const auto& e = *it->second; const int part = SqProxy::partOf (frame, e.perPart);
+            return part < (int) e.have.size() && e.have[(size_t) part] != 0;
+        }
+
+        /** The frame from the proxy at w x h, or nothing when that part is not made yet or the size asked is bigger than the proxy. */
+        juce::Image grab (const juce::File& video, juce::int64 frame, int w, int h)
+        {
+            juce::File part; double fps = 0; juce::int64 local = 0; int pw = 0, ph = 0;
+            {
+                const juce::ScopedLock sl (lock);
+                const auto it = entries.find (video.getFullPathName()); if (it == entries.end() || it->second == nullptr) return {};
+                auto& e = *it->second; if (w > e.w || frame < 0 || frame >= e.frames) return {};
+                const int k = SqProxy::partOf (frame, e.perPart);
+                if (k >= (int) e.have.size() || ! e.have[(size_t) k]) { e.urgent = k; return {}; }
+                part = partFile (e, k); fps = e.info.fps; local = SqProxy::frameInPart (frame, e.perPart); pw = e.w; ph = e.h;
+            }
+            const auto ff = ffmpeg(); if (! ff.existsAsFile()) return {};
+            juce::StringArray args { ff.getFullPathName(), "-hide_banner", "-loglevel", "error", "-ss", juce::String (SqProxy::seekFor (local, fps), 6), "-i", part.getFullPathName(), "-frames:v", "1" };
+            if (w != pw || h != ph) { args.add ("-vf"); args.add ("scale=" + juce::String (w) + ":" + juce::String (h)); }
+            args.addArray ({ "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1" });
+            juce::MemoryBlock raw; const size_t need = (size_t) w * (size_t) h * 3;
+            runBinary (args, raw, need);
+            return raw.getSize() >= need ? imageFromRgb ((const juce::uint8*) raw.getData(), w, h) : juce::Image();
+        }
+
+        /** Deletes proxies not used for a month (called once when the app starts using video). */
+        static void prune (int days = 30)
+        {
+            const auto root = folder().getChildFile ("Proxies"); if (! root.isDirectory()) return;
+            const auto limit = juce::Time::getCurrentTime() - juce::RelativeTime::days (days);
+            for (const auto& d : root.findChildFiles (juce::File::findDirectories, false))
+            { const auto used = d.getChildFile ("used"); if ((used.existsAsFile() ? used.getLastModificationTime() : d.getLastModificationTime()) < limit) d.deleteRecursively(); }
+        }
+
+    private:
+        struct Entry { juce::File video, dir; Info info; long long frames = 0, perPart = 1; int w = 0, h = 0, urgent = -1, failures = 0; std::vector<char> have; bool wanted = false; juce::String error; };
+        Proxies() : juce::Thread ("Squelchmoth video proxy") {}
+
+        juce::File dirFor (const juce::File& video, const Info& in) const
+        {
+            int w = 0, h = 0; SqProxy::size (in.width, in.height, maxWidth, w, h);
+            const juce::String key = video.getFullPathName() + "|" + juce::String (video.getSize()) + "|" + juce::String (video.getLastModificationTime().toMilliseconds()) + "|"
+                                     + juce::String (SqProxy::partFrames (in.fps, partSeconds)) + "|" + juce::String (w) + "x" + juce::String (h);
+            return folder().getChildFile ("Proxies").getChildFile (juce::String::toHexString (key.hashCode64()));
+        }
+        static juce::File partFile (const Entry& e, int k) { return e.dir.getChildFile ("part" + juce::String (k).paddedLeft ('0', 5) + ".mp4"); }
+        bool isBusyWith (const std::shared_ptr<Entry>& e) const { const juce::ScopedLock sl (procLock); return current == e && e != nullptr; }
+
+        void run() override
+        {
+            while (! threadShouldExit())
+            {
+                std::shared_ptr<Entry> e; int part = -1;
+                {
+                    const juce::ScopedLock sl (lock);
+                    for (auto& kv : entries) if (kv.second && kv.second->wanted) { part = SqProxy::nextPart (kv.second->have, kv.second->urgent); if (part >= 0) { e = kv.second; break; } }
+                }
+                if (e == nullptr) return;                                   // nothing left to make: the thread ends until asked again
+                if (paused.load()) { wait (200); continue; }
+                const auto ff = ffmpeg(); if (! ff.existsAsFile()) { wait (500); continue; }
+                e->dir.createDirectory();
+                const auto out = partFile (*e, part), tmp = e->dir.getChildFile ("making.mp4"); tmp.deleteFile();
+                const auto enc = videoEncoder();
+                juce::StringArray args { ff.getFullPathName(), "-y", "-hide_banner", "-loglevel", "error", "-ss", juce::String (SqProxy::seekFor ((long long) part * e->perPart, e->info.fps), 6),
+                                         "-i", e->video.getFullPathName(), "-frames:v", juce::String (SqProxy::framesInPart (part, e->frames, e->perPart)), "-an",
+                                         "-vf", "scale=" + juce::String (e->w) + ":" + juce::String (e->h), "-r", juce::String (e->info.fps, 6), "-c:v", enc };
+                if (enc == "libx264") args.addArray ({ "-preset", "veryfast", "-crf", "27" });
+                else if (enc == "mpeg4") args.addArray ({ "-q:v", "6" });
+                else args.addArray ({ "-b:v", "900k" });
+                args.addArray ({ "-g", "12", "-bf", "0", "-pix_fmt", "yuv420p", tmp.getFullPathName() });
+                { const juce::ScopedLock sl (procLock); proc = std::make_unique<juce::ChildProcess>(); current = e; }
+                const bool started = proc->start (args, juce::ChildProcess::wantStdErr); juce::String errText;
+                bool killed = false;
+                while (started && proc->isRunning())
+                {
+                    if (threadShouldExit() || ! e->wanted) { const juce::ScopedLock sl (procLock); proc->kill(); killed = true; break; }
+                    wait (40);
+                }
+                if (started && ! killed) errText = proc->readAllProcessOutput().trim();
+                const bool ok = started && ! killed && proc->getExitCode() == 0 && tmp.getSize() > 200;
+                { const juce::ScopedLock sl (procLock); proc.reset(); current.reset(); }
+                const juce::ScopedLock sl (lock);
+                if (ok && tmp.moveFileTo (out)) { e->have[(size_t) part] = 1; if (e->urgent == part) e->urgent = -1; e->failures = 0; }
+                else
+                {
+                    tmp.deleteFile();
+                    if (! killed && ++e->failures >= 3) { e->wanted = false; e->error = errText.isNotEmpty() ? errText.substring (0, 200) : juce::String ("The proxy could not be made"); }
+                }
+            }
+        }
+
+        mutable juce::CriticalSection lock, procLock;
+        std::map<juce::String, std::shared_ptr<Entry>> entries;
+        std::shared_ptr<Entry> current; std::unique_ptr<juce::ChildProcess> proc;
+        std::atomic<bool> paused { false }; double partSeconds = 300.0;
+    };
+
+    /** One frame of a video, exactly the one on screen at that time. With allowProxy it comes from the video's proxy when
+        that part is made and the size asked fits it (fast anywhere in a long video); otherwise from the video itself. */
+    inline juce::Image grabFrame (const juce::File& video, const Info& in, double seconds, int maxWidth, juce::String& err, bool allowProxy = true)
     {
         const auto ff = ffmpeg(); if (! ff.existsAsFile()) { err = missingText(); return {}; }
         if (! in.hasVideo || in.fps <= 0 || in.width <= 0) { err = video.getFileName() + " has no picture"; return {}; }
         int w = 0, h = 0; fitSize (in, maxWidth, w, h);
+        if (allowProxy) { auto quick = Proxies::get().grab (video, frameIndexAt (seconds, in.fps), w, h); if (quick.isValid()) return quick; }
         const double at = juce::jmax (0.0, ((double) frameIndexAt (seconds, in.fps) - 0.25) / in.fps);
         juce::MemoryBlock raw; const size_t need = (size_t) w * (size_t) h * 3;
         runBinary ({ ff.getFullPathName(), "-hide_banner", "-loglevel", "error", "-ss", juce::String (at, 6), "-i", video.getFullPathName(), "-frames:v", "1",
@@ -545,7 +722,21 @@ namespace Frame
                     if (streaming.load()) { const juce::ScopedLock sl (procLock); if (proc) proc->kill(); proc.reset(); streaming = false; const juce::ScopedLock s2 (lock); queue.clear(); }
                     if (still >= 0)
                     {
-                        juce::String err; auto img = grabFrame (file, info, ((double) still + 0.5) / info.fps, width, err);
+                        juce::String err; const double at = ((double) still + 0.5) / info.fps;
+                        // with a proxy: its frame first (fast, so scrubbing keeps up), then the full-quality frame once the playhead rests
+                        if (width > Proxies::maxWidth && Proxies::get().ready (file, still))
+                        {
+                            auto quick = grabFrame (file, info, at, Proxies::maxWidth, err);
+                            bool moved = false;
+                            { const juce::ScopedLock sl (lock); if (quick.isValid()) { current = quick; currentIndex = still; } if (stillWanted == still) stillWanted = -1; else moved = true; }
+                            for (int i = 0; i < 6 && ! moved && ! threadShouldExit(); ++i) { wait (20); const juce::ScopedLock sl (lock); moved = stillWanted >= 0 || wantPlaying; }
+                            if (moved || threadShouldExit()) continue;
+                            auto sharp = grabFrame (file, info, at, width, err, false);
+                            const juce::ScopedLock sl (lock);
+                            if (sharp.isValid() && stillWanted < 0 && currentIndex == still) current = sharp;
+                            continue;
+                        }
+                        auto img = grabFrame (file, info, at, width, err);
                         const juce::ScopedLock sl (lock);
                         if (img.isValid()) { current = img; currentIndex = still; }
                         if (stillWanted == still) stillWanted = -1;

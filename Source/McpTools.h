@@ -33,6 +33,7 @@
 #include "BeatArchitect.h"
 #include "PrismSplit.h"
 #include "Frame.h"
+#include "VideoProxy.h"
 #include "VideoWindow.h"
 #include "VideoLane.h"
 #include "SqAdvisor.h"

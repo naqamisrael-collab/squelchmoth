@@ -10,6 +10,7 @@
 #include "Theme.h"
 #include "Prefs.h"
 #include "Frame.h"
+#include "VideoProxy.h"
 
 namespace te = tracktion;
 
@@ -73,10 +74,10 @@ public:
         if (session.edit == nullptr) return;
         auto& e = *session.edit;
         const juce::File f (e.state["frameVideo"].toString());
-        if (f != file) { file = f; fileThere = f.existsAsFile(); info = fileThere && Frame::ffmpeg().existsAsFile() ? Frame::probe (f) : Frame::Info(); probedWithTools = Frame::ffmpeg().existsAsFile(); }
-        else if (! probedWithTools && fileThere && Frame::ffmpeg().existsAsFile()) { info = Frame::probe (f); probedWithTools = true; }
+        if (f != file) { file = f; fileThere = f.existsAsFile(); info = fileThere && Frame::ffmpeg().existsAsFile() ? Frame::probe (f) : Frame::Info(); probedWithTools = Frame::ffmpeg().existsAsFile(); if (info.ok) VideoProxy::follow (file, info); }
+        else if (! probedWithTools && fileThere && Frame::ffmpeg().existsAsFile()) { info = Frame::probe (f); probedWithTools = true; if (info.ok) VideoProxy::follow (file, info); }
         if (! isVisible()) return;
-        strip.setPaused (e.getTransport().isPlaying());
+        strip.setPaused (e.getTransport().isPlaying()); Frame::Proxies::get().setPaused (e.getTransport().isPlaying());
         if (info.ok && info.hasVideo) strip.setSource (file, info, (int) juce::jlimit ((long long) 1, (long long) 120, SqStrip::frameCount (info.seconds, info.fps)), 96);
         const double at = startsAt(), ph = e.getTransport().getPosition().inSeconds();
         if (strip.done() != seenDone || at != seenAt || state.viewStart != seenView || state.secondsPerPixel != seenSpp || ph != seenPlayhead)

@@ -5062,6 +5062,50 @@ inline int runSelfTest()
                             check (shown && gone && vl.isVisible(), "Timeline: the video lane takes its place under the rulers when the session has a video, and leaves when hidden (lane at y " + juce::String (vl.getY()) + ")");
                         }
                     }
+                    // ---- 1.31: proxies - made in parts, the same frame numbers, found again, removed
+                    {
+                        auto& px = Frame::Proxies::get(); px.setPartSecondsForTests (1.0); px.setPaused (false);
+                        px.open (ramp, in, false); px.remove (ramp);
+                        const auto none = call ("video_proxy", "{}");
+                        const auto made = call ("video_proxy", R"({"action":"make","wait_seconds":180})");
+                        auto st = px.status (ramp);
+                        const int parts = SqProxy::partCount (SqStrip::frameCount (in.seconds, in.fps), 25);
+                        check (none.contains ("No proxy") && parts >= 4 && st.complete() && st.parts == parts && st.bytes > 0 && made.contains (juce::String (parts) + " of " + juce::String (parts) + " parts"),
+                               "video_proxy make: a 4-second video in 1-second parts gives " + juce::String (st.parts) + " parts, all made - " + made);
+                        int right = 0, asked = 0; juce::String seenP;
+                        for (juce::int64 f : { 0, 1, 24, 25, 26, 49, 50, 63, 98, 99 })
+                        {
+                            ++asked; const auto img = px.grab (ramp, f, 64, 64); const double got = frameOf (img);
+                            if (px.ready (ramp, f) && std::abs (got - (double) f) <= 1.2) ++right;
+                            seenP << f << "->" << juce::String (got, 1) << " ";
+                        }
+                        check (right == asked, "Proxy frames are the video's frames, across part joins too (frame -> read back): " + seenP.trim());
+                        juce::String ge; const auto viaAny = Frame::grabFrame (ramp, in, 2.52, 64, ge), viaVideo = Frame::grabFrame (ramp, in, 2.52, 64, ge, false);
+                        check (std::abs (frameOf (viaAny) - 63.0) <= 1.2 && std::abs (frameOf (viaVideo) - 63.0) <= 1.2 && ! px.grab (ramp, 63, 128, 128).isValid() && ! px.grab (ramp, 5000, 64, 64).isValid(),
+                               "a still at 2.52 s is frame 63 with the proxy and from the video itself; the proxy is not used for a size bigger than it or a frame past the end");
+                        // found again in a later session, and a missing part is made again without redoing the others
+                        const auto part2 = px.partPath (ramp, 2), part0 = px.partPath (ramp, 0); const auto stamp0 = part0.getLastModificationTime();
+                        px.forget (ramp); part2.deleteFile();
+                        const auto st2 = px.open (ramp, in, false);
+                        const bool gap = st2.made == parts - 1 && ! px.ready (ramp, 63) && px.ready (ramp, 10) && ! px.grab (ramp, 63, 64, 64).isValid();
+                        const auto fallback = Frame::grabFrame (ramp, in, 2.52, 64, ge);
+                        const auto again = call ("video_proxy", R"({"action":"make","wait_seconds":180})");
+                        check (gap && std::abs (frameOf (fallback) - 63.0) <= 1.2 && px.status (ramp).complete() && part2.existsAsFile() && part0.getLastModificationTime() == stamp0,
+                               "Proxy parts are found again; with one part missing, stills there come from the video until that part alone is remade (" + juce::String (st2.made) + " of " + juce::String (parts) + " found)");
+                        const auto rm = call ("video_proxy", R"({"action":"remove"})");
+                        const bool goneNow = ! px.status (ramp).known && ! part0.existsAsFile() && ! part0.getParentDirectory().isDirectory();
+                        // the P key in the Video window asks for the same thing
+                        clock = 3.0; vc.update();
+                        const bool pk = vc.keyPressed (juce::KeyPress ('p', juce::ModifierKeys(), 'p'));
+                        for (int i = 0; i < 3000 && ! px.status (ramp).complete(); ++i) juce::Thread::sleep (20);
+                        const bool byKey = px.status (ramp).complete();
+                        vc.removeProxy();
+                        check (rm.contains ("removed") && goneNow && pk && byKey && ! px.status (ramp).known, "video_proxy remove deletes the files; the P key in the Video window makes the proxy, and its Remove takes it away again");
+                        const auto offR = call ("video_proxy", R"({"action":"auto","on":false})"); const bool wasOff = ! VideoProxy::autoOn();
+                        const auto onR = call ("video_proxy", R"({"action":"auto","on":true})");
+                        check (wasOff && VideoProxy::autoOn() && offR.contains ("only made when asked") && onR.contains ("without asking") && ! SqProxy::worthIt (in.width, in.seconds), "video_proxy auto switches unasked proxies off and on; a small short video never gets one unasked");
+                        px.setPartSecondsForTests (300.0);
+                    }
                     vc.getPlayer().stopStream();
                 }
                 dir.deleteRecursively();

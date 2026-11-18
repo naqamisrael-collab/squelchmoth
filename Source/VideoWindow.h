@@ -2,11 +2,13 @@
 // Squelchmoth 1.28 - the Video window: the session's picture, following the transport.
 // It shows the frame that belongs to the playhead - exact when stopped or scrubbing, decoded ahead while playing - with
 // timecode and frame number. Drop a video on it to bring one in. Editing the picture comes later; this is the viewer.
+// 1.31: long or large videos get a proxy in the background (the Proxy button shows it), so scrubbing keeps up anywhere.
 // 1.29: a strip of stills along the bottom shows the whole video; click or drag it to go there, arrow keys step by frame.
 
 #include <JuceHeader.h>
 #include "Console.h"
 #include "Frame.h"
+#include "VideoProxy.h"
 
 class VideoContent : public juce::Component, public juce::FileDragAndDropTarget, private juce::Timer
 {
@@ -20,7 +22,7 @@ public:
     VideoContent()
     {
         namespace L = Console::Look;
-        for (auto* b : { &importBtn, &toolsBtn })
+        for (auto* b : { &importBtn, &toolsBtn, &proxyBtn })
         {
             addAndMakeVisible (*b); b->setColour (juce::TextButton::buttonColourId, L::well()); b->setColour (juce::TextButton::textColourOffId, L::text());
         }
@@ -30,6 +32,25 @@ public:
             chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc) { if (fc.getResult().existsAsFile()) bringIn (fc.getResult()); });
         };
         toolsBtn.onClick = [this] { Frame::startInstall(); };
+        proxyBtn.setTooltip ("A proxy is a small copy of the video that makes stills and scrubbing fast anywhere in a long or large video.");
+        proxyBtn.onClick = [this]
+        {
+            if (! player.ready()) return;
+            const auto st = Frame::Proxies::get().status (player.source());
+            juce::PopupMenu m;
+            m.addSectionHeader (VideoProxy::sentence (player.source(), st).upToFirstOccurrenceOf (".", true, false));
+            m.addItem (1, "Make a proxy of this video  (P)", ! st.complete() && ! (st.wanted && st.error.isEmpty()));
+            m.addItem (2, "Remove this video's proxy", st.known && (st.made > 0 || st.wanted));
+            m.addSeparator();
+            m.addItem (3, "Make proxies of long or large videos without asking", true, VideoProxy::autoOn());
+            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&proxyBtn), [safe = juce::Component::SafePointer<VideoContent> (this)] (int r)
+            {
+                if (safe == nullptr) return;
+                if (r == 1) safe->makeProxy();
+                else if (r == 2) safe->removeProxy();
+                else if (r == 3) Prefs::set ("frame_autoProxy", VideoProxy::autoOn() ? 0 : 1);
+            });
+        };
         setWantsKeyboardFocus (true);
         setSize (880, 630);
         startTimerHz (30);
@@ -51,7 +72,10 @@ public:
         toolsBtn.setVisible (! haveTools && ! Frame::installState().running);
         if (! readState) return;
         const auto st = readState();
-        if (st.video != player.source()) { player.setSource (st.video); shown = {}; shownIndex = -1; }
+        if (st.video != player.source()) { player.setSource (st.video); shown = {}; shownIndex = -1; if (player.ready() && haveTools) VideoProxy::follow (player.source(), player.facts()); proxyTick = 0; }
+        Frame::Proxies::get().setPaused (st.playing);
+        proxyBtn.setVisible (player.ready() && haveTools);
+        if (player.ready() && (proxyTick++ % 15) == 0) { const auto lab = VideoProxy::label (Frame::Proxies::get().status (player.source())); if (lab != proxyBtn.getButtonText()) proxyBtn.setButtonText (lab); }
         state = st;
         if (! player.ready()) { strip.setSource ({}, {}, 0); if (shown.isValid()) { shown = {}; repaint(); } return; }
         strip.setPaused (st.playing);
@@ -74,6 +98,9 @@ public:
     juce::Image imageShown() const   { return shown; }
     Frame::Player& getPlayer()       { return player; }
     Frame::Strip& getStrip()         { return strip; }
+    /** Asks for this video's proxy to be made (the button, the P key and the tool all end in the same call). */
+    void makeProxy()   { if (player.ready()) { Frame::Proxies::get().open (player.source(), player.facts(), true); proxyTick = 0; } }
+    void removeProxy() { if (player.ready()) { Frame::Proxies::get().remove (player.source()); proxyTick = 0; } }
     juce::Rectangle<int> stripBounds() const { return stripArea; }
 
     /** How many stills the strip holds at this width: each is as wide as the video's shape makes it at the strip's height. */
@@ -114,6 +141,7 @@ public:
         if (k.getKeyCode() == juce::KeyPress::leftKey)  { stepFrames (shift ? -second : -1); return true; }
         if (k.getKeyCode() == juce::KeyPress::homeKey)  { if (seek) seek (state.videoStartsAt); return true; }
         if (k.getKeyCode() == juce::KeyPress::endKey)   { seekToStripX (stripArea.getRight()); return true; }
+        if (k.getTextCharacter() == 'p' || k.getTextCharacter() == 'P') { makeProxy(); return true; }
         return false;
     }
 
@@ -201,6 +229,7 @@ public:
         header = r.removeFromTop (46);
         importBtn.setBounds (header.getRight() - 138, header.getY() + 9, 122, 28);
         toolsBtn.setBounds (importBtn.getX() - 148, header.getY() + 9, 140, 28);
+        proxyBtn.setBounds (importBtn.getX() - 118, header.getY() + 9, 110, 28);
         r.reduce (14, 4);
         noteArea = r.removeFromBottom (18);
         footer = r.removeFromBottom (58); r.removeFromBottom (8);
@@ -212,7 +241,7 @@ private:
     void timerCallback() override { update(); if (Frame::installState().running) repaint(); }
 
     Frame::Player player; Frame::Strip strip; int stripSeen = -1; bool dragging = false; State state; juce::Image shown; juce::int64 shownIndex = -1; double lastPlayhead = -1.0;
-    juce::TextButton importBtn { "Import video..." }, toolsBtn { "Get video tools" };
+    juce::TextButton importBtn { "Import video..." }, toolsBtn { "Get video tools" }, proxyBtn { "Proxy" }; int proxyTick = 0;
     std::unique_ptr<juce::FileChooser> chooser; juce::String note; bool hover = false;
     juce::Rectangle<int> header, screen, footer, noteArea, stripArea;
 };

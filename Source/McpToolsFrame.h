@@ -50,6 +50,37 @@ void registerFrameTools()
              return ToolResult::ok (s);
          });
 
+    add ("video_proxy",
+         "Frame: the proxy of the session's video - a small copy (up to 640 wide) made in parts in the background, so stills, the strip, the timeline lane, contact sheets and scrubbing stay fast anywhere "
+         "in a long or large video. Frame numbers are the same as in the video. Saved frames (video_frame path) and video_export always use the video itself, never the proxy. "
+         "action: status (default), make (wait_seconds to wait for it, up to 600), remove (deletes its files), auto with on true/false (make proxies unasked for videos wider than 1280 or ten minutes and longer; on by default). "
+         "Proxies live in the app's data folder and ones unused for a month are cleared.",
+         R"json({"type":"object","properties":{"action":{"type":"string","enum":["status","make","remove","auto"]},"on":{"type":"boolean"},"wait_seconds":{"type":"number"}}})json",
+         [this] (const juce::var& a) -> ToolResult
+         {
+             const auto action = str (a, "action", "status");
+             if (action == "auto")
+             {
+                 if (has (a, "on")) Prefs::set ("frame_autoProxy", flag (a, "on", true) ? 1 : 0);
+                 return ToolResult::ok (VideoProxy::autoOn() ? "Proxies are made without asking for videos wider than 1280 or ten minutes and longer." : "Proxies are only made when asked for.");
+             }
+             auto& e = edit(); const juce::File video (e.state["frameVideo"].toString());
+             if (! video.existsAsFile()) return ToolResult::error ("This session has no video yet: bring one in with video_import");
+             if (! Frame::ffmpeg().existsAsFile()) return ToolResult::error (Frame::missingText());
+             auto& px = Frame::Proxies::get();
+             if (action == "remove") { px.remove (video); return ToolResult::ok ("The proxy of " + video.getFileName() + " is removed; stills come from the video itself again."); }
+             const auto in = Frame::probe (video); if (! in.ok || ! in.hasVideo) return ToolResult::error (video.getFileName() + " has no picture");
+             auto st = px.open (video, in, action == "make");
+             if (action == "make")
+             {
+                 const auto until = juce::Time::getMillisecondCounter() + (juce::uint32) (juce::jlimit (0.0, 600.0, num (a, "wait_seconds", 0.0)) * 1000.0);
+                 while (! st.complete() && st.error.isEmpty() && juce::Time::getMillisecondCounter() < until) { juce::Thread::sleep (50); st = px.status (video); }
+             }
+             else if (action != "status") return ToolResult::error ("action is status, make, remove or auto");
+             if (st.error.isNotEmpty()) return ToolResult::error (VideoProxy::sentence (video, st));
+             return ToolResult::ok (VideoProxy::sentence (video, st));
+         });
+
     add ("video_move",
          "Frame: moves the session's video along the timeline (the same as dragging its block in the video lane). start_seconds puts its start there; by_seconds or by_frames (frames of the video) "
          "moves it from where it is. Its own sound clip moves with it unless sound is false (use that to slip the picture against the sound). Never before the start of the session. One undo step.",
@@ -175,7 +206,7 @@ void registerFrameTools()
                               + juce::String (in.fps, in.fps == std::floor (in.fps) ? 0 : 2) + " fps).";
              if (has (a, "path"))
              {
-                 juce::String err; const auto img = Frame::grabFrame (video, in, inVideo, juce::jlimit (64, 1920, (int) num (a, "width", 960.0)), err);
+                 juce::String err; const auto img = Frame::grabFrame (video, in, inVideo, juce::jlimit (64, 1920, (int) num (a, "width", 960.0)), err, false);   // a saved frame always comes from the video itself
                  if (! img.isValid()) return ToolResult::error (err);
                  auto out = juce::File (str (a, "path")); if (! out.hasFileExtension ("png")) out = out.withFileExtension ("png");
                  out.getParentDirectory().createDirectory(); out.deleteFile();
