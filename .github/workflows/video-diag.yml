@@ -1,0 +1,63 @@
+name: Video frame check (FFmpeg alone)
+
+# Checks, without the app, what the video tools return for a frame at a time on each Mac.
+on:
+  push:
+    paths: [ ".github/workflows/video-diag.yml" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: intel
+            runner: macos-15-intel
+            bin: ffmpeg-darwin-x64
+          - arch: applesilicon
+            runner: macos-15
+            bin: ffmpeg-darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - name: Fetch the same FFmpeg the app downloads
+        run: |
+          curl -sSL -o ffmpeg "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/${{ matrix.bin }}"
+          chmod +x ffmpeg; shasum -a 256 ffmpeg; ./ffmpeg -hide_banner -version | head -2
+
+      - name: Make the test clip and read frames back
+        run: |
+          python3 - <<'PY' > report.txt 2>&1
+          import subprocess
+          raw = b"".join(bytes([round(4 + 2.5 * k)]) * (64 * 64 * 3) for k in range(100))
+          open("ramp.rgb", "wb").write(raw)
+          def run(args): return subprocess.run(args, capture_output=True)
+          r = run(["./ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", "64x64", "-r", "25", "-i", "ramp.rgb",
+                   "-f", "lavfi", "-i", "sine=f=330:d=4", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "ramp.mp4"])
+          print("encode:", r.returncode, r.stderr.decode()[:300])
+          print(run(["./ffmpeg", "-hide_banner", "-i", "ramp.mp4"]).stderr.decode()[-700:])
+          allf = run(["./ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "ramp.mp4", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"]).stdout
+          n = len(allf) // (64 * 64 * 3)
+          print("whole clip:", n, "frames; centre values:", [allf[i * 12288 + 6240] for i in range(n)])
+          for t in (0.02, 1.0, 2.0, 2.52, 3.9):
+              idx = int(t * 25 + 1e-6); at = max(0.0, (idx - 0.25) / 25)
+              for label, extra in (("as the app asks", ["-vf", "scale=64:64"]), ("no scale filter", [])):
+                  o = run(["./ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", "%.6f" % at, "-i", "ramp.mp4", "-frames:v", "1"] + extra + ["-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"])
+                  d = o.stdout
+                  print("t=%.2f want frame %d (%s): bytes %d min %s max %s centre %s -> frame %s  err=%s" % (t, idx, label, len(d), min(d) if d else None, max(d) if d else None, d[6240] if len(d) > 6240 else None,
+                        round((d[6240] - 4) / 2.5, 1) if len(d) > 6240 else None, o.stderr.decode()[:120]))
+          PY
+          cat report.txt
+
+      - name: Save
+        if: always()
+        run: |
+          mkdir out; cp report.txt out/ 2>/dev/null || true
+          cd out; git init -q -b video-diag-${{ matrix.arch }}
+          git config user.name "video-diag"; git config user.email "actions@github.com"
+          git add -A; git commit -qm "video frame check ${{ matrix.arch }}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" video-diag-${{ matrix.arch }}
