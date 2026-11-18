@@ -4950,6 +4950,54 @@ inline int runSelfTest()
                            "Video window, playing: the picture follows the clock - " + juce::String (distinct) + " frames in order over 0.9 s, " + juce::String (close) + " of " + juce::String (samples) + " looks within two frames (worst " + juce::String (worst, 0) + ")");
                     clock = 9.0; pump (150);
                     check (vc.frameShown() == -1 && ! vc.imageShown().isValid(), "Video window: past the end of the video there is no picture, and it says so");
+                    // ---- 1.29: the strip of stills, click to go there, step by frame, and the contact sheet
+                    {
+                        clock = 3.0; pump (60);
+                        auto& st = vc.getStrip(); const double secs = vc.getPlayer().facts().seconds;
+                        for (int i = 0; i < 600 && ! (st.size() > 0 && st.finished()); ++i) pump (50);
+                        const int n = st.size(); int right = 0; double worstOff = 0;
+                        for (int k = 0; k < n; ++k)
+                        {
+                            const double off = std::abs (frameOf (st.thumb (k)) - (double) Frame::frameIndexAt (SqStrip::slotTime (k, n, secs), 25.0));
+                            worstOff = std::max (worstOff, off); if (off <= 1.2) ++right;
+                        }
+                        check (n >= 8 && st.done() == n && right == n, "Video strip: " + juce::String (n) + " stills, each the frame at the middle of its slot (" + juce::String (right) + " right, worst " + juce::String (worstOff, 1) + " frames off)");
+                        pump (60);
+                        { const auto shot = vc.createComponentSnapshot (vc.getLocalBounds(), true, 1.0f); const juce::File sp ("/tmp/main_video_strip.png"); sp.deleteFile(); juce::FileOutputStream os (sp); if (os.openedOk()) juce::PNGImageFormat().writeImageToStream (shot, os); }
+                        vc.seek = [&] (double t) { clock = t; };
+                        const auto sb = vc.stripBounds();
+                        const double went = vc.seekToStripX (sb.getX() + sb.getWidth() / 4);
+                        const auto wantIdx = Frame::frameIndexAt (secs / 4.0, 25.0);
+                        pump (100); for (int i = 0; i < 200 && vc.frameShown() != wantIdx; ++i) pump (30);
+                        check (std::abs (went - (2.0 + secs / 4.0)) < 0.01 && std::abs (clock - went) < 1.0e-9 && vc.frameShown() == wantIdx,
+                               "Video strip: a click a quarter of the way along goes to " + juce::String (went, 2) + " s of the session and the picture is frame " + juce::String (vc.frameShown()));
+                        clock = 3.0; vc.update();
+                        const bool k1 = vc.keyPressed (juce::KeyPress (juce::KeyPress::rightKey)); const double afterRight = clock;
+                        vc.update(); vc.keyPressed (juce::KeyPress (juce::KeyPress::leftKey, juce::ModifierKeys::shiftModifier, 0)); const double afterShiftLeft = clock;
+                        vc.update(); vc.keyPressed (juce::KeyPress (juce::KeyPress::homeKey)); const double afterHome = clock;
+                        vc.update(); vc.keyPressed (juce::KeyPress (juce::KeyPress::leftKey)); const double atStart = clock;
+                        vc.update(); vc.keyPressed (juce::KeyPress (juce::KeyPress::endKey)); const double afterEnd = clock;
+                        check (k1 && std::abs (afterRight - (2.0 + 26.0 / 25.0)) < 1.0e-9 && std::abs (afterShiftLeft - (2.0 + 1.0 / 25.0)) < 1.0e-9 && std::abs (afterHome - 2.0) < 1.0e-9 && std::abs (atStart - 2.0) < 1.0e-9
+                               && std::abs (afterEnd - (2.0 + (double) (SqStrip::frameCount (secs, 25.0) - 1) / 25.0)) < 1.0e-9,
+                               "Video window keys: right is one frame (frame 26), Shift+left one second back, Home the start, left at the start stays, End the last frame (" + juce::String (afterEnd, 2) + " s)");
+                        const auto stp = call ("video_frame", R"({"seconds":3.0,"step":2})");
+                        const double ph = session->edit != nullptr ? session->edit->getTransport().getPosition().inSeconds() : -1.0;
+                        check (stp.contains ("Playhead moved to 3.080") && stp.contains ("frame 27 of ramp.mp4") && std::abs (ph - 3.08) < 1.0e-6, "video_frame step 2 from 3.0 s: the playhead is at 3.08 s on frame 27");
+                        const auto sheetPng = dir.getChildFile ("sheet.png");
+                        const auto shr = call ("video_frame", "{\"sheet\":6,\"columns\":3,\"width\":64,\"path\":" + asJson (sheetPng) + "}");
+                        const auto sheetImg = juce::ImageFileFormat::loadFrom (sheetPng); const auto lay = SqStrip::sheet (6, 3, 64, 64, 64);
+                        int cellsRight = 0;
+                        if (sheetImg.isValid() && sheetImg.getWidth() == lay.width && sheetImg.getHeight() == lay.height)
+                            for (int k = 0; k < 6; ++k)
+                            {
+                                const double got = ((double) sheetImg.getPixelAt (lay.cellX (k) + lay.cellW / 2, lay.cellY (k) + lay.imageH / 2).getGreen() - 4.0) / 2.5;
+                                if (std::abs (got - (double) Frame::frameIndexAt (SqStrip::slotTime (k, 6, secs), 25.0)) <= 1.2) ++cellsRight;
+                            }
+                        check (shr.contains ("6 stills") && shr.contains ("1. 00:00:00:0") && cellsRight == 6, "video_frame sheet: 6 stills in 3 columns, " + juce::String (sheetImg.getWidth()) + " x " + juce::String (sheetImg.getHeight())
+                               + ", every cell the frame for its time (" + juce::String (cellsRight) + " of 6), times listed");
+                        const auto noPath = call ("video_frame", R"({"sheet":6})", false);
+                        check (noPath.contains ("needs path"), "video_frame sheet without a path says what is missing");
+                    }
                     vc.getPlayer().stopStream();
                 }
                 dir.deleteRecursively();

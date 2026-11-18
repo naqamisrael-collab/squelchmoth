@@ -8,6 +8,7 @@
 // Not in this stage: a picture viewer on the timeline, picture editing, upload.
 
 #include <JuceHeader.h>
+#include "SqStrip.h"
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -596,4 +597,61 @@ namespace Frame
         bool wantPlaying = false; std::atomic<bool> streaming { false }, ended { false };
         std::unique_ptr<juce::ChildProcess> proc;
     };
+    /** The thumbnail strip of a video: count stills, each the frame at the middle of its slot, fetched one by one in the
+        background (coarse first), so the cost does not grow with the video's length. */
+    class Strip : private juce::Thread
+    {
+    public:
+        Strip() : juce::Thread ("Squelchmoth video strip") {}
+        ~Strip() override { stopThread (6000); }
+
+        void setSource (const juce::File& f, const Info& in, int count, int thumbWidth = 96)
+        {
+            if (f == file && count == (int) thumbs.size() && thumbWidth == width) return;
+            stopThread (6000);
+            file = f; info = in; width = thumbWidth;
+            { const juce::ScopedLock sl (lock); thumbs.assign ((size_t) juce::jmax (0, count), juce::Image()); made = 0; }
+            if (count > 0 && in.ok && in.hasVideo && in.fps > 0 && f.existsAsFile()) startThread();
+        }
+        int size() const            { const juce::ScopedLock sl (lock); return (int) thumbs.size(); }
+        int done() const            { return made.load(); }
+        bool finished() const       { return ! isThreadRunning(); }
+        juce::Image thumb (int k) const { const juce::ScopedLock sl (lock); return k >= 0 && k < (int) thumbs.size() ? thumbs[(size_t) k] : juce::Image(); }
+
+    private:
+        void run() override
+        {
+            const int count = size();
+            for (int k : SqStrip::fillOrder (count))
+            {
+                if (threadShouldExit()) return;
+                if (! ffmpeg().existsAsFile()) { wait (300); continue; }
+                juce::String err; auto img = grabFrame (file, info, SqStrip::slotTime (k, count, info.seconds), width, err);
+                const juce::ScopedLock sl (lock);
+                if (k < (int) thumbs.size()) thumbs[(size_t) k] = img;
+                ++made;
+            }
+        }
+        juce::File file; Info info; int width = 96;
+        juce::CriticalSection lock; std::vector<juce::Image> thumbs; std::atomic<int> made { 0 };
+    };
+
+    /** A contact sheet of a video: count stills evenly through it, each with its timecode underneath. */
+    inline juce::Image contactSheet (const juce::File& video, const Info& in, int count, int cols, int cellW, std::function<juce::String (double)> label, std::vector<double>* times, juce::String& err)
+    {
+        const auto sh = SqStrip::sheet (count, cols, cellW, in.width, in.height);
+        juce::Image out (juce::Image::RGB, sh.width, sh.height, true);
+        juce::Graphics g (out); g.fillAll (juce::Colour (0xff101216));
+        for (int k = 0; k < sh.count; ++k)
+        {
+            const double t = SqStrip::slotTime (k, sh.count, in.seconds);
+            auto img = grabFrame (video, in, t, sh.cellW, err);
+            if (! img.isValid()) return {};
+            g.drawImage (img, juce::Rectangle<float> ((float) sh.cellX (k), (float) sh.cellY (k), (float) sh.cellW, (float) sh.imageH), juce::RectanglePlacement::stretchToFit);
+            g.setColour (juce::Colour (0xffd8dde6)); g.setFont (juce::FontOptions (12.0f));
+            g.drawText (label ? label (t) : juce::String (t, 2) + " s", sh.cellX (k), sh.cellY (k) + sh.imageH, sh.cellW, sh.labelH, juce::Justification::centred);
+            if (times) times->push_back (t);
+        }
+        return out;
+    }
 }

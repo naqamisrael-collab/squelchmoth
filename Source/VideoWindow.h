@@ -2,6 +2,7 @@
 // Squelchmoth 1.28 - the Video window: the session's picture, following the transport.
 // It shows the frame that belongs to the playhead - exact when stopped or scrubbing, decoded ahead while playing - with
 // timecode and frame number. Drop a video on it to bring one in. Editing the picture comes later; this is the viewer.
+// 1.29: a strip of stills along the bottom shows the whole video; click or drag it to go there, arrow keys step by frame.
 
 #include <JuceHeader.h>
 #include "Console.h"
@@ -14,6 +15,7 @@ public:
     struct State { juce::File video; double videoStartsAt = 0, playhead = 0; bool playing = false; };
     std::function<State()> readState;
     std::function<juce::String (const juce::File&)> importVideo;       // brings a video into the session; returns what happened
+    std::function<void (double)> seek;                                 // moves the session's playhead (seconds on the timeline)
 
     VideoContent()
     {
@@ -28,7 +30,8 @@ public:
             chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc) { if (fc.getResult().existsAsFile()) bringIn (fc.getResult()); });
         };
         toolsBtn.onClick = [this] { Frame::startInstall(); };
-        setSize (880, 560);
+        setWantsKeyboardFocus (true);
+        setSize (880, 630);
         startTimerHz (30);
     }
     ~VideoContent() override { stopTimer(); }
@@ -50,7 +53,14 @@ public:
         const auto st = readState();
         if (st.video != player.source()) { player.setSource (st.video); shown = {}; shownIndex = -1; }
         state = st;
-        if (! player.ready()) { if (shown.isValid()) { shown = {}; repaint(); } return; }
+        if (! player.ready()) { strip.setSource ({}, {}, 0); if (shown.isValid()) { shown = {}; repaint(); } return; }
+        if (haveTools)
+        {
+            // keep the stills while the window is being resized: fetch again only when the count changes by more than a quarter
+            const int want = stripSlots(), have = strip.size();
+            strip.setSource (player.source(), player.facts(), have > 0 && std::abs (want - have) * 4 <= have ? have : want);
+        }
+        if (strip.done() != stripSeen) { stripSeen = strip.done(); repaint (stripArea); }
         juce::int64 idx = -1;
         auto img = player.frameFor (st.playhead - st.videoStartsAt, st.playing, &idx);
         const double inVideo = st.playhead - st.videoStartsAt;
@@ -62,6 +72,49 @@ public:
     juce::int64 frameShown() const   { return shownIndex; }
     juce::Image imageShown() const   { return shown; }
     Frame::Player& getPlayer()       { return player; }
+    Frame::Strip& getStrip()         { return strip; }
+    juce::Rectangle<int> stripBounds() const { return stripArea; }
+
+    /** How many stills the strip holds at this width: each is as wide as the video's shape makes it at the strip's height. */
+    int stripSlots() const
+    {
+        const auto& in = player.facts(); if (! player.ready() || in.height <= 0) return 0;
+        const int slotW = juce::jmax (24, juce::roundToInt ((double) (stripArea.getHeight() - 4) * in.width / in.height));
+        return SqStrip::slotsFor (stripArea.getWidth(), slotW);
+    }
+
+    /** Goes to the moment under a point of the strip (x in this component). Returns the session time, or -1 when there is no video. */
+    double seekToStripX (int x)
+    {
+        if (! player.ready() || stripArea.getWidth() <= 0) return -1.0;
+        // the last frame's start is the furthest a click can go, so the end of the strip still shows a picture
+        const auto& in = player.facts();
+        const double inVideo = juce::jmin (SqStrip::timeAt ((double) (x - stripArea.getX()), (double) stripArea.getWidth(), in.seconds), (double) (SqStrip::frameCount (in.seconds, in.fps) - 1) / in.fps);
+        const double t = state.videoStartsAt + inVideo; if (seek) seek (t); return t;
+    }
+
+    /** Moves by whole frames of the video from the playhead. Returns the new session time, or -1 when there is no video. */
+    double stepFrames (juce::int64 frames)
+    {
+        if (! player.ready()) return -1.0;
+        const auto& in = player.facts(); const auto st = readState ? readState() : state;
+        const double t = st.videoStartsAt + SqStrip::stepFrames (st.playhead - st.videoStartsAt, in.fps, (long long) frames, in.seconds); if (seek) seek (t); return t;
+    }
+
+    void mouseDown (const juce::MouseEvent& e) override { grabKeyboardFocus(); if (stripArea.contains (e.getPosition())) { dragging = true; seekToStripX (e.x); } }
+    void mouseDrag (const juce::MouseEvent& e) override { if (dragging) seekToStripX (e.x); }
+    void mouseUp (const juce::MouseEvent&) override     { dragging = false; }
+    bool keyPressed (const juce::KeyPress& k) override
+    {
+        if (! player.ready()) return false;
+        const auto& in = player.facts(); const juce::int64 second = juce::jmax ((juce::int64) 1, (juce::int64) juce::roundToInt (in.fps));
+        const bool shift = k.getModifiers().isShiftDown();
+        if (k.getKeyCode() == juce::KeyPress::rightKey) { stepFrames (shift ? second : 1); return true; }
+        if (k.getKeyCode() == juce::KeyPress::leftKey)  { stepFrames (shift ? -second : -1); return true; }
+        if (k.getKeyCode() == juce::KeyPress::homeKey)  { if (seek) seek (state.videoStartsAt); return true; }
+        if (k.getKeyCode() == juce::KeyPress::endKey)   { seekToStripX (stripArea.getRight()); return true; }
+        return false;
+    }
 
     static juce::String timecode (double seconds, double fps)
     {
@@ -102,6 +155,29 @@ public:
         }
         if (hover) { g.setColour (L::cyan().withAlpha (0.18f)); g.fillRoundedRectangle (screen.toFloat(), 6.0f); g.setColour (L::cyan()); g.drawRoundedRectangle (screen.toFloat().reduced (1.0f), 6.0f, 2.0f); }
 
+        // the strip: the whole video in stills, the playhead on it
+        g.setColour (juce::Colours::black.withAlpha (0.55f)); g.fillRoundedRectangle (stripArea.toFloat(), 4.0f);
+        if (player.ready() && strip.size() > 0)
+        {
+            const int n = strip.size(); const auto inner = stripArea.reduced (2);
+            for (int k = 0; k < n; ++k)
+            {
+                const int x0 = inner.getX() + k * inner.getWidth() / n, x1 = inner.getX() + (k + 1) * inner.getWidth() / n;
+                const juce::Rectangle<int> cell (x0, inner.getY(), x1 - x0, inner.getHeight());
+                const auto th = strip.thumb (k);
+                if (th.isValid()) g.drawImage (th, cell.toFloat(), juce::RectanglePlacement::fillDestination);
+                else { g.setColour (L::well().withAlpha (k % 2 ? 0.55f : 0.4f)); g.fillRect (cell); }
+            }
+            const double inV = state.playhead - state.videoStartsAt;
+            if (inV >= 0 && inV <= in.seconds)
+            {
+                const float px = (float) stripArea.getX() + (float) SqStrip::xAt (inV, (double) stripArea.getWidth(), in.seconds);
+                g.setColour (juce::Colours::black.withAlpha (0.6f)); g.fillRect (px - 2.0f, (float) stripArea.getY(), 4.0f, (float) stripArea.getHeight());
+                g.setColour (L::cyan()); g.fillRect (px - 1.0f, (float) stripArea.getY() - 2.0f, 2.0f, (float) stripArea.getHeight() + 4.0f);
+            }
+        }
+        else { g.setColour (L::dim()); g.setFont (Theme::font (11.5f)); g.drawText ("The whole video appears here in stills. Click to go to a moment; the arrow keys step by frame.", stripArea, juce::Justification::centred); }
+
         // the numbers: session time, timecode inside the video, frame number
         g.setColour (L::well().withAlpha (0.85f)); g.fillRoundedRectangle (footer.toFloat(), 6.0f);
         const double inVideo = state.playhead - state.videoStartsAt;
@@ -127,16 +203,17 @@ public:
         r.reduce (14, 4);
         noteArea = r.removeFromBottom (18);
         footer = r.removeFromBottom (58); r.removeFromBottom (8);
+        stripArea = r.removeFromBottom (58); r.removeFromBottom (8);
         screen = r;
     }
 
 private:
     void timerCallback() override { update(); if (Frame::installState().running) repaint(); }
 
-    Frame::Player player; State state; juce::Image shown; juce::int64 shownIndex = -1; double lastPlayhead = -1.0;
+    Frame::Player player; Frame::Strip strip; int stripSeen = -1; bool dragging = false; State state; juce::Image shown; juce::int64 shownIndex = -1; double lastPlayhead = -1.0;
     juce::TextButton importBtn { "Import video..." }, toolsBtn { "Get video tools" };
     std::unique_ptr<juce::FileChooser> chooser; juce::String note; bool hover = false;
-    juce::Rectangle<int> header, screen, footer, noteArea;
+    juce::Rectangle<int> header, screen, footer, noteArea, stripArea;
 };
 
 /** Connects the Video window to the session and its tools (the app and the self-test both use this). */
@@ -152,6 +229,7 @@ void attachVideo (VideoContent& c, Tools& tools, Sess& session)
         s.playhead = e.getTransport().getPosition().inSeconds(); s.playing = e.getTransport().isPlaying();
         return s;
     };
+    c.seek = [&session] (double t) { if (session.edit != nullptr) session.edit->getTransport().setPosition (tracktion::TimePosition::fromSeconds (juce::jmax (0.0, t))); };
     c.importVideo = [&tools] (const juce::File& f)
     {
         juce::var args (new juce::DynamicObject()); args.getDynamicObject()->setProperty ("path", f.getFullPathName());

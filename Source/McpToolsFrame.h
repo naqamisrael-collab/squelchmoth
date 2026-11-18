@@ -103,8 +103,10 @@ void registerFrameTools()
     add ("video_frame",
          "Frame: the picture at a moment of the session. Gives the exact frame of the session's video (the one brought in with video_import) that is on screen at seconds (session time; default the playhead), "
          "with its frame number and timecode, and saves it as a PNG when path is given (width up to 1920, default 960). window true opens the Video window, which shows the picture following the playhead "
-         "(Window menu > Video). Use it to check what is on screen at a cut, a marker or a hit.",
-         R"json({"type":"object","properties":{"seconds":{"type":"number"},"path":{"type":"string"},"width":{"type":"integer"},"window":{"type":"boolean"}}})json",
+         "(Window menu > Video). Use it to check what is on screen at a cut, a marker or a hit. step moves the playhead by that many frames of the video first (negative goes back; "
+         "it snaps to the frame on screen and stays inside the video). sheet N (2 to 64) with path saves a contact sheet instead: N stills evenly through the whole video in a grid "
+         "(columns optional; width is then the width of one still, default 240), each with its timecode in the video underneath - read the saved picture to see what the video shows and where.",
+         R"json({"type":"object","properties":{"seconds":{"type":"number"},"step":{"type":"integer"},"path":{"type":"string"},"width":{"type":"integer"},"sheet":{"type":"integer"},"columns":{"type":"integer"},"window":{"type":"boolean"}}})json",
          [this] (const juce::var& a) -> ToolResult
          {
              auto& e = edit();
@@ -114,12 +116,35 @@ void registerFrameTools()
              if (! Frame::ffmpeg().existsAsFile()) return ToolResult::error (Frame::missingText());
              const auto in = Frame::probe (video); if (! in.ok || ! in.hasVideo) return ToolResult::error (video.getFileName() + " has no picture");
              const double at = (double) e.state.getProperty ("frameVideoAt", 0.0);
-             const double t = has (a, "seconds") ? num (a, "seconds") : e.getTransport().getPosition().inSeconds();
+             if (has (a, "sheet"))
+             {
+                 if (! has (a, "path")) return ToolResult::error ("A contact sheet needs path: where to save the picture");
+                 const int count = juce::jlimit (2, 64, (int) num (a, "sheet", 12.0));
+                 juce::String err; std::vector<double> times;
+                 const auto img = Frame::contactSheet (video, in, count, (int) num (a, "columns", 0.0), juce::jlimit (64, 640, (int) num (a, "width", 240.0)),
+                                                       [&in] (double t) { return VideoContent::timecode (t, in.fps); }, &times, err);
+                 if (! img.isValid()) return ToolResult::error (err.isNotEmpty() ? err : juce::String ("Couldn't read the video's frames"));
+                 auto out = juce::File (str (a, "path")); if (! out.hasFileExtension ("png")) out = out.withFileExtension ("png");
+                 out.getParentDirectory().createDirectory(); out.deleteFile();
+                 juce::FileOutputStream os (out); if (! os.openedOk() || ! juce::PNGImageFormat().writeImageToStream (img, os)) return ToolResult::error ("Couldn't write " + out.getFullPathName());
+                 juce::String s = "Contact sheet of " + video.getFileName() + ": " + juce::String (count) + " stills, saved to " + out.getFullPathName() + " (" + juce::String (img.getWidth()) + " x " + juce::String (img.getHeight())
+                                  + "). Left to right, top to bottom, with session times:";
+                 for (size_t i = 0; i < times.size(); ++i) s << "\n" << (int) (i + 1) << ". " << VideoContent::timecode (times[i], in.fps) << " in the video = " << juce::String (at + times[i], 2) << " s of the session";
+                 return ToolResult::ok (s);
+             }
+             double t = has (a, "seconds") ? num (a, "seconds") : e.getTransport().getPosition().inSeconds();
+             juce::String moved;
+             if (has (a, "step"))
+             {
+                 t = at + SqStrip::stepFrames (t - at, in.fps, (long long) num (a, "step", 0.0), in.seconds);
+                 e.getTransport().setPosition (tracktion::TimePosition::fromSeconds (juce::jmax (0.0, t)));
+                 moved = "Playhead moved to " + juce::String (t, 3) + " s. ";
+             }
              const double inVideo = t - at;
              if (inVideo < 0) return ToolResult::ok ("At " + juce::String (t, 3) + " s the picture has not started: " + video.getFileName() + " begins at " + juce::String (at, 3) + " s on the timeline.");
              if (inVideo >= in.seconds) return ToolResult::ok ("At " + juce::String (t, 3) + " s the picture has ended: " + video.getFileName() + " runs from " + juce::String (at, 3) + " to " + juce::String (at + in.seconds, 3) + " s.");
              const auto idx = Frame::frameIndexAt (inVideo, in.fps);
-             juce::String s = "At " + juce::String (t, 3) + " s of the session: frame " + juce::String (idx) + " of " + video.getFileName() + " (" + VideoContent::timecode (inVideo, in.fps) + " in the video, " + juce::String (in.width) + " x " + juce::String (in.height) + ", "
+             juce::String s = moved + "At " + juce::String (t, 3) + " s of the session: frame " + juce::String (idx) + " of " + video.getFileName() + " (" + VideoContent::timecode (inVideo, in.fps) + " in the video, " + juce::String (in.width) + " x " + juce::String (in.height) + ", "
                               + juce::String (in.fps, in.fps == std::floor (in.fps) ? 0 : 2) + " fps).";
              if (has (a, "path"))
              {
