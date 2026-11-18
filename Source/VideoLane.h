@@ -76,6 +76,7 @@ public:
         if (f != file) { file = f; fileThere = f.existsAsFile(); info = fileThere && Frame::ffmpeg().existsAsFile() ? Frame::probe (f) : Frame::Info(); probedWithTools = Frame::ffmpeg().existsAsFile(); }
         else if (! probedWithTools && fileThere && Frame::ffmpeg().existsAsFile()) { info = Frame::probe (f); probedWithTools = true; }
         if (! isVisible()) return;
+        strip.setPaused (e.getTransport().isPlaying());
         if (info.ok && info.hasVideo) strip.setSource (file, info, (int) juce::jlimit ((long long) 1, (long long) 120, SqStrip::frameCount (info.seconds, info.fps)), 96);
         const double at = startsAt(), ph = e.getTransport().getPosition().inSeconds();
         if (strip.done() != seenDone || at != seenAt || state.viewStart != seenView || state.secondsPerPixel != seenSpp || ph != seenPlayhead)

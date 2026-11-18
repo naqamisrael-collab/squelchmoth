@@ -613,6 +613,8 @@ namespace Frame
             { const juce::ScopedLock sl (lock); thumbs.assign ((size_t) juce::jmax (0, count), juce::Image()); made = 0; }
             if (count > 0 && in.ok && in.hasVideo && in.fps > 0 && f.existsAsFile()) startThread();
         }
+        /** While the session plays, fetching stills waits: the picture on the playhead comes first. */
+        void setPaused (bool p)     { if (paused.exchange (p) != p) notify(); }
         int size() const            { const juce::ScopedLock sl (lock); return (int) thumbs.size(); }
         int done() const            { return made.load(); }
         bool finished() const       { return ! isThreadRunning(); }
@@ -624,6 +626,7 @@ namespace Frame
             const int count = size();
             for (int k : SqStrip::fillOrder (count))
             {
+                while (paused.load() && ! threadShouldExit()) wait (100);
                 if (threadShouldExit()) return;
                 if (! ffmpeg().existsAsFile()) { wait (300); continue; }
                 juce::String err; auto img = grabFrame (file, info, SqStrip::slotTime (k, count, info.seconds), width, err);
@@ -633,7 +636,7 @@ namespace Frame
             }
         }
         juce::File file; Info info; int width = 96;
-        juce::CriticalSection lock; std::vector<juce::Image> thumbs; std::atomic<int> made { 0 };
+        juce::CriticalSection lock; std::vector<juce::Image> thumbs; std::atomic<int> made { 0 }; std::atomic<bool> paused { false };
     };
 
     /** A contact sheet of a video: count stills evenly through it, each with its timecode underneath. */

@@ -54,6 +54,7 @@ public:
         if (st.video != player.source()) { player.setSource (st.video); shown = {}; shownIndex = -1; }
         state = st;
         if (! player.ready()) { strip.setSource ({}, {}, 0); if (shown.isValid()) { shown = {}; repaint(); } return; }
+        strip.setPaused (st.playing);
         if (haveTools)
         {
             // keep the stills while the window is being resized: fetch again only when the count changes by more than a quarter
