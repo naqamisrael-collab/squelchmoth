@@ -265,6 +265,35 @@ inline int runSelfTest()
         };
         auto snap = [&] (juce::Component& c, int w, int h) { c.setSize (w, h); juce::MessageManager::getInstance()->runDispatchLoopUntil (400); return c.createComponentSnapshot (c.getLocalBounds(), true, 1.0f); };
 
+        // 00. The Video window on a video the app made itself: a real beat under the app's own artwork, with a title and a caption
+        const auto shotArt = juce::File::getCurrentWorkingDirectory().getChildFile ("Resources/welcome_banner.jpg");
+        if (Frame::ffmpeg().existsAsFile() && shotArt.existsAsFile())
+        {
+            call ("new_session", R"({"name":"Night Moth"})");
+            call ("build_beat", R"({"style":"trap","bpm":140,"seed":7})");
+            const auto art = dir.getChildFile ("beat-art.mp4");
+            const auto made = call ("video_export", "{\"picture\":\"image\",\"image\":" + juce::JSON::toString (juce::var (shotArt.getFullPathName())) + ",\"width\":1280,\"height\":720,\"start_seconds\":0,\"end_seconds\":14,\"wait_seconds\":400,\"path\":" + juce::JSON::toString (juce::var (art.getFullPathName())) + "}");
+            std::cout << "  video shot: " << made.upToFirstOccurrenceOf ("\n", false, false).substring (0, 160) << "\n";
+            call ("video_import", "{\"sound\":false,\"path\":" + juce::JSON::toString (juce::var (art.getFullPathName())) + "}");
+            call ("video_text", R"({"text":"NIGHT MOTH","style":"title","start_seconds":2.0,"length_seconds":3.5})");
+            call ("video_text", R"({"text":"Rich Noise Audio","style":"lower third","start_seconds":6.0,"length_seconds":3.0})");
+            call ("video_text", R"({"text":"made, mixed and cut in one window","start_seconds":9.5,"end_seconds":13.0})");
+            VideoContent vc; attachVideo (vc, tools, *session); vc.setSize (1100, 720);
+            auto settle = [&] (double t)
+            {
+                session->edit->getTransport().setPosition (tracktion::TimePosition::fromSeconds (t));
+                std::cout << "  video shot: just after asking, the playhead reads " << session->edit->getTransport().getPosition().inSeconds() << " s\n";
+                for (int i = 0; i < 400; ++i) { juce::MessageManager::getInstance()->runDispatchLoopUntil (100); vc.update(); if (vc.imageShown().isValid() && vc.getStrip().size() > 0 && vc.getStrip().finished() && vc.frameShown() == Frame::frameIndexAt (t, vc.getPlayer().facts().fps)) break; }
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (900);     // the full-quality frame replaces the quick one
+                std::cout << "  video shot: asked for " << t << " s, the playhead is at " << session->edit->getTransport().getPosition().inSeconds() << " s, frame shown " << vc.frameShown() << "\n";
+            };
+            settle (10.6); save (snap (vc, 1100, 720), "video");
+            call ("video_shape", R"({"shape":"vertical","fit":"fill","focus_x":0.36})");
+            settle (3.2); save (snap (vc, 1100, 720), "video-vertical");
+            vc.getPlayer().stopStream();
+            if (juce::SystemStats::getEnvironmentVariable ("SQUELCH_SHOTS_ONLY", {}) == "video") { scannerOwner.reset(); session.reset(); engine.reset(); return 0; }
+        }
+
         // 0. The Hearing window on a real beat: the note panels, and Unmask measuring two of the beat's own tracks
         {
             call ("new_session", R"({"name":"Hearing"})");
@@ -5186,6 +5215,7 @@ inline int runSelfTest()
                     }
                     // ---- 1.33: titles and captions - seen in the window, burned into the export, caption files in and out
                     {
+                        vc.readState = nullptr; vc.seek = nullptr;      // the window must not go on reading a session that is about to be replaced
                         call ("new_session", R"({"name":"Selftest Text"})");
                         call ("video_import", "{\"path\":" + asJson (ramp) + "}");
                         auto& ed = *session->edit;
@@ -5250,6 +5280,7 @@ inline int runSelfTest()
                         }
                         Frame::run ({ ff.getFullPathName(), "-y", "-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", "128x64", "-r", "25", "-i", rawH.getFullPathName(),
                                       "-c:v", Frame::videoEncoder(), "-pix_fmt", "yuv420p", "-an", halves.getFullPathName() }, oh);
+                        vc.readState = nullptr; vc.seek = nullptr; vc.shapeTool = nullptr;      // (1.34.1) it read the replaced session from its timer: the Intel Mac run died here
                         call ("new_session", R"({"name":"Selftest Shape"})");
                         const auto hi = call ("video_import", "{\"path\":" + asJson (halves) + "}");
                         auto& ed = *session->edit;
