@@ -36,6 +36,7 @@
 #include "VideoProxy.h"
 #include "VideoCuts.h"
 #include "VideoText.h"
+#include "VideoShape.h"
 #include "VideoWindow.h"
 #include "VideoLane.h"
 #include "SqAdvisor.h"

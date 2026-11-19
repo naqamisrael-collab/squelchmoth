@@ -319,6 +319,8 @@ namespace Frame
         double sourceFps = 0;                        // the video's own frame rate (for landing on exact frames of a cut picture)
         struct Overlay { juce::File png; double from = 0, to = 0; };   // a see-through picture the size of the frame, shown from..to seconds of the export
         std::vector<Overlay> overlays;               // titles and captions, laid over whatever the picture is
+        int cropX = 0, cropY = 0, cropW = 0, cropH = 0; // source picture: the area kept before it is sized (0 wide: all of it)
+        juce::File chapters;                         // a metadata file whose chapters go into the video (none: no chapters of our own)
         bool resize = false;                         // source picture: re-encode to width x height
         double seconds = 0;                          // length of the audio, for progress
     };
@@ -334,7 +336,8 @@ namespace Frame
         else if (enc == "mpeg4") venc.addArray ({ "-q:v", "3" });
         else venc.addArray ({ "-b:v", juce::String (juce::jmax (2, o.width * o.height / 260000)) + "M" });
         venc.addArray ({ "-pix_fmt", "yuv420p" });
-        const auto fit = "scale=" + juce::String (o.width) + ":" + juce::String (o.height) + ":force_original_aspect_ratio=decrease,pad=" + juce::String (o.width) + ":" + juce::String (o.height) + ":(ow-iw)/2:(oh-ih)/2,setsar=1";
+        const auto fitOnly = "scale=" + juce::String (o.width) + ":" + juce::String (o.height) + ":force_original_aspect_ratio=decrease,pad=" + juce::String (o.width) + ":" + juce::String (o.height) + ":(ow-iw)/2:(oh-ih)/2,setsar=1";
+        const auto fit = (o.cropW > 0 && o.picture == "source" ? "crop=" + juce::String (o.cropW) + ":" + juce::String (o.cropH) + ":" + juce::String (o.cropX) + ":" + juce::String (o.cropY) + "," : juce::String()) + fitOnly;
         if (! o.overlays.empty())
         {
             // words over the picture: build the picture as one stream [v], then lay each text over it for its time
@@ -350,7 +353,7 @@ namespace Frame
                     const double vf = o.sourceFps > 0 ? o.sourceFps : o.fps;
                     if (st.picture) a.addArray ({ "-ss", juce::String (juce::jmax (0.0, (std::floor (st.src * vf + 1.0e-6) - 0.25) / vf), 6), "-t", need, "-i", o.sourceVideo.getFullPathName() });
                     else a.addArray ({ "-f", "lavfi", "-t", need, "-i", "color=c=black:s=" + size + ":r=" + rate });
-                    graph << "[" << n << ":v:0]" << fit << ",fps=" << rate << ",format=yuv420p,tpad=stop_mode=clone:stop_duration=1,trim=end_frame=" << juce::String (counts[i]) << ",setpts=PTS-STARTPTS[p" << n << "];";
+                    graph << "[" << n << ":v:0]" << (st.picture ? fit : fitOnly) << ",fps=" << rate << ",format=yuv420p,tpad=stop_mode=clone:stop_duration=1,trim=end_frame=" << juce::String (counts[i]) << ",setpts=PTS-STARTPTS[p" << n << "];";
                     joins << "[p" << n << "]"; ++n; ++parts;
                 }
                 graph << joins << "concat=n=" << parts << ":v=1:a=0[v];";
@@ -401,7 +404,7 @@ namespace Frame
                     a.addArray ({ "-ss", juce::String (juce::jmax (0.0, (std::floor (st.src * vf + 1.0e-6) - 0.25) / vf), 6), "-t", need, "-i", o.sourceVideo.getFullPathName() });
                 }
                 else a.addArray ({ "-f", "lavfi", "-t", need, "-i", "color=c=black:s=" + size + ":r=" + rate });
-                graph << "[" << n << ":v:0]" << fit << ",fps=" << rate << ",format=yuv420p,tpad=stop_mode=clone:stop_duration=1,trim=end_frame=" << juce::String (counts[i]) << ",setpts=PTS-STARTPTS[v" << n << "];";
+                graph << "[" << n << ":v:0]" << (st.picture ? fit : fitOnly) << ",fps=" << rate << ",format=yuv420p,tpad=stop_mode=clone:stop_duration=1,trim=end_frame=" << juce::String (counts[i]) << ",setpts=PTS-STARTPTS[v" << n << "];";
                 joins << "[v" << n << "]"; ++n;
             }
             graph << joins << "concat=n=" << n << ":v=1:a=0[v]";
@@ -438,6 +441,15 @@ namespace Frame
                                                         : "[0:a]showwaves=s=" + size + ":mode=cline:rate=" + rate + ":colors=0xE8C46A|0xF2E3B5,format=yuv420p[v]";
             a.addArray ({ "-i", o.audio.getFullPathName(), "-filter_complex", filter, "-map", "[v]", "-map", "0:a:0" });
             a.addArray (venc);
+        }
+        if (o.chapters.existsAsFile())
+        {
+            // the chapter list is one more input: it goes after the other inputs and before the first output option
+            int at = a.size(), inputs = 0;
+            for (int i = 0; i < a.size(); ++i) if (a[i] == "-filter_complex" || a[i] == "-map" || a[i] == "-vf" || a[i] == "-c:v") { at = i; break; }
+            for (int i = 0; i < at; ++i) if (a[i] == "-i") ++inputs;
+            a.insert (at, o.chapters.getFullPathName()); a.insert (at, "-i"); a.insert (at, "ffmetadata"); a.insert (at, "-f");
+            a.addArray ({ "-map_chapters", juce::String (inputs) });
         }
         a.addArray ({ "-c:a", "aac", "-b:a", "320k", "-shortest", "-movflags", "+faststart", o.out.getFullPathName() });
         return a;

@@ -2,6 +2,7 @@
 // Squelchmoth 1.28 - the Video window: the session's picture, following the transport.
 // It shows the frame that belongs to the playhead - exact when stopped or scrubbing, decoded ahead while playing - with
 // timecode and frame number. Drop a video on it to bring one in. Editing the picture comes later; this is the viewer.
+// 1.34: the picture's shape (vertical / square / wide, filled or fitted) shows as it will export (Shape button; R key).
 // 1.33: titles and captions show over the picture as they will be exported (Text button; T and C keys).
 // 1.32: the picture follows the clips of the video's sound, so cutting those clips cuts the picture.
 // 1.31: long or large videos get a proxy in the background (the Proxy button shows it), so scrubbing keeps up anywhere.
@@ -13,6 +14,7 @@
 #include "VideoProxy.h"
 #include "VideoCuts.h"
 #include "VideoText.h"
+#include "VideoShape.h"
 
 class VideoContent : public juce::Component, public juce::FileDragAndDropTarget, private juce::Timer
 {
@@ -20,17 +22,18 @@ public:
     /** The app tells the window where the session is: video file, where it sits on the timeline, playhead, playing. */
     struct State { juce::File video; double videoStartsAt = 0, playhead = 0; bool playing = false;
                    bool cut = false; std::vector<SqCut::Piece> pieces; double slip = 0;
-                   std::vector<SqText::Item> texts; };                                             // words on the picture (session times)   // cut: pieces say where the picture is (otherwise one whole piece at videoStartsAt)
+                   std::vector<SqText::Item> texts; VideoShape::Setting shape; };                                             // words on the picture (session times)   // cut: pieces say where the picture is (otherwise one whole piece at videoStartsAt)
 
     std::function<State()> readState;
     std::function<juce::String (const juce::File&)> importVideo;       // brings a video into the session; returns what happened
     std::function<void (double)> seek;                                 // moves the session's playhead (seconds on the timeline)
     std::function<juce::String (const juce::var&)> textTool;           // runs video_text with these arguments; returns what happened
+    std::function<juce::String (const juce::var&)> shapeTool;          // runs video_shape with these arguments; returns what happened
 
     VideoContent()
     {
         namespace L = Console::Look;
-        for (auto* b : { &importBtn, &toolsBtn, &proxyBtn, &textBtn })
+        for (auto* b : { &importBtn, &toolsBtn, &proxyBtn, &textBtn, &shapeBtn })
         {
             addAndMakeVisible (*b); b->setColour (juce::TextButton::buttonColourId, L::well()); b->setColour (juce::TextButton::textColourOffId, L::text());
         }
@@ -40,6 +43,27 @@ public:
             chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc) { if (fc.getResult().existsAsFile()) bringIn (fc.getResult()); });
         };
         toolsBtn.onClick = [this] { Frame::startInstall(); };
+        shapeBtn.setTooltip ("The picture's shape for the export: as the video is, vertical, square, tall or wide - filled (cropped) or fitted (bars).");
+        shapeBtn.onClick = [this]
+        {
+            juce::PopupMenu m; const auto& sh = state.shape; auto isShape = [&sh] (int w, int h) { return sh.shape.w == w && sh.shape.h == h; };
+            m.addItem (1, "As the video is", true, ! sh.active());
+            m.addItem (2, "Vertical  9:16", true, isShape (9, 16)); m.addItem (3, "Square  1:1", true, isShape (1, 1)); m.addItem (4, "Tall  4:5", true, isShape (4, 5)); m.addItem (5, "Wide  16:9", true, isShape (16, 9));
+            m.addSeparator();
+            m.addItem (10, "Fill the shape (crop)", sh.active(), sh.fill); m.addItem (11, "Fit inside the shape (bars)", sh.active(), ! sh.fill);
+            m.addSeparator();
+            m.addItem (20, "Keep the left", sh.active() && sh.fill, sh.focusX < 0.25); m.addItem (21, "Keep the middle (across)", sh.active() && sh.fill, sh.focusX >= 0.25 && sh.focusX <= 0.75); m.addItem (22, "Keep the right", sh.active() && sh.fill, sh.focusX > 0.75);
+            m.addItem (23, "Keep the top", sh.active() && sh.fill, sh.focusY < 0.25); m.addItem (24, "Keep the middle (down)", sh.active() && sh.fill, sh.focusY >= 0.25 && sh.focusY <= 0.75); m.addItem (25, "Keep the bottom", sh.active() && sh.fill, sh.focusY > 0.75);
+            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&shapeBtn), [safe = juce::Component::SafePointer<VideoContent> (this)] (int r)
+            {
+                if (safe == nullptr || r == 0) return;
+                static const char* names[] = { "", "source", "9:16", "1:1", "4:5", "16:9" };
+                if (r >= 1 && r <= 5) safe->runShape ({ { "shape", names[r] } });
+                else if (r == 10 || r == 11) safe->runShape ({ { "fit", r == 10 ? "fill" : "fit" } });
+                else if (r >= 20 && r <= 22) safe->runShape ({ { "focus_x", (r - 20) * 0.5 } });
+                else if (r >= 23 && r <= 25) safe->runShape ({ { "focus_y", (r - 23) * 0.5 } });
+            });
+        };
         textBtn.setTooltip ("Titles, lower thirds and captions on the picture. They are exported as they look here.");
         textBtn.onClick = [this]
         {
@@ -109,7 +133,8 @@ public:
         if (st.video != player.source()) { player.setSource (st.video); shown = {}; shownIndex = -1; if (player.ready() && haveTools) VideoProxy::follow (player.source(), player.facts()); proxyTick = 0; }
         Frame::Proxies::get().setPaused (st.playing);
         { double sum = 0; for (auto& t : st.texts) sum += t.start * 3.0 + t.end * 7.0 + (double) t.text.size() + t.size + (double) (t.style * 11 + t.place * 13) + (double) (t.colour & 0xffff);
-          if (st.texts.size() != textsSeen || sum != textsSum) { textsSeen = st.texts.size(); textsSum = sum; state.texts = st.texts; repaint(); } }
+          sum += st.shape.shape.w * 1000.0 + st.shape.shape.h * 100.0 + (st.shape.fill ? 17.0 : 0.0) + st.shape.focusX * 5.0 + st.shape.focusY * 9.0;
+          if (st.texts.size() != textsSeen || sum != textsSum) { textsSeen = st.texts.size(); textsSum = sum; state.texts = st.texts; state.shape = st.shape; repaint(); } }
         proxyBtn.setVisible (player.ready() && haveTools);
         if (player.ready() && (proxyTick++ % 15) == 0) { const auto lab = VideoProxy::label (Frame::Proxies::get().status (player.source())); if (lab != proxyBtn.getButtonText()) proxyBtn.setButtonText (lab); }
         if (note.startsWith ("That moment") && std::abs (st.playhead - noteAt) > 1.0e-6) { note.clear(); repaint(); }     // the remark goes once the playhead moves on
@@ -140,9 +165,24 @@ public:
     juce::Rectangle<float> pictureRect() const
     {
         const auto area = screen.reduced (2).toFloat(); const auto& in = player.facts();
-        const double shape = player.ready() && in.height > 0 ? (double) in.width / in.height : 16.0 / 9.0;
+        const double shape = state.shape.active() ? state.shape.shape.ratio() : player.ready() && in.height > 0 ? (double) in.width / in.height : 16.0 / 9.0;
         float w = area.getWidth(), h = (float) (w / shape); if (h > area.getHeight()) { h = area.getHeight(); w = (float) (h * shape); }
         return { area.getCentreX() - w * 0.5f, area.getCentreY() - h * 0.5f, w, h };
+    }
+
+    /** Runs video_shape (the menu, the R key and the self-test all end here). */
+    juce::String runShape (std::initializer_list<std::pair<const char*, juce::var>> fields)
+    {
+        juce::var args (new juce::DynamicObject()); for (auto& f : fields) args.getDynamicObject()->setProperty (f.first, f.second);
+        note = shapeTool ? shapeTool (args).upToFirstOccurrenceOf ("\n", false, false) : juce::String ("Open a session first.");
+        update(); repaint(); return note;
+    }
+    /** The next shape in turn: as the video is, vertical, square, tall, wide. */
+    juce::String nextShape()
+    {
+        const auto& sh = state.shape.shape;
+        const char* next = ! sh.given() ? "9:16" : (sh.w == 9 && sh.h == 16) ? "1:1" : (sh.w == 1 && sh.h == 1) ? "4:5" : (sh.w == 4 && sh.h == 5) ? "16:9" : "source";
+        return runShape ({ { "shape", next } });
     }
 
     /** Runs video_text (the menu, the keys and the self-test all end here). */
@@ -243,6 +283,7 @@ public:
         if (k.getKeyCode() == juce::KeyPress::endKey)   { seekToStripX (stripArea.getRight()); return true; }
         if (k.getTextCharacter() == 'p' || k.getTextCharacter() == 'P') { makeProxy(); return true; }
         if (k.getTextCharacter() == 't' || k.getTextCharacter() == 'T') { askForText ("title", -1); return true; }
+        if (k.getTextCharacter() == 'r' || k.getTextCharacter() == 'R') { nextShape(); return true; }
         if (k.getTextCharacter() == 'c' || k.getTextCharacter() == 'C') { askForText ("caption", -1); return true; }
         return false;
     }
@@ -265,11 +306,11 @@ public:
         g.setColour (L::dim()); g.setFont (Theme::font (12.0f));
         g.drawText (player.ready() ? player.source().getFileName() + "   " + juce::String (in.width) + " x " + juce::String (in.height) + "   " + juce::String (in.fps, in.fps == std::floor (in.fps) ? 0 : 2) + " fps"
                                    : juce::String ("The session's picture, following the playhead."),
-                    header.withTrimmedLeft (92).withTrimmedRight (270), juce::Justification::centredLeft);
+                    header.withTrimmedLeft (92).withTrimmedRight (432), juce::Justification::centredLeft);
 
         g.setColour (juce::Colours::black); g.fillRoundedRectangle (screen.toFloat(), 6.0f);
         if (shown.isValid())
-            g.drawImage (shown, screen.reduced (2).toFloat(), juce::RectanglePlacement::centred);
+            VideoShape::drawPicture (g, pictureRect(), shown, state.shape);
         else if (SqText::showing (state.texts, state.playhead).empty() || ! player.ready())
         {
             g.setColour (L::dim()); g.setFont (L::caps (17.0f));
@@ -336,6 +377,7 @@ public:
         toolsBtn.setBounds (importBtn.getX() - 148, header.getY() + 9, 140, 28);
         proxyBtn.setBounds (importBtn.getX() - 118, header.getY() + 9, 110, 28);
         textBtn.setBounds (proxyBtn.getX() - 78, header.getY() + 9, 70, 28);
+        shapeBtn.setBounds (textBtn.getX() - 82, header.getY() + 9, 74, 28);
         r.reduce (14, 4);
         noteArea = r.removeFromBottom (18);
         footer = r.removeFromBottom (58); r.removeFromBottom (8);
@@ -347,7 +389,7 @@ private:
     void timerCallback() override { update(); if (Frame::installState().running) repaint(); }
 
     Frame::Player player; Frame::Strip strip; int stripSeen = -1; bool dragging = false; State state; juce::Image shown; juce::int64 shownIndex = -1; double lastPlayhead = -1.0;
-    juce::TextButton importBtn { "Import video..." }, toolsBtn { "Get video tools" }, proxyBtn { "Proxy" }, textBtn { "Text" }; int proxyTick = 0; size_t textsSeen = 0; double textsSum = 0; double noteAt = 0;
+    juce::TextButton importBtn { "Import video..." }, toolsBtn { "Get video tools" }, proxyBtn { "Proxy" }, textBtn { "Text" }, shapeBtn { "Shape" }; int proxyTick = 0; size_t textsSeen = 0; double textsSum = 0; double noteAt = 0;
     std::unique_ptr<juce::FileChooser> chooser; juce::String note; bool hover = false;
     juce::Rectangle<int> header, screen, footer, noteArea, stripArea;
 };
@@ -363,12 +405,13 @@ void attachVideo (VideoContent& c, Tools& tools, Sess& session)
         auto& e = *session.edit;
         s.video = juce::File (e.state["frameVideo"].toString()); s.videoStartsAt = (double) e.state.getProperty ("frameVideoAt", 0.0);
         s.playhead = e.getTransport().getPosition().inSeconds(); s.playing = e.getTransport().isPlaying();
-        s.texts = VideoText::read (e);
+        s.texts = VideoText::read (e); s.shape = VideoShape::read (e);
         if (VideoCuts::soundFile (e) != juce::File()) { const auto pic = VideoCuts::read (e, 0.0); s.cut = true; s.pieces = pic.pieces; s.slip = pic.slip; }
         else s.slip = (double) e.state.getProperty ("frameVideoSlip", 0.0);
         return s;
     };
     c.seek = [&session] (double t) { if (session.edit != nullptr) session.edit->getTransport().setPosition (tracktion::TimePosition::fromSeconds (juce::jmax (0.0, t))); };
+    c.shapeTool = [&tools] (const juce::var& args) { return tools.call ("video_shape", args).text; };
     c.textTool = [&tools] (const juce::var& args) { return tools.call ("video_text", args).text; };
     c.importVideo = [&tools] (const juce::File& f)
     {

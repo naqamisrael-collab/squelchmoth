@@ -90,6 +90,24 @@ void registerFrameTools()
              return ToolResult::ok (VideoProxy::sentence (video, st));
          });
 
+    add ("video_shape",
+         "Frame: the shape of the session's picture for the Video window and for video_export. shape: source (as the video is), vertical (9:16), square (1:1), tall (4:5), wide (16:9), or any w:h. "
+         "fit: fill (default; the largest area of that shape is kept, placed by focus_x and focus_y from 0 to 1 - 0 keeps the left / top, 0.5 the middle, 1 the right / bottom) or fit (the whole picture with black bars). "
+         "Export then uses the shape's size with a short side of 1080 (9:16 = 1080 x 1920) unless width and height are given. Titles and captions are laid out inside the shape. No arguments: says what is set. "
+         "video_export also takes chapters (default true: the session's markers inside the range become chapters in the file) and poster true or a path with poster_seconds (a PNG of that moment exactly as exported, for a thumbnail).",
+         R"json({"type":"object","properties":{"shape":{"type":"string"},"fit":{"type":"string","enum":["fill","fit"]},"focus_x":{"type":"number"},"focus_y":{"type":"number"}}})json",
+         [this] (const juce::var& a) -> ToolResult
+         {
+             auto& e = edit(); auto s = VideoShape::read (e);
+             if (! has (a, "shape") && ! has (a, "fit") && ! has (a, "focus_x") && ! has (a, "focus_y")) return ToolResult::ok (VideoShape::describe (s));
+             if (has (a, "shape")) { bool ok = false; const auto sh = SqShape::parse (str (a, "shape").toStdString(), &ok); if (! ok) return ToolResult::error ("shape is source, vertical, square, tall, wide, or numbers like 9:16"); s.shape = sh; }
+             if (has (a, "fit")) { const auto f = str (a, "fit").toLowerCase(); if (f != "fill" && f != "fit") return ToolResult::error ("fit is fill or fit"); s.fill = f == "fill"; }
+             if (has (a, "focus_x")) s.focusX = juce::jlimit (0.0, 1.0, num (a, "focus_x", 0.5));
+             if (has (a, "focus_y")) s.focusY = juce::jlimit (0.0, 1.0, num (a, "focus_y", 0.5));
+             VideoShape::write (e, s);
+             return ToolResult::ok (VideoShape::describe (s));
+         });
+
     add ("video_text",
          "Frame: words on the picture - titles, lower thirds and captions. They show in the Video window as they will look and video_export burns them into the picture (its text option: burn (default), "
          "file = a caption file (.srt) beside the video instead, both, none). Times are session seconds.\n"
@@ -217,7 +235,7 @@ void registerFrameTools()
          " action install: downloads the video tools (FFmpeg, about 80 MB, once) when the computer has none; action install_status: its progress. Not yet here: picture editing, titles, upload.",
          R"json({"type":"object","properties":{"action":{"type":"string","enum":["start","status","install","install_status"]},"picture":{"type":"string","enum":["source","image","waveform","spectrum","black"]},"video":{"type":"string"},"image":{"type":"string"},
             "width":{"type":"integer"},"height":{"type":"integer"},"fps":{"type":"number"},"start_seconds":{"type":"number"},"end_seconds":{"type":"number"},"start_bar":{"type":"number"},"end_bar":{"type":"number"},
-            "name":{"type":"string"},"path":{"type":"string"},"job":{"type":"integer"},"wait_seconds":{"type":"number"},"text":{"type":"string","enum":["burn","file","both","none"]}}})json",
+            "name":{"type":"string"},"path":{"type":"string"},"job":{"type":"integer"},"wait_seconds":{"type":"number"},"text":{"type":"string","enum":["burn","file","both","none"]},"chapters":{"type":"boolean"},"poster":{"type":["boolean","string"]},"poster_seconds":{"type":"number"}}})json",
          [this] (const juce::var& a) -> ToolResult
          {
              const auto action = str (a, "action", "start");
@@ -260,6 +278,20 @@ void registerFrameTools()
                  o.sourceFps = vin.fps;
              }
              else if (o.picture == "source") o.videoOffset = startS;
+             // ---- the picture's shape (vertical / square / wide): sets the size, and for a filled shape the area kept
+             const auto shape = VideoShape::read (e); juce::String extraNote; bool shapedSource = false;
+             if (shape.active())
+             {
+                 if (! o.resize) SqShape::size (shape.shape, o.width, o.height);
+                 if (o.picture == "source")
+                 {
+                     if (! vin.ok) { vin = Frame::probe (video); if (! vin.ok || ! vin.hasVideo) return ToolResult::error (video.getFileName() + " has no picture"); o.sourceFps = vin.fps; }
+                     if (! has (a, "fps")) o.fps = juce::jlimit (1.0, 120.0, vin.fps);
+                     if (shape.fill) { const auto c = SqShape::crop (vin.width, vin.height, SqShape::Shape { o.width, o.height }, shape.focusX, shape.focusY); o.cropX = c.x; o.cropY = c.y; o.cropW = c.w; o.cropH = c.h; }
+                     o.resize = true; shapedSource = true;
+                 }
+                 extraNote << "\nShape: " << juce::String (SqShape::name (shape.shape)) << ", " << o.width << " x " << o.height << (o.picture == "source" ? (shape.fill ? ", filled" : ", fitted with bars") : "") << ".";
+             }
              o.out = has (a, "path") ? juce::File (str (a, "path")) : session.bouncesDir.getNonexistentChildFile (juce::File::createLegalFileName (str (a, "name", session.getFile().getFileNameWithoutExtension() + " video")), ".mp4", false);
              if (! o.out.hasFileExtension ("mp4;mov;mkv")) o.out = o.out.withFileExtension ("mp4");
 
@@ -271,7 +303,43 @@ void registerFrameTools()
              if (! o.audio.existsAsFile()) return ToolResult::error ("The mix could not be bounced for the video");
              if (auto reader = std::unique_ptr<juce::AudioFormatReader> (session.getEngine().getAudioFileFormatManager().readFormatManager.createReaderFor (o.audio)))
                  o.seconds = (double) reader->lengthInSamples / juce::jmax (1.0, reader->sampleRate);
-             if (cutPicture) o.stretches = SqCut::plan (pic.pieces, pic.slip, vin.seconds, startS, startS + o.seconds, 0.5 / juce::jmax (1.0, o.fps));
+             auto ensurePlan = [&]
+             {
+                 if (! o.stretches.empty()) return;
+                 if (has (a, "video")) o.stretches.push_back ({ startS, o.seconds, startS, true });
+                 else o.stretches = SqCut::plan (pic.pieces, pic.slip, vin.seconds, startS, startS + o.seconds, 0.5 / juce::jmax (1.0, o.fps));
+             };
+             if (cutPicture || shapedSource) ensurePlan();
+             // ---- chapters from the session's markers
+             if (flag (a, "chapters", true))
+             {
+                 std::vector<SqShape::Marker> marks; for (auto m : session.getMarkers()) marks.push_back ({ m->getPosition().getStart().inSeconds(), m->getName().toStdString() });
+                 const auto ch = SqShape::chapters (marks, startS, startS + o.seconds);
+                 if (! ch.empty())
+                 {
+                     const auto meta = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("Squelchmoth").getChildFile ("frame-chapters.txt");
+                     meta.getParentDirectory().createDirectory();
+                     if (meta.replaceWithText (juce::String::fromUTF8 (SqShape::metadataText (ch).c_str()), false, false, "\n")) { o.chapters = meta; extraNote << "\n" << (int) ch.size() << " chapters from the session's markers."; }
+                 }
+             }
+             // ---- a poster picture: one moment exactly as exported
+             if (has (a, "poster") && ! (a["poster"].isBool() && ! (bool) a["poster"]))
+             {
+                 if (o.picture != "source") extraNote << "\nNo poster: it needs picture source.";
+                 else
+                 {
+                     if (! vin.ok) { vin = Frame::probe (video); o.sourceFps = vin.fps; }
+                     const double pt = juce::jlimit (startS, startS + juce::jmax (0.0, o.seconds - 0.01), num (a, "poster_seconds", startS + juce::jmin (1.0, o.seconds * 0.5)));
+                     const double src = has (a, "video") ? pt : SqCut::lookup (pic.pieces, pt, pic.slip, vin.seconds).src;
+                     const bool shows = has (a, "video") ? (pt < vin.seconds) : SqCut::lookup (pic.pieces, pt, pic.slip, vin.seconds).shows();
+                     juce::String perr; const auto frame = shows && vin.ok ? Frame::grabFrame (video, vin, src, juce::jmin (1920, vin.width), perr, false) : juce::Image();
+                     int pw = o.width, ph = o.height; if (! o.resize && vin.ok) { pw = juce::jmax (16, vin.width) & ~1; ph = juce::jmax (16, vin.height) & ~1; }
+                     auto pf = a["poster"].isString() && a["poster"].toString().isNotEmpty() ? juce::File (a["poster"].toString()) : o.out.withFileExtension ("png"); if (! pf.hasFileExtension ("png")) pf = pf.withFileExtension ("png");
+                     pf.getParentDirectory().createDirectory(); pf.deleteFile(); juce::FileOutputStream pos (pf);
+                     if (pos.openedOk() && juce::PNGImageFormat().writeImageToStream (VideoShape::compose (frame, shape, pw, ph, VideoText::read (e), pt), pos)) extraNote << "\nPoster: " << pf.getFullPathName() << " (" << pw << " x " << ph << ", the moment at " << juce::String (pt, 2) << " s).";
+                     else extraNote << "\nThe poster could not be written.";
+                 }
+             }
              // ---- words on the picture: burned in, written beside as a caption file, or both
              juce::String textNote;
              {
@@ -290,11 +358,7 @@ void registerFrameTools()
                      {
                          if (! vin.ok) { vin = Frame::probe (video); if (! vin.ok || ! vin.hasVideo) return ToolResult::error (video.getFileName() + " has no picture"); o.sourceFps = vin.fps; }
                          if (! o.resize) { o.width = juce::jmax (16, vin.width) & ~1; o.height = juce::jmax (16, vin.height) & ~1; if (! has (a, "fps")) o.fps = juce::jlimit (1.0, 120.0, vin.fps); }
-                         if (o.stretches.empty())
-                         {
-                             if (has (a, "video")) o.stretches.push_back ({ startS, o.seconds, startS, true });
-                             else o.stretches = SqCut::plan (pic.pieces, pic.slip, vin.seconds, startS, startS + o.seconds, 0.5 / juce::jmax (1.0, o.fps));
-                         }
+                         ensurePlan();
                      }
                      const auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("Squelchmoth").getChildFile ("frame-text");
                      folder.deleteRecursively(); folder.createDirectory();
@@ -309,6 +373,7 @@ void registerFrameTools()
                      textNote << "\n" << (int) inRange.size() << (inRange.size() == 1 ? " text is" : " texts are") << " burned into the picture.";
                  }
              }
+             textNote << extraNote;
              if (textNote.isNotEmpty()) { auto r2 = frameExportStatus (Frame::Store::get().start (o, true), num (a, "wait_seconds", 20.0)); if (! r2.isError) r2.text << textNote; return r2; }
              return frameExportStatus (Frame::Store::get().start (o, true), num (a, "wait_seconds", 20.0));
          });

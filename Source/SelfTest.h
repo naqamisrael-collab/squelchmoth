@@ -5239,6 +5239,79 @@ inline int runSelfTest()
                         const auto wiped = call ("video_text", R"({"action":"remove","all":true})");
                         check (tooMany.contains ("up to 150") && tooMany.contains ("caption file") && wiped.contains ("Removed") && VideoText::read (ed).empty(), "more than 150 texts in one export is refused with the caption-file way out; remove all clears them");
                     }
+                    // ---- 1.34: the picture's shape, chapters from markers, the poster
+                    {
+                        // a clip whose left half is dark (40) and right half bright (200), 128 x 64, 2 s, no sound
+                        const auto halves = dir.getChildFile ("halves.mp4"), rawH = dir.getChildFile ("halves.rgb"); juce::String oh;
+                        {
+                            juce::FileOutputStream os (rawH); juce::HeapBlock<juce::uint8> fr (128 * 64 * 3);
+                            for (int y = 0; y < 64; ++y) for (int x = 0; x < 128; ++x) std::memset (fr + (y * 128 + x) * 3, x < 64 ? 40 : 200, 3);
+                            for (int k = 0; k < 50; ++k) os.write (fr, 128 * 64 * 3);
+                        }
+                        Frame::run ({ ff.getFullPathName(), "-y", "-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", "128x64", "-r", "25", "-i", rawH.getFullPathName(),
+                                      "-c:v", Frame::videoEncoder(), "-pix_fmt", "yuv420p", "-an", halves.getFullPathName() }, oh);
+                        call ("new_session", R"({"name":"Selftest Shape"})");
+                        const auto hi = call ("video_import", "{\"path\":" + asJson (halves) + "}");
+                        auto& ed = *session->edit;
+                        juce::String ge;
+                        auto shapedExport = [&] (const juce::String& shapeArgs, const juce::String& name)
+                        {
+                            call ("video_shape", shapeArgs);
+                            const auto f = dir.getChildFile (name + ".mp4");
+                            call ("video_export", "{\"picture\":\"source\",\"width\":128,\"height\":128,\"start_seconds\":0,\"end_seconds\":2,\"wait_seconds\":240,\"path\":" + asJson (f) + "}");
+                            const auto pi = Frame::probe (f); return pi.ok && pi.width == 128 && pi.height == 128 ? Frame::grabFrame (f, pi, 1.0, 128, ge, false) : juce::Image();
+                        };
+                        auto lum = [] (const juce::Image& img, int x, int y) { return img.isValid() ? (int) img.getPixelAt (x, y).getGreen() : -1; };
+                        const auto eLeft = shapedExport (R"({"shape":"square","fit":"fill","focus_x":0})", "left"), eRight = shapedExport (R"({"focus_x":1})", "right"), eMid = shapedExport (R"({"focus_x":0.5})", "mid"), eFit = shapedExport (R"({"fit":"fit"})", "fit");
+                        auto dark = [] (int v) { return std::abs (v - 40) <= 6; }; auto bright = [] (int v) { return std::abs (v - 200) <= 6; };
+                        check (hi.contains ("128 x 64") && hi.contains ("no sound") && dark (lum (eLeft, 32, 64)) && dark (lum (eLeft, 96, 64)) && bright (lum (eRight, 32, 64)) && bright (lum (eRight, 96, 64))
+                               && dark (lum (eMid, 32, 64)) && bright (lum (eMid, 96, 64)) && lum (eFit, 64, 8) >= 0 && lum (eFit, 64, 8) <= 6 && lum (eFit, 64, 120) <= 6 && dark (lum (eFit, 32, 64)) && bright (lum (eFit, 96, 64)),
+                               "video_shape square, read back from the exported files: focus left keeps the dark half (" + juce::String (lum (eLeft, 32, 64)) + ", " + juce::String (lum (eLeft, 96, 64)) + "), focus right the bright half ("
+                               + juce::String (lum (eRight, 32, 64)) + ", " + juce::String (lum (eRight, 96, 64)) + "), the middle half of each, and fit shows the whole picture between black bars (" + juce::String (lum (eFit, 64, 8)) + ")");
+                        // the size that comes with a shape, and the Video window drawing it
+                        call ("video_shape", R"({"shape":"vertical","fit":"fill","focus_x":1})");
+                        const auto vfile = dir.getChildFile ("vertical.mp4");
+                        const auto vex = call ("video_export", "{\"picture\":\"source\",\"start_seconds\":0,\"end_seconds\":1,\"wait_seconds\":300,\"path\":" + asJson (vfile) + "}");
+                        const auto vp = Frame::probe (vfile); const auto vimg = vp.ok ? Frame::grabFrame (vfile, vp, 0.5, 270, ge, false) : juce::Image();
+                        const auto said = call ("video_shape", "{}");
+                        check (vex.contains ("9:16, 1080 x 1920, filled") && vp.ok && vp.width == 1080 && vp.height == 1920 && bright (lum (vimg, 30, 240)) && bright (lum (vimg, 240, 240)) && said.contains ("9:16 (1080 x 1920") && said.contains ("100 % across"),
+                               "a vertical shape exports 1080 x 1920 with no size given, filled from the right side of the picture (reads " + juce::String (lum (vimg, 30, 240)) + ")");
+                        vc.readState = [&] { VideoContent::State st; st.video = halves; st.playhead = clock; st.playing = playing; st.texts = VideoText::read (ed); st.shape = VideoShape::read (ed); return st; };
+                        vc.shapeTool = [&] (const juce::var& args) { return tools.call ("video_shape", args).text; };
+                        clock = 0.5; pump (200); for (int i = 0; i < 200 && ! vc.imageShown().isValid(); ++i) pump (30);
+                        const auto prV = vc.pictureRect(); const auto shotV = vc.createComponentSnapshot (vc.getLocalBounds(), true, 1.0f);
+                        { const juce::File sp ("/tmp/main_video_vertical.png"); sp.deleteFile(); juce::FileOutputStream os (sp); if (os.openedOk()) juce::PNGImageFormat().writeImageToStream (shotV, os); }
+                        const int inL = lum (shotV, juce::roundToInt (prV.getX() + prV.getWidth() * 0.2f), juce::roundToInt (prV.getCentreY())), inR = lum (shotV, juce::roundToInt (prV.getX() + prV.getWidth() * 0.8f), juce::roundToInt (prV.getCentreY()));
+                        const bool kr = vc.keyPressed (juce::KeyPress ('r', juce::ModifierKeys(), 'r')); const auto afterR = VideoShape::read (ed);
+                        check (std::abs (prV.getWidth() / prV.getHeight() - 9.0f / 16.0f) < 0.01f && bright (inL) && bright (inR) && kr && afterR.shape.w == 1 && afterR.shape.h == 1,
+                               "Video window: the picture is drawn 9:16 and filled from the right (reads " + juce::String (inL) + ", " + juce::String (inR) + "); the R key moves on to the next shape (square)");
+                        // chapters from markers, read back from the file
+                        call ("add_marker", R"({"name":"Verse","seconds":2.0})"); call ("add_marker", R"({"name":"Hook = big","seconds":4.0})");
+                        const auto cfile = dir.getChildFile ("chapters.mp4");
+                        const auto cex = call ("video_export", "{\"picture\":\"black\",\"width\":128,\"height\":128,\"start_seconds\":0,\"end_seconds\":6,\"wait_seconds\":240,\"path\":" + asJson (cfile) + "}");
+                        juce::String facts; Frame::run ({ ff.getFullPathName(), "-hide_banner", "-i", cfile.getFullPathName() }, facts);
+                        check (cex.contains ("3 chapters from the session's markers") && facts.contains ("start 0.000000, end 2.000000") && facts.contains ("start 2.000000, end 4.000000") && facts.contains ("start 4.000000, end 6.000000")
+                               && facts.contains ("Start") && facts.contains ("Verse") && facts.contains ("Hook = big"),
+                               "video_export puts the markers in the file as chapters; read back: Start 0-2 s, Verse 2-4 s, Hook = big 4-6 s");
+                        const auto nfile = dir.getChildFile ("nochapters.mp4");
+                        call ("video_export", "{\"picture\":\"black\",\"width\":128,\"height\":128,\"chapters\":false,\"start_seconds\":0,\"end_seconds\":6,\"wait_seconds\":240,\"path\":" + asJson (nfile) + "}");
+                        juce::String facts2; Frame::run ({ ff.getFullPathName(), "-hide_banner", "-i", nfile.getFullPathName() }, facts2);
+                        check (nfile.existsAsFile() && ! facts2.contains ("Chapter #"), "chapters false leaves them out");
+                        // the poster: one moment exactly as exported
+                        call ("video_shape", R"({"shape":"square","fit":"fill","focus_x":0})");
+                        call ("video_text", R"({"text":"POSTER","style":"title","start_seconds":0.5,"length_seconds":1.0})");
+                        const auto pfile = dir.getChildFile ("poster.mp4");
+                        const auto pex = call ("video_export", "{\"picture\":\"source\",\"width\":256,\"height\":256,\"poster\":true,\"poster_seconds\":1.0,\"start_seconds\":0,\"end_seconds\":2,\"wait_seconds\":240,\"path\":" + asJson (pfile) + "}");
+                        const auto poster = juce::ImageFileFormat::loadFrom (pfile.withFileExtension ("png"));
+                        int whiteP = 0; if (poster.isValid()) for (int y = 0; y < poster.getHeight(); ++y) for (int x = 0; x < poster.getWidth(); ++x) { const auto px = poster.getPixelAt (x, y); if (px.getRed() > 244 && px.getGreen() > 244 && px.getBlue() > 244) ++whiteP; }
+                        const auto pvid = Frame::probe (pfile); const auto pframe = pvid.ok ? Frame::grabFrame (pfile, pvid, 1.0, 256, ge, false) : juce::Image();
+                        int whiteV = 0; if (pframe.isValid()) for (int y = 0; y < pframe.getHeight(); ++y) for (int x = 0; x < pframe.getWidth(); ++x) { const auto px = pframe.getPixelAt (x, y); if (px.getRed() > 244 && px.getGreen() > 244 && px.getBlue() > 244) ++whiteV; }
+                        check (pex.contains ("Poster:") && poster.isValid() && poster.getWidth() == 256 && poster.getHeight() == 256 && dark (lum (poster, 20, 20)) && dark (lum (poster, 236, 236)) && whiteP > 150
+                               && pframe.isValid() && dark (lum (pframe, 20, 20)) && std::abs (whiteP - whiteV) < juce::jmax (120, whiteP / 2),
+                               "poster: a 256 x 256 picture of 1.0 s as exported - the left half of the video with the title on it (" + juce::String (whiteP) + " white pixels; the video's own frame there has " + juce::String (whiteV) + ")");
+                        call ("video_shape", R"({"shape":"source"})"); const auto bad = call ("video_shape", R"({"shape":"banana"})", false);
+                        check (! VideoShape::read (ed).active() && bad.contains ("shape is source"), "video_shape source goes back to the video's own shape; a shape that is not one is refused");
+                    }
                     vc.getPlayer().stopStream();
                 }
                 dir.deleteRecursively();
