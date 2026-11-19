@@ -317,6 +317,8 @@ namespace Frame
         double videoOffset = 0;                      // source picture: where the range starts inside the video (negative: the video starts later)
         std::vector<SqCut::Stretch> stretches;       // source picture, cut: the picture as stretches of video and black, in order (empty: one uncut video)
         double sourceFps = 0;                        // the video's own frame rate (for landing on exact frames of a cut picture)
+        struct Overlay { juce::File png; double from = 0, to = 0; };   // a see-through picture the size of the frame, shown from..to seconds of the export
+        std::vector<Overlay> overlays;               // titles and captions, laid over whatever the picture is
         bool resize = false;                         // source picture: re-encode to width x height
         double seconds = 0;                          // length of the audio, for progress
     };
@@ -333,7 +335,57 @@ namespace Frame
         else venc.addArray ({ "-b:v", juce::String (juce::jmax (2, o.width * o.height / 260000)) + "M" });
         venc.addArray ({ "-pix_fmt", "yuv420p" });
         const auto fit = "scale=" + juce::String (o.width) + ":" + juce::String (o.height) + ":force_original_aspect_ratio=decrease,pad=" + juce::String (o.width) + ":" + juce::String (o.height) + ":(ow-iw)/2:(oh-ih)/2,setsar=1";
-        if (o.picture == "source" && ! o.stretches.empty())
+        if (! o.overlays.empty())
+        {
+            // words over the picture: build the picture as one stream [v], then lay each text over it for its time
+            juce::String graph; int n = 0;                      // n: inputs so far
+            int audioIn = 0;
+            if (o.picture == "source")
+            {
+                const auto counts = SqCut::frameCounts (o.stretches, o.fps); juce::String joins; int parts = 0;
+                for (size_t i = 0; i < o.stretches.size(); ++i)
+                {
+                    const auto& st = o.stretches[i]; if (counts[i] <= 0) continue;
+                    const auto need = juce::String ((double) (counts[i] + 2) / o.fps, 4);
+                    const double vf = o.sourceFps > 0 ? o.sourceFps : o.fps;
+                    if (st.picture) a.addArray ({ "-ss", juce::String (juce::jmax (0.0, (std::floor (st.src * vf + 1.0e-6) - 0.25) / vf), 6), "-t", need, "-i", o.sourceVideo.getFullPathName() });
+                    else a.addArray ({ "-f", "lavfi", "-t", need, "-i", "color=c=black:s=" + size + ":r=" + rate });
+                    graph << "[" << n << ":v:0]" << fit << ",fps=" << rate << ",format=yuv420p,tpad=stop_mode=clone:stop_duration=1,trim=end_frame=" << juce::String (counts[i]) << ",setpts=PTS-STARTPTS[p" << n << "];";
+                    joins << "[p" << n << "]"; ++n; ++parts;
+                }
+                graph << joins << "concat=n=" << parts << ":v=1:a=0[v];";
+                a.addArray ({ "-i", o.audio.getFullPathName() }); audioIn = n++;
+            }
+            else if (o.picture == "image")
+            {
+                a.addArray ({ "-loop", "1", "-framerate", rate, "-i", o.image.getFullPathName(), "-i", o.audio.getFullPathName() }); n = 2; audioIn = 1;
+                graph << "[0:v:0]" << fit << ",format=yuv420p[v];";
+            }
+            else if (o.picture == "black")
+            {
+                a.addArray ({ "-f", "lavfi", "-i", "color=c=black:s=" + size + ":r=" + rate, "-i", o.audio.getFullPathName() }); n = 2; audioIn = 1;
+                graph << "[0:v:0]format=yuv420p[v];";
+            }
+            else
+            {
+                a.addArray ({ "-i", o.audio.getFullPathName() }); n = 1; audioIn = 0;
+                graph << (o.picture == "spectrum" ? "[0:a]showspectrum=s=" + size + ":slide=scroll:color=fiery:scale=log:legend=0,fps=" + rate + ",format=yuv420p[v];"
+                                                  : "[0:a]showwaves=s=" + size + ":mode=cline:rate=" + rate + ":colors=0xE8C46A|0xF2E3B5,format=yuv420p[v];");
+            }
+            juce::String last = "[v]";
+            for (size_t k = 0; k < o.overlays.size(); ++k)
+            {
+                const auto& ov = o.overlays[k];
+                a.addArray ({ "-i", ov.png.getFullPathName() });
+                const juce::String next = "[t" + juce::String ((int) k) + "]";
+                graph << last << "[" << n << ":v:0]overlay=0:0:enable='between(t," << juce::String (ov.from, 3) << "," << juce::String (juce::jmax (ov.from, ov.to - 0.5 / o.fps), 3) << ")'" << next << ";";
+                last = next; ++n;
+            }
+            graph << last << "format=yuv420p[vout]";
+            a.addArray ({ "-filter_complex", graph, "-map", "[vout]", "-map", juce::String (audioIn) + ":a:0" });
+            a.addArray (venc); if (o.picture == "image" && enc == "libx264") a.addArray ({ "-tune", "stillimage" });
+        }
+        else if (o.picture == "source" && ! o.stretches.empty())
         {
             // a cut picture: every stretch is its own input (only that stretch of the file is read), black for the gaps;
             // each is brought to one size, rate and pixel format, cut to a whole number of frames, and they are joined.

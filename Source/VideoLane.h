@@ -13,6 +13,7 @@
 #include "Frame.h"
 #include "VideoProxy.h"
 #include "VideoCuts.h"
+#include "VideoText.h"
 
 namespace te = tracktion;
 
@@ -97,6 +98,7 @@ public:
         if (info.ok && info.hasVideo) strip.setSource (file, info, (int) juce::jlimit ((long long) 1, (long long) 120, SqStrip::frameCount (info.seconds, info.fps)), 96);
         pic = VideoCuts::read (e, info.seconds);
         double sum = (double) pic.pieces.size() * 7919.0 + pic.slip; for (auto& p : pic.pieces) sum += p.at * 3.0 + p.length * 5.0 + p.srcIn * 7.0;
+        texts = VideoText::read (e); sum += (double) texts.size() * 31.0; for (auto& t : texts) sum += t.start * 11.0 + t.end * 13.0;
         const double at = sum, ph = e.getTransport().getPosition().inSeconds();
         if (strip.done() != seenDone || at != seenAt || state.viewStart != seenView || state.secondsPerPixel != seenSpp || ph != seenPlayhead)
         { seenDone = strip.done(); seenAt = at; seenView = state.viewStart; seenSpp = state.secondsPerPixel; seenPlayhead = ph; repaint(); }
@@ -177,6 +179,13 @@ public:
             g.setColour (dragging ? Theme::acid() : (hasKeyboardFocus (false) ? Theme::acid().withAlpha (0.8f) : Theme::line().brighter (0.3f)));
             g.drawRect (block, dragging || hasKeyboardFocus (false) ? 1.6f : 1.0f);
         }
+        // words on the picture: a thin amber bar along the bottom for the time each one shows
+        for (auto& t : texts)
+        {
+            const float a = (float) hx + state.timeToX (t.start), b = (float) hx + state.timeToX (t.end);
+            if (b < (float) hx || a > (float) getWidth()) continue;
+            g.setColour (Theme::amber().withAlpha (0.9f)); g.fillRect (a, (float) getHeight() - 5.0f, juce::jmax (2.0f, b - a), 3.0f);
+        }
         if (pic.pieces.empty()) { g.setColour (Theme::dim()); g.setFont (Theme::font (11.0f)); g.drawText ("No picture: every clip of the video's sound was deleted (undo brings it back)", hx + 10, 0, getWidth() - hx - 20, getHeight(), juce::Justification::centredLeft); }
         if (dragging)
         {
@@ -234,6 +243,6 @@ public:
 private:
     Session& session; TimelineState& state;
     juce::File file; bool fileThere = false, probedWithTools = false; Frame::Info info; Frame::Strip strip;
-    bool dragging = false; double dragDelta = 0; VideoCuts::Picture pic;
+    bool dragging = false; double dragDelta = 0; VideoCuts::Picture pic; std::vector<SqText::Item> texts;
     int seenDone = -1; double seenAt = -1, seenView = -1, seenSpp = -1, seenPlayhead = -1;
 };

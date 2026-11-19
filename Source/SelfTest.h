@@ -5184,6 +5184,61 @@ inline int runSelfTest()
                         // quitting: Don't Save leaves the file alone (the question itself needs a person)
                         check (session->saveOnClose, "Quitting saves unless Don't Save is chosen at the question");
                     }
+                    // ---- 1.33: titles and captions - seen in the window, burned into the export, caption files in and out
+                    {
+                        call ("new_session", R"({"name":"Selftest Text"})");
+                        call ("video_import", "{\"path\":" + asJson (ramp) + "}");
+                        auto& ed = *session->edit;
+                        const auto t1 = call ("video_text", R"({"action":"add","text":"HELLO MOTH","style":"title","start_seconds":1.0,"length_seconds":1.0})");
+                        const auto t2 = call ("video_text", R"({"text":"these are the caption words","start_seconds":2.5,"end_seconds":3.5})");
+                        const auto listed = call ("video_text", "{}");
+                        check (t1.contains ("1. 1.00 to 2.00 s  title: HELLO MOTH") && t2.contains ("2. 2.50 to 3.50 s  caption") && listed.contains ("2 texts on the picture") && VideoText::read (ed).size() == 2,
+                               "video_text add: a title from 1 to 2 s and a caption from 2.5 to 3.5 s are in the session's list");
+                        vc.readState = [&] { VideoContent::State st; st.video = ramp; st.playhead = clock; st.playing = playing; const auto pc = VideoCuts::read (ed, in.seconds); st.cut = true; st.pieces = pc.pieces; st.slip = pc.slip; st.texts = VideoText::read (ed); return st; };
+                        auto whiteIn = [] (const juce::Image& img, juce::Rectangle<int> r) { int n = 0; r = r.getIntersection (img.getBounds()); for (int y = r.getY(); y < r.getBottom(); ++y) for (int x = r.getX(); x < r.getRight(); ++x) { const auto px = img.getPixelAt (x, y); if (px.getRed() > 244 && px.getGreen() > 244 && px.getBlue() > 244) ++n; } return n; };
+                        auto windowShot = [&] (double t) { clock = t; pump (120); for (int i = 0; i < 100 && vc.frameShown() != Frame::frameIndexAt (t, 25.0); ++i) pump (30); return vc.createComponentSnapshot (vc.getLocalBounds(), true, 1.0f); };
+                        const auto scr = vc.screenBounds(); const auto topHalf = scr.withHeight (scr.getHeight() * 2 / 3), bottomThird = scr.withTrimmedTop (scr.getHeight() * 2 / 3);
+                        const auto sTitle = windowShot (1.5), sNone = windowShot (0.5), sCap = windowShot (3.0);
+                        { const juce::File sp ("/tmp/main_video_title.png"); sp.deleteFile(); juce::FileOutputStream os (sp); if (os.openedOk()) juce::PNGImageFormat().writeImageToStream (sTitle, os); }
+                        { const juce::File sp ("/tmp/main_video_caption.png"); sp.deleteFile(); juce::FileOutputStream os (sp); if (os.openedOk()) juce::PNGImageFormat().writeImageToStream (sCap, os); }
+                        const int wTitle = whiteIn (sTitle, topHalf), wNone = whiteIn (sNone, scr), wCapLow = whiteIn (sCap, bottomThird), wCapHigh = whiteIn (sCap, topHalf);
+                        check (wTitle > 300 && wNone == 0 && wCapLow > 150 && wCapHigh == 0,
+                               "Video window: the title shows in the middle only during its time and the caption at the bottom during its own (white pixels: title " + juce::String (wTitle) + ", no text " + juce::String (wNone) + ", caption low " + juce::String (wCapLow) + " / high " + juce::String (wCapHigh) + ")");
+                        // export with the words burned in, read the file back
+                        const auto tf = dir.getChildFile ("words.mp4");
+                        const auto tex = call ("video_export", "{\"picture\":\"source\",\"width\":640,\"height\":360,\"text\":\"both\",\"start_seconds\":0,\"end_seconds\":4,\"wait_seconds\":240,\"path\":" + asJson (tf) + "}");
+                        const auto ti = Frame::probe (tf); juce::String ge;
+                        auto fileShot = [&] (double t) { return ti.ok ? Frame::grabFrame (tf, ti, t, 640, ge, false) : juce::Image(); };
+                        const auto fTitle = fileShot (1.5), fNone = fileShot (0.5), fCap = fileShot (3.0), fAfter = fileShot (3.6), fEdge = fileShot (2.02);
+                        const juce::Rectangle<int> whole (0, 0, 640, 360), upper (0, 0, 640, 240), lower (0, 240, 640, 120);
+                        const int eTitle = whiteIn (fTitle, upper), eNone = whiteIn (fNone, whole), eCapLow = whiteIn (fCap, lower), eCapHigh = whiteIn (fCap, upper), eAfter = whiteIn (fAfter, whole), eEdge = whiteIn (fEdge, whole);
+                        const double under = fCap.isValid() ? ((double) fCap.getPixelAt (320, 60).getGreen() - 4.0) / 2.5 : -100.0;
+                        const auto srtFile = tf.withFileExtension ("srt"); const auto srtBack = SqText::parseSrt (srtFile.loadFileAsString().toStdString());
+                        check (tex.contains ("exported") && tex.contains ("2 texts are burned into the picture") && ti.ok && ti.width == 640 && ti.height == 360 && eTitle > 200 && eNone == 0 && eCapLow > 100 && eCapHigh == 0 && eAfter == 0 && eEdge == 0 && std::abs (under - 75.0) <= 1.5,
+                               "video_export burns the words in: read back, the title is there at 1.5 s, gone at 0.5 s and 2.02 s, the caption at the bottom at 3.0 s and gone at 3.6 s; the picture under them is still frame "
+                               + juce::String (under, 1) + " (white pixels: " + juce::String (eTitle) + " / " + juce::String (eNone) + " / " + juce::String (eCapLow) + " / " + juce::String (eAfter) + ")");
+                        check (srtBack.size() == 2 && srtBack[0].text == "HELLO MOTH" && std::abs (srtBack[0].start - 1.0) < 0.002 && srtBack[1].text == "these are the caption words" && std::abs (srtBack[1].end - 3.5) < 0.002,
+                               "text both also writes the caption file beside the video, with the same words and times");
+                        // caption file in, edit, remove, undo
+                        const auto capIn = dir.getChildFile ("in.srt"); capIn.replaceWithText ("1\n00:00:00,500 --> 00:00:01,250\nfirst line\nsecond line\n\n2\n00:00:02,000 --> 00:00:02,750\n<i>last</i>\n");
+                        const auto imp = call ("video_text", "{\"action\":\"import_srt\",\"offset_seconds\":10,\"path\":" + asJson (capIn) + "}");
+                        const auto afterImp = VideoText::read (ed);
+                        const auto edited = call ("video_text", R"({"action":"edit","number":3,"text":"changed","place":"top","start_seconds":12})");
+                        const auto afterEdit = VideoText::read (ed);
+                        const auto removed = call ("video_text", R"({"action":"remove","number":1})"); const size_t afterRemove = VideoText::read (ed).size();
+                        ed.getUndoManager().undo(); const size_t afterUndo = VideoText::read (ed).size();
+                        const auto badNum = call ("video_text", R"({"action":"remove","number":99})", false);
+                        check (imp.contains ("Brought in 2 captions") && afterImp.size() == 4 && afterImp[2].text == "first line\nsecond line" && std::abs (afterImp[2].start - 10.5) < 1.0e-9 && afterImp[3].text == "last"
+                               && afterEdit.size() == 4 && afterEdit[2].text == "changed" && afterEdit[2].place == SqText::top && std::abs (afterEdit[2].start - 12.0) < 1.0e-9 && std::abs (afterEdit[2].end - 12.75) < 1.0e-9
+                               && removed.contains ("HELLO MOTH") && afterRemove == 3 && afterUndo == 4 && badNum.contains ("1 to 4"),
+                               "video_text: a caption file comes in at 10 s (two lines kept, tags dropped); edit changes words, place and start keeping the length; remove and undo work; a wrong number is refused");
+                        // too many to burn in is refused with the way out; a caption file still works
+                        { juce::String many; for (int i = 0; i < 160; ++i) many << (i + 1) << "\n" << juce::String::fromUTF8 (SqText::srtTime (i * 0.02).c_str()) << " --> " << juce::String::fromUTF8 (SqText::srtTime (i * 0.02 + 0.02).c_str()) << "\nc" << i << "\n\n";
+                          const auto manyFile = dir.getChildFile ("many.srt"); manyFile.replaceWithText (many); call ("video_text", "{\"action\":\"import_srt\",\"replace\":true,\"path\":" + asJson (manyFile) + "}"); }
+                        const auto tooMany = call ("video_export", "{\"picture\":\"black\",\"start_seconds\":0,\"end_seconds\":4,\"path\":" + asJson (dir.getChildFile ("many.mp4")) + "}", false);
+                        const auto wiped = call ("video_text", R"({"action":"remove","all":true})");
+                        check (tooMany.contains ("up to 150") && tooMany.contains ("caption file") && wiped.contains ("Removed") && VideoText::read (ed).empty(), "more than 150 texts in one export is refused with the caption-file way out; remove all clears them");
+                    }
                     vc.getPlayer().stopStream();
                 }
                 dir.deleteRecursively();

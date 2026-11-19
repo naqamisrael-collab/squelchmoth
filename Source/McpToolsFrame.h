@@ -90,6 +90,82 @@ void registerFrameTools()
              return ToolResult::ok (VideoProxy::sentence (video, st));
          });
 
+    add ("video_text",
+         "Frame: words on the picture - titles, lower thirds and captions. They show in the Video window as they will look and video_export burns them into the picture (its text option: burn (default), "
+         "file = a caption file (.srt) beside the video instead, both, none). Times are session seconds.\n"
+         " action add: text (use \\n for a new line), start_seconds (default the playhead), length_seconds or end_seconds (default 4 s for a title, 3 s otherwise), style caption | title | lower third (default caption), "
+         "place top | middle | bottom (default: title in the middle, others at the bottom), size (a factor, 1 = normal), colour (hex, default white).\n"
+         " action list (default). action edit: number (from the list) plus any of the same fields. action remove: number, or all true.\n"
+         " action import_srt: path of a caption file, offset_seconds (where its zero falls on the timeline, default 0), replace true to remove the present captions first. action export_srt: path, from_seconds (default 0).\n"
+         "There is no automatic captioning from speech. Texts stay where they are when the video is moved or cut. One undo step each.",
+         R"json({"type":"object","properties":{"action":{"type":"string","enum":["add","list","edit","remove","import_srt","export_srt"]},"text":{"type":"string"},"start_seconds":{"type":"number"},"end_seconds":{"type":"number"},
+            "length_seconds":{"type":"number"},"style":{"type":"string"},"place":{"type":"string"},"size":{"type":"number"},"colour":{"type":"string"},"number":{"type":"integer"},"all":{"type":"boolean"},
+            "path":{"type":"string"},"offset_seconds":{"type":"number"},"from_seconds":{"type":"number"},"replace":{"type":"boolean"}}})json",
+         [this] (const juce::var& a) -> ToolResult
+         {
+             auto& e = edit(); auto items = VideoText::read (e);
+             const auto action = str (a, "action", has (a, "text") ? "add" : "list");
+             auto listText = [&] (const std::vector<SqText::Item>& v)
+             {
+                 if (v.empty()) return juce::String ("There are no texts on the picture.");
+                 juce::String s = juce::String ((int) v.size()) + (v.size() == 1 ? " text" : " texts") + " on the picture:";
+                 for (size_t i = 0; i < v.size() && i < 200; ++i) s << "\n" << VideoText::line ((int) i + 1, v[i]);
+                 if (v.size() > 200) s << "\n... and " << (int) v.size() - 200 << " more";
+                 return s;
+             };
+             auto apply = [&] (SqText::Item& it)
+             {
+                 if (has (a, "text")) it.text = str (a, "text").replace ("\\n", "\n").toStdString();
+                 if (has (a, "style")) it.style = SqText::styleFrom (str (a, "style").toStdString());
+                 if (has (a, "place")) it.place = SqText::placeFrom (str (a, "place").toStdString());
+                 if (has (a, "size")) it.size = juce::jlimit (0.25, 4.0, num (a, "size", 1.0));
+                 if (has (a, "colour")) { auto c = str (a, "colour").trim().trimCharactersAtStart ("#"); if (c.length() == 6) c = "ff" + c; if (c.length() == 8 && c.containsOnly ("0123456789abcdefABCDEF")) it.colour = (unsigned int) c.getHexValue64(); }
+                 const double length = it.end - it.start;
+                 if (has (a, "start_seconds")) { it.start = num (a, "start_seconds"); if (! has (a, "end_seconds") && ! has (a, "length_seconds")) it.end = it.start + length; }
+                 if (has (a, "end_seconds")) it.end = num (a, "end_seconds");
+                 else if (has (a, "length_seconds")) it.end = it.start + num (a, "length_seconds");
+                 SqText::tidy (it);
+             };
+             if (action == "list") return ToolResult::ok (listText (items));
+             if (action == "add")
+             {
+                 if (str (a, "text").trim().isEmpty()) return ToolResult::error ("add needs text: the words to show");
+                 SqText::Item it; it.style = SqText::styleFrom (str (a, "style").toStdString());
+                 it.start = e.getTransport().getPosition().inSeconds(); it.end = it.start + (it.style == SqText::title ? 4.0 : 3.0);
+                 apply (it); items.push_back (it); VideoText::write (e, items, "Add text");
+                 return ToolResult::ok ("Added: " + VideoText::line ((int) items.size(), it));
+             }
+             if (action == "edit" || action == "remove")
+             {
+                 if (action == "remove" && flag (a, "all")) { const int n = (int) items.size(); VideoText::write (e, {}, "Remove all texts"); return ToolResult::ok ("Removed " + juce::String (n) + (n == 1 ? " text." : " texts.")); }
+                 const int n = (int) num (a, "number", 0.0);
+                 if (n < 1 || n > (int) items.size()) return ToolResult::error ("number is the text's place in the list (1 to " + juce::String ((int) items.size()) + "); video_text action list shows them");
+                 if (action == "remove") { const auto gone = VideoText::line (n, items[(size_t) n - 1]); items.erase (items.begin() + (n - 1)); VideoText::write (e, items, "Remove text"); return ToolResult::ok ("Removed: " + gone); }
+                 apply (items[(size_t) n - 1]); VideoText::write (e, items, "Edit text");
+                 return ToolResult::ok ("Now: " + VideoText::line (n, items[(size_t) n - 1]));
+             }
+             if (action == "import_srt")
+             {
+                 const juce::File f (str (a, "path")); if (! f.existsAsFile()) return ToolResult::error ("No caption file at " + f.getFullPathName());
+                 if (f.getSize() > 20 * 1024 * 1024) return ToolResult::error ("That file is too large to be a caption file");
+                 const auto read = SqText::parseSrt (f.loadFileAsString().toStdString(), num (a, "offset_seconds", 0.0));
+                 if (read.empty()) return ToolResult::error ("No captions were found in " + f.getFileName() + " (it should be a .srt caption file)");
+                 if (flag (a, "replace")) items.erase (std::remove_if (items.begin(), items.end(), [] (const SqText::Item& i) { return i.style == SqText::caption; }), items.end());
+                 items.insert (items.end(), read.begin(), read.end()); VideoText::write (e, items, "Import captions");
+                 return ToolResult::ok ("Brought in " + juce::String ((int) read.size()) + " captions from " + f.getFileName() + ", from " + juce::String (read.front().start, 2) + " to " + juce::String (read.back().end, 2) + " s. " + juce::String ((int) items.size()) + " texts in all.");
+             }
+             if (action == "export_srt")
+             {
+                 if (! has (a, "path")) return ToolResult::error ("export_srt needs path: where to save the caption file");
+                 if (items.empty()) return ToolResult::error ("There are no texts to write");
+                 auto f = juce::File (str (a, "path")); if (! f.hasFileExtension ("srt")) f = f.withFileExtension ("srt");
+                 f.getParentDirectory().createDirectory();
+                 if (! f.replaceWithText (juce::String::fromUTF8 (SqText::writeSrt (items, num (a, "from_seconds", 0.0)).c_str()))) return ToolResult::error ("Couldn't write " + f.getFullPathName());
+                 return ToolResult::ok ("Caption file written: " + f.getFullPathName());
+             }
+             return ToolResult::error ("action is add, list, edit, remove, import_srt or export_srt");
+         });
+
     add ("video_cuts",
          "Frame: the session's picture as pieces - which stretch of the video shows where on the timeline, and the gaps. The picture follows the clips that play the video's own sound: to cut, trim, move, "
          "delete or repeat a piece of the picture, do it to that sound clip (split_clip, edit_clip, delete_clip, duplicate_clip; the mouse and keys in the timeline do the same). Where two pieces overlap the "
@@ -141,7 +217,7 @@ void registerFrameTools()
          " action install: downloads the video tools (FFmpeg, about 80 MB, once) when the computer has none; action install_status: its progress. Not yet here: picture editing, titles, upload.",
          R"json({"type":"object","properties":{"action":{"type":"string","enum":["start","status","install","install_status"]},"picture":{"type":"string","enum":["source","image","waveform","spectrum","black"]},"video":{"type":"string"},"image":{"type":"string"},
             "width":{"type":"integer"},"height":{"type":"integer"},"fps":{"type":"number"},"start_seconds":{"type":"number"},"end_seconds":{"type":"number"},"start_bar":{"type":"number"},"end_bar":{"type":"number"},
-            "name":{"type":"string"},"path":{"type":"string"},"job":{"type":"integer"},"wait_seconds":{"type":"number"}}})json",
+            "name":{"type":"string"},"path":{"type":"string"},"job":{"type":"integer"},"wait_seconds":{"type":"number"},"text":{"type":"string","enum":["burn","file","both","none"]}}})json",
          [this] (const juce::var& a) -> ToolResult
          {
              const auto action = str (a, "action", "start");
@@ -196,6 +272,44 @@ void registerFrameTools()
              if (auto reader = std::unique_ptr<juce::AudioFormatReader> (session.getEngine().getAudioFileFormatManager().readFormatManager.createReaderFor (o.audio)))
                  o.seconds = (double) reader->lengthInSamples / juce::jmax (1.0, reader->sampleRate);
              if (cutPicture) o.stretches = SqCut::plan (pic.pieces, pic.slip, vin.seconds, startS, startS + o.seconds, 0.5 / juce::jmax (1.0, o.fps));
+             // ---- words on the picture: burned in, written beside as a caption file, or both
+             juce::String textNote;
+             {
+                 const auto mode = str (a, "text", "burn").toLowerCase();
+                 std::vector<SqText::Item> inRange;
+                 for (auto& it : VideoText::read (e)) if (it.end > startS && it.start < startS + o.seconds && ! it.text.empty()) inRange.push_back (it);
+                 if (! inRange.empty() && (mode == "file" || mode == "both"))
+                 {
+                     const auto srt = o.out.withFileExtension ("srt");
+                     if (srt.replaceWithText (juce::String::fromUTF8 (SqText::writeSrt (inRange, startS).c_str()))) textNote << "\nCaption file: " << srt.getFullPathName() << " (" << (int) inRange.size() << " texts).";
+                 }
+                 if (! inRange.empty() && (mode == "burn" || mode == "both"))
+                 {
+                     if (inRange.size() > 150) return ToolResult::error ("This range has " + juce::String ((int) inRange.size()) + " texts; up to 150 can be burned into one export. Export with text file (a caption file beside the video) or a shorter range");
+                     if (o.picture == "source")
+                     {
+                         if (! vin.ok) { vin = Frame::probe (video); if (! vin.ok || ! vin.hasVideo) return ToolResult::error (video.getFileName() + " has no picture"); o.sourceFps = vin.fps; }
+                         if (! o.resize) { o.width = juce::jmax (16, vin.width) & ~1; o.height = juce::jmax (16, vin.height) & ~1; if (! has (a, "fps")) o.fps = juce::jlimit (1.0, 120.0, vin.fps); }
+                         if (o.stretches.empty())
+                         {
+                             if (has (a, "video")) o.stretches.push_back ({ startS, o.seconds, startS, true });
+                             else o.stretches = SqCut::plan (pic.pieces, pic.slip, vin.seconds, startS, startS + o.seconds, 0.5 / juce::jmax (1.0, o.fps));
+                         }
+                     }
+                     const auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("Squelchmoth").getChildFile ("frame-text");
+                     folder.deleteRecursively(); folder.createDirectory();
+                     int k = 0;
+                     for (auto& it : inRange)
+                     {
+                         const auto png = folder.getChildFile ("text" + juce::String (k++).paddedLeft ('0', 4) + ".png");
+                         juce::FileOutputStream os (png);
+                         if (! os.openedOk() || ! juce::PNGImageFormat().writeImageToStream (VideoText::layer (it, o.width, o.height), os)) return ToolResult::error ("Couldn't prepare the text for the video");
+                         o.overlays.push_back ({ png, juce::jmax (0.0, it.start - startS), juce::jmin (o.seconds, it.end - startS) });
+                     }
+                     textNote << "\n" << (int) inRange.size() << (inRange.size() == 1 ? " text is" : " texts are") << " burned into the picture.";
+                 }
+             }
+             if (textNote.isNotEmpty()) { auto r2 = frameExportStatus (Frame::Store::get().start (o, true), num (a, "wait_seconds", 20.0)); if (! r2.isError) r2.text << textNote; return r2; }
              return frameExportStatus (Frame::Store::get().start (o, true), num (a, "wait_seconds", 20.0));
          });
     add ("video_frame",

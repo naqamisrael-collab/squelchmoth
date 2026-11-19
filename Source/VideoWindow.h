@@ -2,6 +2,7 @@
 // Squelchmoth 1.28 - the Video window: the session's picture, following the transport.
 // It shows the frame that belongs to the playhead - exact when stopped or scrubbing, decoded ahead while playing - with
 // timecode and frame number. Drop a video on it to bring one in. Editing the picture comes later; this is the viewer.
+// 1.33: titles and captions show over the picture as they will be exported (Text button; T and C keys).
 // 1.32: the picture follows the clips of the video's sound, so cutting those clips cuts the picture.
 // 1.31: long or large videos get a proxy in the background (the Proxy button shows it), so scrubbing keeps up anywhere.
 // 1.29: a strip of stills along the bottom shows the whole video; click or drag it to go there, arrow keys step by frame.
@@ -11,22 +12,25 @@
 #include "Frame.h"
 #include "VideoProxy.h"
 #include "VideoCuts.h"
+#include "VideoText.h"
 
 class VideoContent : public juce::Component, public juce::FileDragAndDropTarget, private juce::Timer
 {
 public:
     /** The app tells the window where the session is: video file, where it sits on the timeline, playhead, playing. */
     struct State { juce::File video; double videoStartsAt = 0, playhead = 0; bool playing = false;
-                   bool cut = false; std::vector<SqCut::Piece> pieces; double slip = 0; };   // cut: pieces say where the picture is (otherwise one whole piece at videoStartsAt)
+                   bool cut = false; std::vector<SqCut::Piece> pieces; double slip = 0;
+                   std::vector<SqText::Item> texts; };                                             // words on the picture (session times)   // cut: pieces say where the picture is (otherwise one whole piece at videoStartsAt)
 
     std::function<State()> readState;
     std::function<juce::String (const juce::File&)> importVideo;       // brings a video into the session; returns what happened
     std::function<void (double)> seek;                                 // moves the session's playhead (seconds on the timeline)
+    std::function<juce::String (const juce::var&)> textTool;           // runs video_text with these arguments; returns what happened
 
     VideoContent()
     {
         namespace L = Console::Look;
-        for (auto* b : { &importBtn, &toolsBtn, &proxyBtn })
+        for (auto* b : { &importBtn, &toolsBtn, &proxyBtn, &textBtn })
         {
             addAndMakeVisible (*b); b->setColour (juce::TextButton::buttonColourId, L::well()); b->setColour (juce::TextButton::textColourOffId, L::text());
         }
@@ -36,6 +40,32 @@ public:
             chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc) { if (fc.getResult().existsAsFile()) bringIn (fc.getResult()); });
         };
         toolsBtn.onClick = [this] { Frame::startInstall(); };
+        textBtn.setTooltip ("Titles, lower thirds and captions on the picture. They are exported as they look here.");
+        textBtn.onClick = [this]
+        {
+            juce::PopupMenu m; const auto now = SqText::showing (state.texts, state.playhead);
+            m.addItem (1, "Add a title at the playhead...  (T)");
+            m.addItem (2, "Add a caption at the playhead...  (C)");
+            m.addItem (3, "Add a lower third at the playhead...");
+            m.addSeparator();
+            m.addItem (4, "Change the text showing now...", ! now.empty());
+            m.addItem (5, "Remove the text showing now", ! now.empty());
+            m.addSeparator();
+            m.addItem (6, "Bring in a caption file (.srt)...");
+            m.addItem (7, "Save the texts as a caption file (.srt)...", ! state.texts.empty());
+            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&textBtn), [safe = juce::Component::SafePointer<VideoContent> (this)] (int r)
+            {
+                if (safe == nullptr || r == 0) return;
+                if (r >= 1 && r <= 3) safe->askForText (r == 1 ? "title" : r == 2 ? "caption" : "lower third", -1);
+                else if (r == 4 || r == 5)
+                {
+                    const auto now2 = SqText::showing (safe->state.texts, safe->state.playhead); if (now2.empty()) return;
+                    if (r == 4) safe->askForText ({}, now2.back());
+                    else safe->runText ({ { "action", "remove" }, { "number", now2.back() + 1 } });
+                }
+                else safe->chooseCaptionFile (r == 7);
+            });
+        };
         proxyBtn.setTooltip ("A proxy is a small copy of the video that makes stills and scrubbing fast anywhere in a long or large video.");
         proxyBtn.onClick = [this]
         {
@@ -78,8 +108,11 @@ public:
         const auto st = readState();
         if (st.video != player.source()) { player.setSource (st.video); shown = {}; shownIndex = -1; if (player.ready() && haveTools) VideoProxy::follow (player.source(), player.facts()); proxyTick = 0; }
         Frame::Proxies::get().setPaused (st.playing);
+        { double sum = 0; for (auto& t : st.texts) sum += t.start * 3.0 + t.end * 7.0 + (double) t.text.size() + t.size + (double) (t.style * 11 + t.place * 13) + (double) (t.colour & 0xffff);
+          if (st.texts.size() != textsSeen || sum != textsSum) { textsSeen = st.texts.size(); textsSum = sum; state.texts = st.texts; repaint(); } }
         proxyBtn.setVisible (player.ready() && haveTools);
         if (player.ready() && (proxyTick++ % 15) == 0) { const auto lab = VideoProxy::label (Frame::Proxies::get().status (player.source())); if (lab != proxyBtn.getButtonText()) proxyBtn.setButtonText (lab); }
+        if (note.startsWith ("That moment") && std::abs (st.playhead - noteAt) > 1.0e-6) { note.clear(); repaint(); }     // the remark goes once the playhead moves on
         state = st;
         if (! player.ready()) { strip.setSource ({}, {}, 0); if (shown.isValid()) { shown = {}; repaint(); } return; }
         strip.setPaused (st.playing);
@@ -101,6 +134,58 @@ public:
     juce::int64 frameShown() const   { return shownIndex; }
     juce::Image imageShown() const   { return shown; }
     Frame::Player& getPlayer()       { return player; }
+    juce::Rectangle<int> screenBounds() const { return screen; }
+
+    /** Where the picture itself sits inside the screen area (the video's shape, centred). */
+    juce::Rectangle<float> pictureRect() const
+    {
+        const auto area = screen.reduced (2).toFloat(); const auto& in = player.facts();
+        const double shape = player.ready() && in.height > 0 ? (double) in.width / in.height : 16.0 / 9.0;
+        float w = area.getWidth(), h = (float) (w / shape); if (h > area.getHeight()) { h = area.getHeight(); w = (float) (h * shape); }
+        return { area.getCentreX() - w * 0.5f, area.getCentreY() - h * 0.5f, w, h };
+    }
+
+    /** Runs video_text (the menu, the keys and the self-test all end here). */
+    juce::String runText (std::initializer_list<std::pair<const char*, juce::var>> fields)
+    {
+        juce::var args (new juce::DynamicObject()); for (auto& f : fields) args.getDynamicObject()->setProperty (f.first, f.second);
+        note = textTool ? textTool (args).upToFirstOccurrenceOf ("\n", false, false) : juce::String ("Open a session first.");
+        update(); repaint(); return note;
+    }
+
+    /** Asks for the words of a new text (style given) or of an existing one (index into the list). */
+    void askForText (const juce::String& style, int existing)
+    {
+        const bool isNew = existing < 0; if (! isNew && existing >= (int) state.texts.size()) return;
+        const auto old = isNew ? SqText::Item() : state.texts[(size_t) existing];
+        auto aw = std::make_shared<juce::AlertWindow> (isNew ? "Add a " + style : juce::String ("Change the text"), "The words (a new line with Shift+Return):", juce::MessageBoxIconType::NoIcon);
+        aw->addTextEditor ("text", isNew ? juce::String() : juce::String::fromUTF8 (old.text.c_str()));
+        aw->addTextEditor ("seconds", juce::String (isNew ? (style == "title" ? 4.0 : 3.0) : old.end - old.start, 2), "How long it shows (seconds):");
+        aw->addButton (isNew ? "Add" : "Change", 1, juce::KeyPress (juce::KeyPress::returnKey)); aw->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        const double at = state.playhead;
+        aw->enterModalState (true, juce::ModalCallbackFunction::create ([safe = juce::Component::SafePointer<VideoContent> (this), aw, isNew, existing, style, at] (int r)
+        {
+            if (safe == nullptr || r != 1) return;
+            const auto words = aw->getTextEditorContents ("text"); const double secs = juce::jlimit (0.1, 36000.0, aw->getTextEditorContents ("seconds").getDoubleValue());
+            if (words.trim().isEmpty()) return;
+            if (isNew) safe->runText ({ { "action", "add" }, { "text", words }, { "style", style }, { "start_seconds", at }, { "length_seconds", secs } });
+            else safe->runText ({ { "action", "edit" }, { "number", existing + 1 }, { "text", words }, { "length_seconds", secs } });
+        }), false);
+    }
+
+    void chooseCaptionFile (bool saving)
+    {
+        chooser = std::make_unique<juce::FileChooser> (saving ? "Save the texts as a caption file" : "Choose a caption file", juce::File(), "*.srt");
+        const double at = state.playhead;
+        chooser->launchAsync (saving ? juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting
+                                     : juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                              [this, saving, at] (const juce::FileChooser& fc)
+                              {
+                                  const auto f = fc.getResult(); if (f == juce::File()) return; juce::ignoreUnused (at);
+                                  if (saving) runText ({ { "action", "export_srt" }, { "path", f.getFullPathName() } });
+                                  else runText ({ { "action", "import_srt" }, { "path", f.getFullPathName() } });
+                              });
+    }
     /** The picture's pieces for a state, and what shows at its playhead. */
     std::vector<SqCut::Piece> piecesOf (const State& s) const { if (s.cut) return s.pieces; return { { s.videoStartsAt, juce::jmax (0.0, player.facts().seconds), 0.0, 1.0 } }; }
     SqCut::Hit hitAt (const State& s) const { return SqCut::lookup (piecesOf (s), s.playhead, s.slip, player.facts().seconds); }
@@ -126,7 +211,7 @@ public:
         const auto& in = player.facts();
         const double inVideo = juce::jmin (SqStrip::timeAt ((double) (x - stripArea.getX()), (double) stripArea.getWidth(), in.seconds), (double) (SqStrip::frameCount (in.seconds, in.fps) - 1) / in.fps);
         const double t = SqCut::whereIs (piecesOf (state), inVideo, state.slip, in.seconds);
-        if (t < 0) { note = "That moment of the video is not in the session (it was cut out)."; repaint(); return -1.0; }
+        if (t < 0) { note = "That moment of the video is not in the session (it was cut out)."; noteAt = state.playhead; repaint(); return -1.0; }
         if (note.startsWith ("That moment")) note.clear();
         if (seek) seek (t); return t;
     }
@@ -157,6 +242,8 @@ public:
         if (k.getKeyCode() == juce::KeyPress::homeKey)  { if (seek) seek (SqCut::start (piecesOf (state))); return true; }
         if (k.getKeyCode() == juce::KeyPress::endKey)   { seekToStripX (stripArea.getRight()); return true; }
         if (k.getTextCharacter() == 'p' || k.getTextCharacter() == 'P') { makeProxy(); return true; }
+        if (k.getTextCharacter() == 't' || k.getTextCharacter() == 'T') { askForText ("title", -1); return true; }
+        if (k.getTextCharacter() == 'c' || k.getTextCharacter() == 'C') { askForText ("caption", -1); return true; }
         return false;
     }
 
@@ -183,7 +270,7 @@ public:
         g.setColour (juce::Colours::black); g.fillRoundedRectangle (screen.toFloat(), 6.0f);
         if (shown.isValid())
             g.drawImage (shown, screen.reduced (2).toFloat(), juce::RectanglePlacement::centred);
-        else
+        else if (SqText::showing (state.texts, state.playhead).empty() || ! player.ready())
         {
             g.setColour (L::dim()); g.setFont (L::caps (17.0f));
             const auto& vi = Frame::installState();
@@ -198,6 +285,8 @@ public:
                                          : "The picture runs from " + juce::String (SqCut::start (piecesOf (state)), 2) + " to " + juce::String (SqCut::end (piecesOf (state)), 2) + " s on the timeline.",
                         screen.withTrimmedTop (screen.getHeight() / 2 + 6), juce::Justification::centredTop);
         }
+        // the words on the picture, drawn by the same code the export uses
+        if (player.ready() && ! state.texts.empty()) { juce::Graphics::ScopedSaveState ts (g); g.reduceClipRegion (screen); VideoText::drawShowing (g, pictureRect(), state.texts, state.playhead); }
         if (hover) { g.setColour (L::cyan().withAlpha (0.18f)); g.fillRoundedRectangle (screen.toFloat(), 6.0f); g.setColour (L::cyan()); g.drawRoundedRectangle (screen.toFloat().reduced (1.0f), 6.0f, 2.0f); }
 
         // the strip: the whole video in stills, the playhead on it
@@ -246,6 +335,7 @@ public:
         importBtn.setBounds (header.getRight() - 138, header.getY() + 9, 122, 28);
         toolsBtn.setBounds (importBtn.getX() - 148, header.getY() + 9, 140, 28);
         proxyBtn.setBounds (importBtn.getX() - 118, header.getY() + 9, 110, 28);
+        textBtn.setBounds (proxyBtn.getX() - 78, header.getY() + 9, 70, 28);
         r.reduce (14, 4);
         noteArea = r.removeFromBottom (18);
         footer = r.removeFromBottom (58); r.removeFromBottom (8);
@@ -257,7 +347,7 @@ private:
     void timerCallback() override { update(); if (Frame::installState().running) repaint(); }
 
     Frame::Player player; Frame::Strip strip; int stripSeen = -1; bool dragging = false; State state; juce::Image shown; juce::int64 shownIndex = -1; double lastPlayhead = -1.0;
-    juce::TextButton importBtn { "Import video..." }, toolsBtn { "Get video tools" }, proxyBtn { "Proxy" }; int proxyTick = 0;
+    juce::TextButton importBtn { "Import video..." }, toolsBtn { "Get video tools" }, proxyBtn { "Proxy" }, textBtn { "Text" }; int proxyTick = 0; size_t textsSeen = 0; double textsSum = 0; double noteAt = 0;
     std::unique_ptr<juce::FileChooser> chooser; juce::String note; bool hover = false;
     juce::Rectangle<int> header, screen, footer, noteArea, stripArea;
 };
@@ -273,11 +363,13 @@ void attachVideo (VideoContent& c, Tools& tools, Sess& session)
         auto& e = *session.edit;
         s.video = juce::File (e.state["frameVideo"].toString()); s.videoStartsAt = (double) e.state.getProperty ("frameVideoAt", 0.0);
         s.playhead = e.getTransport().getPosition().inSeconds(); s.playing = e.getTransport().isPlaying();
+        s.texts = VideoText::read (e);
         if (VideoCuts::soundFile (e) != juce::File()) { const auto pic = VideoCuts::read (e, 0.0); s.cut = true; s.pieces = pic.pieces; s.slip = pic.slip; }
         else s.slip = (double) e.state.getProperty ("frameVideoSlip", 0.0);
         return s;
     };
     c.seek = [&session] (double t) { if (session.edit != nullptr) session.edit->getTransport().setPosition (tracktion::TimePosition::fromSeconds (juce::jmax (0.0, t))); };
+    c.textTool = [&tools] (const juce::var& args) { return tools.call ("video_text", args).text; };
     c.importVideo = [&tools] (const juce::File& f)
     {
         juce::var args (new juce::DynamicObject()); args.getDynamicObject()->setProperty ("path", f.getFullPathName());
