@@ -2,6 +2,7 @@
 // Squelchmoth 1.28 - the Video window: the session's picture, following the transport.
 // It shows the frame that belongs to the playhead - exact when stopped or scrubbing, decoded ahead while playing - with
 // timecode and frame number. Drop a video on it to bring one in. Editing the picture comes later; this is the viewer.
+// 1.32: the picture follows the clips of the video's sound, so cutting those clips cuts the picture.
 // 1.31: long or large videos get a proxy in the background (the Proxy button shows it), so scrubbing keeps up anywhere.
 // 1.29: a strip of stills along the bottom shows the whole video; click or drag it to go there, arrow keys step by frame.
 
@@ -9,12 +10,15 @@
 #include "Console.h"
 #include "Frame.h"
 #include "VideoProxy.h"
+#include "VideoCuts.h"
 
 class VideoContent : public juce::Component, public juce::FileDragAndDropTarget, private juce::Timer
 {
 public:
     /** The app tells the window where the session is: video file, where it sits on the timeline, playhead, playing. */
-    struct State { juce::File video; double videoStartsAt = 0, playhead = 0; bool playing = false; };
+    struct State { juce::File video; double videoStartsAt = 0, playhead = 0; bool playing = false;
+                   bool cut = false; std::vector<SqCut::Piece> pieces; double slip = 0; };   // cut: pieces say where the picture is (otherwise one whole piece at videoStartsAt)
+
     std::function<State()> readState;
     std::function<juce::String (const juce::File&)> importVideo;       // brings a video into the session; returns what happened
     std::function<void (double)> seek;                                 // moves the session's playhead (seconds on the timeline)
@@ -87,9 +91,9 @@ public:
         }
         if (strip.done() != stripSeen) { stripSeen = strip.done(); repaint (stripArea); }
         juce::int64 idx = -1;
-        auto img = player.frameFor (st.playhead - st.videoStartsAt, st.playing, &idx);
-        const double inVideo = st.playhead - st.videoStartsAt;
-        const bool inside = inVideo >= 0 && inVideo < player.facts().seconds;
+        const auto hit = hitAt (st); const double inVideo = hit.src;
+        const bool inside = hit.shows();
+        auto img = inside ? player.frameFor (inVideo, st.playing, &idx) : juce::Image();
         if (! inside) { img = {}; idx = -1; }
         if (idx != shownIndex || img.isValid() != shown.isValid() || std::abs (st.playhead - lastPlayhead) > 1.0e-4) { shown = img; shownIndex = idx; lastPlayhead = st.playhead; repaint(); }
     }
@@ -97,6 +101,9 @@ public:
     juce::int64 frameShown() const   { return shownIndex; }
     juce::Image imageShown() const   { return shown; }
     Frame::Player& getPlayer()       { return player; }
+    /** The picture's pieces for a state, and what shows at its playhead. */
+    std::vector<SqCut::Piece> piecesOf (const State& s) const { if (s.cut) return s.pieces; return { { s.videoStartsAt, juce::jmax (0.0, player.facts().seconds), 0.0, 1.0 } }; }
+    SqCut::Hit hitAt (const State& s) const { return SqCut::lookup (piecesOf (s), s.playhead, s.slip, player.facts().seconds); }
     Frame::Strip& getStrip()         { return strip; }
     /** Asks for this video's proxy to be made (the button, the P key and the tool all end in the same call). */
     void makeProxy()   { if (player.ready()) { Frame::Proxies::get().open (player.source(), player.facts(), true); proxyTick = 0; } }
@@ -118,7 +125,10 @@ public:
         // the last frame's start is the furthest a click can go, so the end of the strip still shows a picture
         const auto& in = player.facts();
         const double inVideo = juce::jmin (SqStrip::timeAt ((double) (x - stripArea.getX()), (double) stripArea.getWidth(), in.seconds), (double) (SqStrip::frameCount (in.seconds, in.fps) - 1) / in.fps);
-        const double t = state.videoStartsAt + inVideo; if (seek) seek (t); return t;
+        const double t = SqCut::whereIs (piecesOf (state), inVideo, state.slip, in.seconds);
+        if (t < 0) { note = "That moment of the video is not in the session (it was cut out)."; repaint(); return -1.0; }
+        if (note.startsWith ("That moment")) note.clear();
+        if (seek) seek (t); return t;
     }
 
     /** Moves by whole frames of the video from the playhead. Returns the new session time, or -1 when there is no video. */
@@ -126,7 +136,12 @@ public:
     {
         if (! player.ready()) return -1.0;
         const auto& in = player.facts(); const auto st = readState ? readState() : state;
-        const double t = st.videoStartsAt + SqStrip::stepFrames (st.playhead - st.videoStartsAt, in.fps, (long long) frames, in.seconds); if (seek) seek (t); return t;
+        // step inside the video when the playhead is on a piece and the next frame is still in the session; otherwise by the same time on the timeline
+        const auto pieces = piecesOf (st); const auto hit = SqCut::lookup (pieces, st.playhead, st.slip, in.seconds);
+        double t = -1.0;
+        if (hit.shows()) t = SqCut::whereIs (pieces, SqStrip::stepFrames (hit.src, in.fps, (long long) frames, in.seconds), st.slip, in.seconds);
+        if (t < 0) t = juce::jmax (0.0, st.playhead + (double) frames / in.fps);
+        if (seek) seek (t); return t;
     }
 
     void mouseDown (const juce::MouseEvent& e) override { grabKeyboardFocus(); if (stripArea.contains (e.getPosition())) { dragging = true; seekToStripX (e.x); } }
@@ -139,7 +154,7 @@ public:
         const bool shift = k.getModifiers().isShiftDown();
         if (k.getKeyCode() == juce::KeyPress::rightKey) { stepFrames (shift ? second : 1); return true; }
         if (k.getKeyCode() == juce::KeyPress::leftKey)  { stepFrames (shift ? -second : -1); return true; }
-        if (k.getKeyCode() == juce::KeyPress::homeKey)  { if (seek) seek (state.videoStartsAt); return true; }
+        if (k.getKeyCode() == juce::KeyPress::homeKey)  { if (seek) seek (SqCut::start (piecesOf (state))); return true; }
         if (k.getKeyCode() == juce::KeyPress::endKey)   { seekToStripX (stripArea.getRight()); return true; }
         if (k.getTextCharacter() == 'p' || k.getTextCharacter() == 'P') { makeProxy(); return true; }
         return false;
@@ -175,11 +190,12 @@ public:
             const juce::String big = vi.running ? "GETTING THE VIDEO TOOLS  " + juce::String (juce::roundToInt (vi.progress.load() * 100)) + " %"
                                    : ! Frame::ffmpeg().existsAsFile() ? juce::String ("VIDEO NEEDS ITS TOOLS (ONE DOWNLOAD)")
                                    : ! player.ready() ? juce::String ("DROP A VIDEO HERE")
-                                   : state.playhead < state.videoStartsAt ? juce::String ("THE PICTURE STARTS LATER") : juce::String ("THE PICTURE HAS ENDED");
+                                   : state.playhead < SqCut::start (piecesOf (state)) ? juce::String ("THE PICTURE STARTS LATER") : state.playhead >= SqCut::end (piecesOf (state)) ? juce::String ("THE PICTURE HAS ENDED") : juce::String ("NO PICTURE HERE");
             g.drawText (big, screen.withTrimmedBottom (screen.getHeight() / 2 + 4), juce::Justification::centredBottom);
             g.setFont (Theme::font (12.5f));
             g.drawText (! player.ready() ? "MP4, MOV, MKV, WEBM or AVI. Its sound goes on a track; the picture plays here in step with the session."
-                                         : "The video sits at " + juce::String (state.videoStartsAt, 2) + " s on the timeline and is " + juce::String (in.seconds, 2) + " s long.",
+                                         : state.cut && state.pieces.size() != 1 ? "The picture is in " + juce::String ((int) state.pieces.size()) + " pieces, from " + juce::String (SqCut::start (state.pieces), 2) + " to " + juce::String (SqCut::end (state.pieces), 2) + " s. It follows the clips of the video's sound."
+                                         : "The picture runs from " + juce::String (SqCut::start (piecesOf (state)), 2) + " to " + juce::String (SqCut::end (piecesOf (state)), 2) + " s on the timeline.",
                         screen.withTrimmedTop (screen.getHeight() / 2 + 6), juce::Justification::centredTop);
         }
         if (hover) { g.setColour (L::cyan().withAlpha (0.18f)); g.fillRoundedRectangle (screen.toFloat(), 6.0f); g.setColour (L::cyan()); g.drawRoundedRectangle (screen.toFloat().reduced (1.0f), 6.0f, 2.0f); }
@@ -197,8 +213,8 @@ public:
                 if (th.isValid()) g.drawImage (th, cell.toFloat(), juce::RectanglePlacement::fillDestination);
                 else { g.setColour (L::well().withAlpha (k % 2 ? 0.55f : 0.4f)); g.fillRect (cell); }
             }
-            const double inV = state.playhead - state.videoStartsAt;
-            if (inV >= 0 && inV <= in.seconds)
+            const auto sh = hitAt (state); const double inV = sh.src;
+            if (sh.shows())
             {
                 const float px = (float) stripArea.getX() + (float) SqStrip::xAt (inV, (double) stripArea.getWidth(), in.seconds);
                 g.setColour (juce::Colours::black.withAlpha (0.6f)); g.fillRect (px - 2.0f, (float) stripArea.getY(), 4.0f, (float) stripArea.getHeight());
@@ -209,7 +225,7 @@ public:
 
         // the numbers: session time, timecode inside the video, frame number
         g.setColour (L::well().withAlpha (0.85f)); g.fillRoundedRectangle (footer.toFloat(), 6.0f);
-        const double inVideo = state.playhead - state.videoStartsAt;
+        const auto fh = hitAt (state); const double inVideo = fh.shows() ? fh.src : -1.0;
         auto cell = [&] (int i, const juce::String& label, const juce::String& value, juce::Colour c)
         {
             auto r = footer.withX (footer.getX() + i * footer.getWidth() / 4).withWidth (footer.getWidth() / 4);
@@ -257,6 +273,8 @@ void attachVideo (VideoContent& c, Tools& tools, Sess& session)
         auto& e = *session.edit;
         s.video = juce::File (e.state["frameVideo"].toString()); s.videoStartsAt = (double) e.state.getProperty ("frameVideoAt", 0.0);
         s.playhead = e.getTransport().getPosition().inSeconds(); s.playing = e.getTransport().isPlaying();
+        if (VideoCuts::soundFile (e) != juce::File()) { const auto pic = VideoCuts::read (e, 0.0); s.cut = true; s.pieces = pic.pieces; s.slip = pic.slip; }
+        else s.slip = (double) e.state.getProperty ("frameVideoSlip", 0.0);
         return s;
     };
     c.seek = [&session] (double t) { if (session.edit != nullptr) session.edit->getTransport().setPosition (tracktion::TimePosition::fromSeconds (juce::jmax (0.0, t))); };

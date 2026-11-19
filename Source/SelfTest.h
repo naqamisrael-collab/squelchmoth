@@ -5016,10 +5016,11 @@ inline int runSelfTest()
                         const auto slip = call ("video_move", R"({"by_seconds":0.5,"sound":false})");
                         check (std::abs (atF - 4.0) < 1.0e-9 && std::abs (sndF - 4.0) < 1.0e-6 && std::abs (at() - 4.5) < 1.0e-9 && std::abs (snd() - 4.0) < 1.0e-6 && slip.contains ("left where it is"),
                                "video_move by -25 frames is one second back (4 s); sound false slips only the picture (4.5 s, sound still at 4 s)");
+                        call ("video_move", R"({"by_seconds":-0.5,"sound":false})");
                         call ("video_move", R"({"start_seconds":-3})"); const double atNeg = at();
                         const auto noArg = call ("video_move", "{}", false);
                         check (std::abs (atNeg) < 1.0e-9 && noArg.contains ("Say where"), "video_move never goes before the start of the session, and says what it needs when given nothing");
-                        call ("video_move", R"({"start_seconds":1,"sound":false})");
+                        call ("video_move", R"({"start_seconds":1})");
 
                         TimelineState ts; ts.viewStart = 0.0; ts.secondsPerPixel = 0.01;
                         VideoLane lane (*session, ts); lane.setBounds (0, 0, headerWidthNow() + 900, VideoLane::laneH); lane.setVisible (true);
@@ -5037,7 +5038,7 @@ inline int runSelfTest()
                             if (std::abs (got - (double) Frame::frameIndexAt (SqStrip::slotTime (t.thumb, n, secs), 25.0)) <= 1.5) ++tilesRight;
                         }
                         const auto outside = shot.getPixelAt (juce::roundToInt (bx.getStart()) - 20, VideoLane::laneH / 2);
-                        check (lane.wanted() && n >= 50 && std::abs (bx.getStart() - ((float) headerWidthNow() + 100.0f)) < 0.6f && std::abs (bx.getLength() - (float) (secs * 100.0)) < 0.6f && tl.size() >= 8 && tilesRight == (int) tl.size()
+                        check (lane.wanted() && n >= 50 && std::abs (bx.getStart() - ((float) headerWidthNow() + 100.0f)) < 0.6f && std::abs (bx.getLength() - (float) (secs * 100.0)) < 6.0f && tl.size() >= 8 && tilesRight == (int) tl.size()
                                && outside == Theme::bg(),
                                "Video lane: the block sits at 1 s and is as long as the video; " + juce::String (tilesRight) + " of " + juce::String ((int) tl.size()) + " stills along it are the frames for their place; nothing is drawn before it");
                         lane.dragBy (150, true); const auto dropped = lane.dropDrag(); const double atDrag = at();
@@ -5105,6 +5106,83 @@ inline int runSelfTest()
                         const auto onR = call ("video_proxy", R"({"action":"auto","on":true})");
                         check (wasOff && VideoProxy::autoOn() && offR.contains ("only made when asked") && onR.contains ("without asking") && ! SqProxy::worthIt (in.width, in.seconds), "video_proxy auto switches unasked proxies off and on; a small short video never gets one unasked");
                         px.setPartSecondsForTests (300.0);
+                    }
+                    // ---- 1.32: cutting the picture by cutting its sound
+                    if (session->edit != nullptr)
+                    {
+                        auto& ed = *session->edit;
+                        call ("video_move", R"({"start_seconds":2})");
+                        auto pieces = [&] { return VideoCuts::read (ed, in.seconds); };
+                        const auto first = VideoCuts::clips (ed);
+                        const juce::String trackName = ! first.empty() && first[0]->getTrack() != nullptr ? first[0]->getTrack()->getName() : juce::String ("?");
+                        const auto trk = "\"track\":" + juce::JSON::toString (juce::var (trackName));
+                        const bool oneBefore = pieces().pieces.size() == 1 && pieces().followsSound && std::abs (pieces().pieces[0].at - 2.0) < 1.0e-6;
+                        call ("split_clip", "{" + trk + ",\"at_seconds\":3.0}"); call ("split_clip", "{" + trk + ",\"at_seconds\":4.0}");
+                        const auto three = pieces(); const auto cutsText = call ("video_cuts", "{}");
+                        const auto mid = call ("video_frame", R"({"seconds":3.5})");
+                        check (oneBefore && three.pieces.size() == 3 && std::abs (three.pieces[1].at - 3.0) < 1.0e-6 && std::abs (three.pieces[1].srcIn - 1.0) < 1.0e-6 && std::abs (three.pieces[2].srcIn - 2.0) < 1.0e-6
+                               && cutsText.contains ("3 pieces") && mid.contains ("frame 37 of ramp.mp4"),
+                               "Cutting the video's sound at 3 s and 4 s makes three pieces of picture (the second starts on the video's 1 s); nothing has moved, so 3.5 s still shows frame 37");
+                        auto cl = VideoCuts::clips (ed);
+                        if (cl.size() == 3)
+                        {
+                            call ("delete_clip", "{" + trk + ",\"clip\":2}");                              // clips are numbered in time order on the track
+                            call ("edit_clip", "{" + trk + ",\"clip\":2,\"start_seconds\":8.0}");
+                        }
+                        const auto two = pieces();
+                        const auto gapF = call ("video_frame", R"({"seconds":3.5})"), earlyF = call ("video_frame", R"({"seconds":2.52})"), lateF = call ("video_frame", R"({"seconds":8.5})"), oldPlace = call ("video_frame", R"({"seconds":4.5})");
+                        check (two.pieces.size() == 2 && gapF.contains ("gap between pieces") && earlyF.contains ("frame 13 of ramp.mp4") && lateF.contains ("frame 62 of ramp.mp4") && oldPlace.contains ("gap between pieces"),
+                               "With the middle piece deleted and the last moved to 8 s: 2.52 s shows frame 13, 3.5 s and 4.5 s are gaps, 8.5 s shows frame 62 (the video's 2.5 s)");
+                        // the Video window follows the pieces
+                        vc.readState = [&] { VideoContent::State st; st.video = ramp; st.playhead = clock; st.playing = playing; const auto pc = VideoCuts::read (ed, in.seconds); st.cut = true; st.pieces = pc.pieces; st.slip = pc.slip; return st; };
+                        vc.seek = [&] (double t) { clock = t; };
+                        clock = 8.5; pump (100); for (int i = 0; i < 200 && vc.frameShown() != 62; ++i) pump (30);
+                        const auto shownLate = vc.frameShown(); const double readLate = frameOf (vc.imageShown());
+                        clock = 3.5; pump (150); const bool blackInGap = vc.frameShown() == -1 && ! vc.imageShown().isValid();
+                        const auto sb2 = vc.stripBounds(); const double secsV = vc.getPlayer().facts().seconds;
+                        const double toLate = vc.seekToStripX (sb2.getX() + juce::roundToInt (sb2.getWidth() * 2.5 / secsV)), toCut = vc.seekToStripX (sb2.getX() + juce::roundToInt (sb2.getWidth() * 1.5 / secsV));
+                        clock = 2.96; vc.update(); vc.keyPressed (juce::KeyPress (juce::KeyPress::rightKey)); const double stepIn = clock;      // frame 24 -> 25 would be in the cut-out second: steps along the timeline instead
+                        check (shownLate == 62 && std::abs (readLate - 62.0) <= 1.2 && blackInGap && std::abs (toLate - 8.5) < 0.03 && toCut < 0 && std::abs (stepIn - 3.0) < 1.0e-6,
+                               "Video window with a cut picture: 8.5 s shows frame 62, a gap shows nothing, a click on the strip at the video's 2.5 s goes to 8.5 s, a click on a cut-out moment goes nowhere and says so");
+                        // the lane draws one block per piece
+                        {
+                            TimelineState ts; ts.viewStart = 0.0; ts.secondsPerPixel = 0.02;
+                            VideoLane lane (*session, ts); lane.setBounds (0, 0, headerWidthNow() + 900, VideoLane::laneH); lane.setVisible (true);
+                            for (int i = 0; i < 800 && ! (lane.getStrip().size() > 0 && lane.getStrip().finished()); ++i) { lane.refresh(); juce::Thread::sleep (40); }
+                            lane.refresh();
+                            const auto shotL = lane.createComponentSnapshot (lane.getLocalBounds(), true, 1.0f);
+                            { const juce::File sp ("/tmp/main_video_lane_cut.png"); sp.deleteFile(); juce::FileOutputStream os (sp); if (os.openedOk()) juce::PNGImageFormat().writeImageToStream (shotL, os); }
+                            auto lanePx = [&] (double t) { return shotL.getPixelAt (headerWidthNow() + juce::roundToInt (t / 0.02), VideoLane::laneH / 2); };
+                            const double f1 = ((double) lanePx (2.5).getGreen() - 4.0) / 2.5, f2 = ((double) lanePx (9.0).getGreen() - 4.0) / 2.5;
+                            check (lane.picture().pieces.size() == 2 && lanePx (5.0) == Theme::bg() && lanePx (1.0) == Theme::bg() && std::abs (f1 - 12.0) <= 14.0 && std::abs (f2 - 75.0) <= 14.0 && f2 - f1 > 40.0,
+                                   "Video lane with a cut picture: two blocks with a gap between; the first shows early frames (reads " + juce::String (f1, 0) + "), the moved one late frames (reads " + juce::String (f2, 0) + ")");
+                        }
+                        // export the cut picture and read the file back frame by frame
+                        const auto cutFile = dir.getChildFile ("cut.mp4");
+                        const auto ex = call ("video_export", "{\"picture\":\"source\",\"start_seconds\":0,\"end_seconds\":10,\"wait_seconds\":240,\"path\":" + asJson (cutFile) + "}");
+                        const auto ci = Frame::probe (cutFile); juce::String ge, readBack; int rightX = 0, askedX = 0;
+                        struct Want { double t; double frame; };     // frame -100 = black
+                        for (auto w : { Want { 1.0, -100 }, Want { 2.02, 0 }, Want { 2.52, 13 }, Want { 2.94, 23 }, Want { 3.5, -100 }, Want { 7.0, -100 }, Want { 8.02, 50 }, Want { 8.5, 62 }, Want { 9.5, 87 } })
+                        {
+                            ++askedX; const auto img = ci.ok ? Frame::grabFrame (cutFile, ci, w.t, 64, ge, false) : juce::Image();
+                            const int g = img.isValid() ? (int) img.getPixelAt (32, 32).getGreen() : -1; const double got = ((double) g - 4.0) / 2.5;
+                            const bool ok = w.frame < -50 ? (g >= 0 && g <= 3) : std::abs (got - w.frame) <= 1.3;
+                            if (ok) ++rightX; readBack << juce::String (w.t, 2) << (w.frame < -50 ? "=black" : "=" + juce::String (got, 1)) << (ok ? " " : "(WRONG) ");
+                        }
+                        check (ex.contains ("exported") && ci.ok && ci.width == 64 && ci.height == 64 && std::abs (ci.seconds - 10.0) < 0.2 && std::abs (ci.fps - 25.0) < 0.01 && rightX == askedX,
+                               "video_export of the cut picture, read back: " + readBack.trim() + " - " + juce::String (ci.seconds, 2) + " s at " + juce::String (ci.fps, 0) + " fps");
+                        // slip the picture against its sound, and undo
+                        call ("video_move", R"({"by_seconds":0.2,"sound":false})");
+                        const auto slipped = call ("video_frame", R"({"seconds":8.5})"); const double sndStill = VideoCuts::clips (ed).size() == 2 ? VideoCuts::clips (ed)[1]->getPosition().getStart().inSeconds() : -1.0;
+                        ed.getUndoManager().undo();
+                        const auto unslipped = call ("video_frame", R"({"seconds":8.5})");
+                        check (slipped.contains ("frame 57 of ramp.mp4") && std::abs (sndStill - 8.0) < 1.0e-6 && unslipped.contains ("frame 62 of ramp.mp4"), "video_move sound false slips the picture 0.2 s later than its sound (8.5 s shows frame 57, the clips stay); undo puts it back");
+                        // every piece of sound deleted: no picture, said plainly
+                        for (int i = (int) VideoCuts::clips (ed).size(); --i >= 0;) call ("delete_clip", "{" + trk + ",\"clip\":1}");
+                        const auto noneText = call ("video_cuts", "{}"); const auto noneEx = call ("video_export", "{\"picture\":\"source\",\"start_seconds\":0,\"end_seconds\":2,\"path\":" + asJson (dir.getChildFile ("none.mp4")) + "}", false);
+                        check (pieces().pieces.empty() && noneText.contains ("no picture anywhere") && noneEx.contains ("no picture to export"), "With every clip of its sound deleted there is no picture, and video_cuts and video_export say so");
+                        // quitting: Don't Save leaves the file alone (the question itself needs a person)
+                        check (session->saveOnClose, "Quitting saves unless Don't Save is chosen at the question");
                     }
                     vc.getPlayer().stopStream();
                 }

@@ -59,7 +59,7 @@ public:
         if (edit != nullptr)
         {
             edit->getTransport().stop (false, true);
-            save();
+            if (saveOnClose) save();     // false when the user chose Don't Save at the quit question
         }
         edit.reset();
     }
@@ -1026,6 +1026,7 @@ public:
 
     juce::String barsBeatsString (te::TimePosition t) const    { return TimeFmt::barsBeats (*edit, t); }
 
+    bool saveOnClose = true;         // 1.32: quitting asks first; Don't Save clears this so the session is left as last saved
     bool saveOnNextReplace = true;   // false for Revert to Saved / Restore: the current state must not be written first
 
     void replaceEdit (std::unique_ptr<te::Edit> newEdit, const juce::File& f)

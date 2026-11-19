@@ -22,7 +22,8 @@ void registerFrameTools()
     add ("video_import",
          "Frame: brings a video file into the session. Its sound goes on a new audio track (24-bit, at the session rate) and the video is remembered as the session's picture, so video_export can put the new mix back under it. "
          "path (MP4, MOV, MKV, WEBM, AVI...); start_seconds (where it sits on the timeline, default 0); sound false only reads the facts (length, size, frame rate) and remembers the picture. "
-         "The picture shows in the Video window and as a lane of stills on the timeline; video_move moves it. When the computer has no FFmpeg, run video_export action install once. separate and vocal_remove also take video files directly.",
+         "The picture shows in the Video window and as a lane of stills on the timeline; video_move moves it. TO CUT THE PICTURE, EDIT ITS SOUND: the picture follows the clips of the video's sound, "
+         "so split_clip, edit_clip (trim, move), delete_clip and duplicate_clip on that track cut, trim, move, remove and repeat the picture in step, with undo; video_cuts lists the pieces. When the computer has no FFmpeg, run video_export action install once. separate and vocal_remove also take video files directly.",
          R"json({"type":"object","properties":{"path":{"type":"string"},"start_seconds":{"type":"number"},"sound":{"type":"boolean"}},"required":["path"]})json",
          [this] (const juce::var& a) -> ToolResult
          {
@@ -31,7 +32,7 @@ void registerFrameTools()
              const auto in = Frame::probe (f); if (! in.ok) return ToolResult::error (in.error);
              auto& e = edit(); const double at = num (a, "start_seconds", 0.0);
              juce::String s = f.getFileName() + ": " + in.text() + ".";
-             if (in.hasVideo) { e.state.setProperty ("frameVideo", f.getFullPathName(), nullptr); e.state.setProperty ("frameVideoAt", at, nullptr); s << "\nRemembered as the session's picture (video_export picture source)."; }
+             if (in.hasVideo) { e.state.setProperty ("frameVideo", f.getFullPathName(), nullptr); e.state.setProperty ("frameVideoAt", at, nullptr); e.state.removeProperty ("frameVideoSlip", nullptr); e.state.removeProperty ("frameVideoWav", nullptr); e.state.removeProperty ("frameVideoClip", nullptr); s << "\nRemembered as the session's picture (video_export picture source)."; }
              if (flag (a, "sound", true) && in.hasAudio)
              {
                  juce::String err; const auto wav = frameVideoFolder().getNonexistentChildFile (juce::File::createLegalFileName (f.getFileNameWithoutExtension()).substring (0, 60), ".wav", false);
@@ -42,7 +43,15 @@ void registerFrameTools()
                  auto r = call ("import_audio", im); if (r.isError) return r;
                  // remember which clip is the video's own sound, so moving the video can move it too
                  if (auto* tr = dynamic_cast<te::AudioTrack*> (session.findTrack (juce::var (idx))))
-                 { te::Clip* last = nullptr; for (auto c : tr->getClips()) last = c; if (last != nullptr) e.state.setProperty ("frameVideoClip", last->itemID.toString(), nullptr); }
+                 {
+                     te::Clip* last = nullptr; for (auto c : tr->getClips()) last = c;
+                     if (last != nullptr && in.hasVideo)
+                     {
+                         e.state.setProperty ("frameVideoClip", last->itemID.toString(), nullptr);
+                         // from here the picture follows every clip that plays this file: cutting the sound cuts the picture
+                         if (auto* w = dynamic_cast<te::WaveAudioClip*> (last)) e.state.setProperty ("frameVideoWav", w->getOriginalFile().getFullPathName(), nullptr);
+                     }
+                 }
                  if (ui.refresh) ui.refresh();
                  s << "\nIts sound is on track " << idx << " at " << juce::String (at, 2) << " s (" << wav.getFileName() << ").";
              }
@@ -81,15 +90,33 @@ void registerFrameTools()
              return ToolResult::ok (VideoProxy::sentence (video, st));
          });
 
+    add ("video_cuts",
+         "Frame: the session's picture as pieces - which stretch of the video shows where on the timeline, and the gaps. The picture follows the clips that play the video's own sound: to cut, trim, move, "
+         "delete or repeat a piece of the picture, do it to that sound clip (split_clip, edit_clip, delete_clip, duplicate_clip; the mouse and keys in the timeline do the same). Where two pieces overlap the "
+         "lower track shows; where there is no piece the picture is black. video_export exports the cut picture with the mix.",
+         R"json({"type":"object","properties":{}})json",
+         [this] (const juce::var&) -> ToolResult
+         {
+             auto& e = edit(); const juce::File video (e.state["frameVideo"].toString());
+             if (video == juce::File()) return ToolResult::ok ("This session has no video.");
+             double secs = 0; if (Frame::ffmpeg().existsAsFile() && video.existsAsFile()) { const auto in = Frame::probe (video); if (in.ok) secs = in.seconds; }
+             const auto pic = VideoCuts::read (e, secs);
+             juce::String s = VideoCuts::describe (pic, secs > 0 ? secs : 1.0e9);
+             if (pic.followsSound) { juce::StringArray tracks; for (auto* c : VideoCuts::clips (e)) if (auto* t = c->getTrack()) tracks.addIfNotAlreadyThere (t->getName()); if (! tracks.isEmpty()) s << "\nIts sound clips are on: " << tracks.joinIntoString (", ") << "."; }
+             else s << "\nNo sound clip is tied to this video (it has no sound, or it was brought in before version 1.30), so it stays one piece. Bring it in again with video_import to cut it.";
+             return ToolResult::ok (s);
+         });
+
     add ("video_move",
-         "Frame: moves the session's video along the timeline (the same as dragging its block in the video lane). start_seconds puts its start there; by_seconds or by_frames (frames of the video) "
-         "moves it from where it is. Its own sound clip moves with it unless sound is false (use that to slip the picture against the sound). Never before the start of the session. One undo step.",
+         "Frame: moves the session's whole video along the timeline (the same as dragging a block in the video lane). start_seconds puts the video's first frame there; by_seconds or by_frames (frames of the video) "
+         "moves it from where it is. Every clip of its sound moves with it, so all its pieces keep their spacing; sound false instead slips the picture against its sound. Never before the start of the session. One undo step. "
+         "To move ONE piece, move its sound clip (edit_clip).",
          R"json({"type":"object","properties":{"start_seconds":{"type":"number"},"by_seconds":{"type":"number"},"by_frames":{"type":"number"},"sound":{"type":"boolean"}}})json",
          [this] (const juce::var& a) -> ToolResult
          {
              auto& e = edit();
              if (e.state["frameVideo"].toString().isEmpty()) return ToolResult::error ("This session has no video yet: bring one in with video_import");
-             const double at = (double) e.state.getProperty ("frameVideoAt", 0.0); double to = at;
+             const double at = VideoMove::currentStart (e); double to = at;
              if (has (a, "start_seconds")) to = num (a, "start_seconds");
              else if (has (a, "by_seconds")) to = at + num (a, "by_seconds");
              else if (has (a, "by_frames"))
@@ -144,7 +171,19 @@ void registerFrameTools()
              o.width = juce::jlimit (128, 7680, (int) num (a, "width", 1920.0)) & ~1; o.height = juce::jlimit (128, 4320, (int) num (a, "height", 1080.0)) & ~1;
              o.fps = juce::jlimit (1.0, 120.0, num (a, "fps", 30.0));
              const double startS = timeArg (a, "start").value_or (0s).inSeconds();
-             if (o.picture == "source") o.videoOffset = startS - (has (a, "video") ? 0.0 : (double) e.state.getProperty ("frameVideoAt", 0.0));
+             VideoCuts::Picture pic; Frame::Info vin; bool cutPicture = false;
+             if (o.picture == "source" && ! has (a, "video"))
+             {
+                 vin = Frame::probe (video); if (! vin.ok || ! vin.hasVideo) return ToolResult::error (video.getFileName() + " has no picture");
+                 pic = VideoCuts::read (e, vin.seconds);
+                 if (pic.pieces.empty()) return ToolResult::error ("There is no picture to export: every clip of the video's sound was deleted. Undo, or use picture waveform / black");
+                 cutPicture = ! SqCut::isWhole (pic.pieces, pic.slip, vin.seconds);
+                 if (cutPicture && SqCut::hasSpeedChange (pic.pieces)) return ToolResult::error ("A piece of the video's sound has had its speed changed; the picture cannot be exported at a changed speed yet. Set that clip back to normal speed, or export with picture waveform / black");
+                 if (! cutPicture) o.videoOffset = startS - pic.pieces[0].at;
+                 else if (! o.resize) { o.width = juce::jmax (16, vin.width) & ~1; o.height = juce::jmax (16, vin.height) & ~1; if (! has (a, "fps")) o.fps = juce::jlimit (1.0, 120.0, vin.fps); }
+                 o.sourceFps = vin.fps;
+             }
+             else if (o.picture == "source") o.videoOffset = startS;
              o.out = has (a, "path") ? juce::File (str (a, "path")) : session.bouncesDir.getNonexistentChildFile (juce::File::createLegalFileName (str (a, "name", session.getFile().getFileNameWithoutExtension() + " video")), ".mp4", false);
              if (! o.out.hasFileExtension ("mp4;mov;mkv")) o.out = o.out.withFileExtension ("mp4");
 
@@ -156,6 +195,7 @@ void registerFrameTools()
              if (! o.audio.existsAsFile()) return ToolResult::error ("The mix could not be bounced for the video");
              if (auto reader = std::unique_ptr<juce::AudioFormatReader> (session.getEngine().getAudioFileFormatManager().readFormatManager.createReaderFor (o.audio)))
                  o.seconds = (double) reader->lengthInSamples / juce::jmax (1.0, reader->sampleRate);
+             if (cutPicture) o.stretches = SqCut::plan (pic.pieces, pic.slip, vin.seconds, startS, startS + o.seconds, 0.5 / juce::jmax (1.0, o.fps));
              return frameExportStatus (Frame::Store::get().start (o, true), num (a, "wait_seconds", 20.0));
          });
     add ("video_frame",
@@ -173,7 +213,8 @@ void registerFrameTools()
              if (! video.existsAsFile()) return ToolResult::error ("This session has no picture yet: bring a video in with video_import (or drop one on the Video window)");
              if (! Frame::ffmpeg().existsAsFile()) return ToolResult::error (Frame::missingText());
              const auto in = Frame::probe (video); if (! in.ok || ! in.hasVideo) return ToolResult::error (video.getFileName() + " has no picture");
-             const double at = (double) e.state.getProperty ("frameVideoAt", 0.0);
+             const auto pic = VideoCuts::read (e, in.seconds);
+             const double at = VideoMove::currentStart (e);
              if (has (a, "sheet"))
              {
                  if (! has (a, "path")) return ToolResult::error ("A contact sheet needs path: where to save the picture");
@@ -187,20 +228,31 @@ void registerFrameTools()
                  juce::FileOutputStream os (out); if (! os.openedOk() || ! juce::PNGImageFormat().writeImageToStream (img, os)) return ToolResult::error ("Couldn't write " + out.getFullPathName());
                  juce::String s = "Contact sheet of " + video.getFileName() + ": " + juce::String (count) + " stills, saved to " + out.getFullPathName() + " (" + juce::String (img.getWidth()) + " x " + juce::String (img.getHeight())
                                   + "). Left to right, top to bottom, with session times:";
-                 for (size_t i = 0; i < times.size(); ++i) s << "\n" << (int) (i + 1) << ". " << VideoContent::timecode (times[i], in.fps) << " in the video = " << juce::String (at + times[i], 2) << " s of the session";
+                 for (size_t i = 0; i < times.size(); ++i) s << "\n" << (int) (i + 1) << ". " << VideoContent::timecode (times[i], in.fps) << " in the video"
+                                                               << (SqCut::whereIs (pic.pieces, times[i], pic.slip, in.seconds) >= 0 ? " = " + juce::String (SqCut::whereIs (pic.pieces, times[i], pic.slip, in.seconds), 2) + " s of the session" : juce::String (" (cut out of the session)"));
                  return ToolResult::ok (s);
              }
              double t = has (a, "seconds") ? num (a, "seconds") : e.getTransport().getPosition().inSeconds();
              juce::String moved;
              if (has (a, "step"))
              {
-                 t = at + SqStrip::stepFrames (t - at, in.fps, (long long) num (a, "step", 0.0), in.seconds);
+                 {
+                     const auto h0 = SqCut::lookup (pic.pieces, t, pic.slip, in.seconds); const auto frames = (long long) num (a, "step", 0.0);
+                     const double there = h0.shows() ? SqCut::whereIs (pic.pieces, SqStrip::stepFrames (h0.src, in.fps, frames, in.seconds), pic.slip, in.seconds) : -1.0;
+                     t = there >= 0 ? there : juce::jmax (0.0, t + (double) frames / in.fps);
+                 }
                  e.getTransport().setPosition (tracktion::TimePosition::fromSeconds (juce::jmax (0.0, t)));
                  moved = "Playhead moved to " + juce::String (t, 3) + " s. ";
              }
-             const double inVideo = t - at;
-             if (inVideo < 0) return ToolResult::ok ("At " + juce::String (t, 3) + " s the picture has not started: " + video.getFileName() + " begins at " + juce::String (at, 3) + " s on the timeline.");
-             if (inVideo >= in.seconds) return ToolResult::ok ("At " + juce::String (t, 3) + " s the picture has ended: " + video.getFileName() + " runs from " + juce::String (at, 3) + " to " + juce::String (at + in.seconds, 3) + " s.");
+             const auto hitNow = SqCut::lookup (pic.pieces, t, pic.slip, in.seconds); const double inVideo = hitNow.src;
+             if (! hitNow.shows())
+             {
+                 const double ps = SqCut::start (pic.pieces), pe = SqCut::end (pic.pieces);
+                 if (pic.pieces.empty()) return ToolResult::ok ("There is no picture anywhere: every clip of the video's sound was deleted.");
+                 if (t < ps) return ToolResult::ok ("At " + juce::String (t, 3) + " s the picture has not started: " + video.getFileName() + " begins at " + juce::String (ps, 3) + " s on the timeline.");
+                 if (t >= pe) return ToolResult::ok ("At " + juce::String (t, 3) + " s the picture has ended: " + video.getFileName() + " runs from " + juce::String (ps, 3) + " to " + juce::String (pe, 3) + " s.");
+                 return ToolResult::ok ("At " + juce::String (t, 3) + " s there is no picture: it falls in a gap between pieces (video_cuts lists them).");
+             }
              const auto idx = Frame::frameIndexAt (inVideo, in.fps);
              juce::String s = moved + "At " + juce::String (t, 3) + " s of the session: frame " + juce::String (idx) + " of " + video.getFileName() + " (" + VideoContent::timecode (inVideo, in.fps) + " in the video, " + juce::String (in.width) + " x " + juce::String (in.height) + ", "
                               + juce::String (in.fps, in.fps == std::floor (in.fps) ? 0 : 2) + " fps).";

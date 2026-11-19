@@ -385,7 +385,34 @@ public:
         CrashGuard::end();
     }
 
-    void systemRequestedQuit() override     { quit(); }
+    /** 1.32: quitting always asks about the open session first: Save, Don't Save or Cancel. (Before, it saved without asking.) */
+    void systemRequestedQuit() override
+    {
+        if (session == nullptr || session->edit == nullptr || mainWindow == nullptr || ! session->savingAllowed()) { quit(); return; }
+        if (quitQuestionShowing) return;
+        quitQuestionShowing = true;
+        const bool changed = session->edit->hasChangedSinceSaved();
+        const auto name = session->getFile().getFileNameWithoutExtension();
+        juce::AlertWindow::showYesNoCancelBox (juce::MessageBoxIconType::QuestionIcon, "Quit Squelchmoth",
+            "Save \"" + name + "\" before quitting?" + (changed ? "\n\nIt has changes that are not saved yet." : "\n\nNothing has changed since it was last saved."),
+            "Save", "Don't Save", "Cancel", mainWindow.get(),
+            juce::ModalCallbackFunction::create ([this] (int result)
+            {
+                quitQuestionShowing = false;
+                if (result == 0 || session == nullptr) return;                       // Cancel: keep working
+                if (result == 1)
+                {
+                    if (! session->save())
+                    {
+                        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Couldn't save", "The session could not be saved, so Squelchmoth has not quit. Try File > Save As to another place.");
+                        return;
+                    }
+                }
+                else session->saveOnClose = false;                                    // Don't Save: leave the file as it was last saved
+                quit();
+            }));
+    }
+    bool quitQuestionShowing = false;
 
     void timerCallback() override {}
 

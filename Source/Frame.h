@@ -10,6 +10,7 @@
 #include <JuceHeader.h>
 #include "SqStrip.h"
 #include "SqProxy.h"
+#include "SqCut.h"
 #include <map>
 #include <atomic>
 #include <functional>
@@ -314,6 +315,8 @@ namespace Frame
         juce::String picture = "waveform";          // source | image | waveform | spectrum | black
         int width = 1920, height = 1080; double fps = 30.0;
         double videoOffset = 0;                      // source picture: where the range starts inside the video (negative: the video starts later)
+        std::vector<SqCut::Stretch> stretches;       // source picture, cut: the picture as stretches of video and black, in order (empty: one uncut video)
+        double sourceFps = 0;                        // the video's own frame rate (for landing on exact frames of a cut picture)
         bool resize = false;                         // source picture: re-encode to width x height
         double seconds = 0;                          // length of the audio, for progress
     };
@@ -330,7 +333,30 @@ namespace Frame
         else venc.addArray ({ "-b:v", juce::String (juce::jmax (2, o.width * o.height / 260000)) + "M" });
         venc.addArray ({ "-pix_fmt", "yuv420p" });
         const auto fit = "scale=" + juce::String (o.width) + ":" + juce::String (o.height) + ":force_original_aspect_ratio=decrease,pad=" + juce::String (o.width) + ":" + juce::String (o.height) + ":(ow-iw)/2:(oh-ih)/2,setsar=1";
-        if (o.picture == "source")
+        if (o.picture == "source" && ! o.stretches.empty())
+        {
+            // a cut picture: every stretch is its own input (only that stretch of the file is read), black for the gaps;
+            // each is brought to one size, rate and pixel format, cut to a whole number of frames, and they are joined.
+            const auto counts = SqCut::frameCounts (o.stretches, o.fps);
+            juce::String graph, joins; int n = 0;
+            for (size_t i = 0; i < o.stretches.size(); ++i)
+            {
+                const auto& st = o.stretches[i]; if (counts[i] <= 0) continue;
+                const auto need = juce::String ((double) (counts[i] + 2) / o.fps, 4);
+                if (st.picture)
+                {
+                    const double vf = o.sourceFps > 0 ? o.sourceFps : o.fps;
+                    a.addArray ({ "-ss", juce::String (juce::jmax (0.0, (std::floor (st.src * vf + 1.0e-6) - 0.25) / vf), 6), "-t", need, "-i", o.sourceVideo.getFullPathName() });
+                }
+                else a.addArray ({ "-f", "lavfi", "-t", need, "-i", "color=c=black:s=" + size + ":r=" + rate });
+                graph << "[" << n << ":v:0]" << fit << ",fps=" << rate << ",format=yuv420p,tpad=stop_mode=clone:stop_duration=1,trim=end_frame=" << juce::String (counts[i]) << ",setpts=PTS-STARTPTS[v" << n << "];";
+                joins << "[v" << n << "]"; ++n;
+            }
+            graph << joins << "concat=n=" << n << ":v=1:a=0[v]";
+            a.addArray ({ "-i", o.audio.getFullPathName(), "-filter_complex", graph, "-map", "[v]", "-map", juce::String (n) + ":a:0" });
+            a.addArray (venc);
+        }
+        else if (o.picture == "source")
         {
             const bool copy = ! o.resize && std::abs (o.videoOffset) < 0.0005;
             if (o.videoOffset > 0.0005) a.addArray ({ "-ss", juce::String (o.videoOffset, 3) });
@@ -689,7 +715,9 @@ namespace Frame
                 {
                     // drop what is already past; restart the decoder when the clock is outside what it is producing
                     while (queue.size() > 1 && queue[1].first <= want) queue.erase (queue.begin());
-                    const bool outside = (! streaming.load() && ! ended.load()) || want < streamFirst || want > streamNext + (juce::int64) (info.fps * 0.75);
+                    // also when the clock jumps back inside what was already decoded and dropped (a cut to an earlier moment)
+                    const bool outside = (! streaming.load() && ! ended.load()) || want < streamFirst || want > streamNext + (juce::int64) (info.fps * 0.75)
+                                         || (! queue.empty() && want < queue.front().first - 1 && want < currentIndex - 1);
                     if (! queue.empty() && queue.front().first <= want) { current = queue.front().second; currentIndex = queue.front().first; }
                     if (outside) restartAt = want;
                 }
