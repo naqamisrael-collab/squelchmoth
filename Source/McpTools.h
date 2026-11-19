@@ -37,6 +37,7 @@
 #include "VideoCuts.h"
 #include "VideoText.h"
 #include "VideoShape.h"
+#include "SqBeatCut.h"
 #include "VideoWindow.h"
 #include "VideoLane.h"
 #include "SqAdvisor.h"

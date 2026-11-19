@@ -281,8 +281,9 @@ inline int runSelfTest()
             VideoContent vc; attachVideo (vc, tools, *session); vc.setSize (1100, 720);
             auto settle = [&] (double t)
             {
+                // with no audio device running (this mode) only a session's first playhead move holds: the engine's
+                // transport timer copies the position back from a playhead that never advances. So one position per session here.
                 session->edit->getTransport().setPosition (tracktion::TimePosition::fromSeconds (t));
-                std::cout << "  video shot: just after asking, the playhead reads " << session->edit->getTransport().getPosition().inSeconds() << " s\n";
                 for (int i = 0; i < 400; ++i) { juce::MessageManager::getInstance()->runDispatchLoopUntil (100); vc.update(); if (vc.imageShown().isValid() && vc.getStrip().size() > 0 && vc.getStrip().finished() && vc.frameShown() == Frame::frameIndexAt (t, vc.getPlayer().facts().fps)) break; }
                 juce::MessageManager::getInstance()->runDispatchLoopUntil (900);     // the full-quality frame replaces the quick one
                 std::cout << "  video shot: asked for " << t << " s, the playhead is at " << session->edit->getTransport().getPosition().inSeconds() << " s, frame shown " << vc.frameShown() << "\n";
@@ -5342,6 +5343,49 @@ inline int runSelfTest()
                                "poster: a 256 x 256 picture of 1.0 s as exported - the left half of the video with the title on it (" + juce::String (whiteP) + " white pixels; the video's own frame there has " + juce::String (whiteV) + ")");
                         call ("video_shape", R"({"shape":"source"})"); const auto bad = call ("video_shape", R"({"shape":"banana"})", false);
                         check (! VideoShape::read (ed).active() && bad.contains ("shape is source"), "video_shape source goes back to the video's own shape; a shape that is not one is refused");
+                    }
+                    // ---- 1.35: the picture laid out on the beat grid; a silent video gets a silent clip to carry its picture
+                    {
+                        vc.readState = nullptr; vc.seek = nullptr; vc.shapeTool = nullptr;
+                        call ("new_session", R"({"name":"Selftest Beat"})");
+                        call ("video_import", "{\"path\":" + asJson (ramp) + "}");
+                        auto& ed = *session->edit;
+                        const double beat = ed.tempoSequence.toTime (te::BeatPosition::fromBeats (1.0)).inSeconds();
+                        auto srcAt = [&] (double t) { const auto pc = VideoCuts::read (ed, in.seconds); const auto h = SqCut::lookup (pc.pieces, t, pc.slip, in.seconds); return h.shows() ? h.src : -1.0; };
+                        auto count = [&] { return (int) VideoCuts::read (ed, in.seconds).pieces.size(); };
+                        const int before = count();
+                        const auto rev = call ("video_cut_to_beat", R"({"every_beats":1,"order":"reverse","start_seconds":0,"end_seconds":4})");
+                        const int afterRev = count(); const double r1 = srcAt (0.26), r2 = srcAt (3.76), r3 = srcAt (2.1);
+                        const auto revFrame = call ("video_frame", R"({"seconds":0.26})");
+                        check (std::abs (beat - 0.5) < 1.0e-9 && before == 1 && afterRev >= 8 && afterRev <= 9 && rev.contains ("on the beat grid, one every 1 beat") && std::abs (r1 - 3.76) < 0.03 && std::abs (r2 - 0.26) < 0.03 && std::abs (r3 - 1.6) < 0.03
+                               && (revFrame.contains ("frame 94 of ramp.mp4") || revFrame.contains ("frame 93 of ramp.mp4")),
+                               "video_cut_to_beat reverse at 120 BPM: eight half-second pieces in the opposite order - 0.26 s shows the video's " + juce::String (r1, 2) + " s, 3.76 s shows " + juce::String (r2, 2) + " s, 2.1 s shows " + juce::String (r3, 2) + " s");
+                        int undos = 0; while (count() != 1 && undos < 60) { ed.getUndoManager().undo(); ++undos; }
+                        const double backTo = srcAt (2.1);
+                        check (count() == 1 && std::abs (backTo - 2.1) < 1.0e-6 && undos >= 1, "undo brings the uncut picture back (" + juce::String (undos) + (undos == 1 ? " undo step" : " undo steps") + ")");
+                        const auto spr = call ("video_cut_to_beat", R"({"every_beats":1,"order":"spread","start_seconds":0,"end_seconds":2})");
+                        const double s0 = srcAt (0.1), s1 = srcAt (0.6), s3 = srcAt (1.9), rest = srcAt (3.0);
+                        check (spr.contains ("4 pieces") && std::abs (s0 - 0.1) < 0.03 && std::abs (s1 - (1.1667 + 0.1)) < 0.04 && std::abs (s3 - 3.9) < 0.04 && std::abs (rest - 3.0) < 0.03,
+                               "spread over the first 2 s: four pieces taken evenly through the whole video (0.6 s shows " + juce::String (s1, 2) + " s, 1.9 s shows " + juce::String (s3, 2) + " s); the picture after 2 s is untouched");
+                        const auto shA = call ("video_cut_to_beat", R"({"every_beats":2,"order":"shuffle","seed":5,"start_seconds":0,"end_seconds":4,"mute":true})");
+                        std::set<int> used; bool anyInPlace = false; for (int i = 0; i < 4; ++i) { const double sv = srcAt (i * 1.0 + 0.05); const int k = juce::roundToInt ((sv - 0.05) / 1.0); used.insert (k); if (k == i) anyInPlace = true; }
+                        const auto trackOfClips = VideoCuts::clips (ed).empty() ? nullptr : VideoCuts::clips (ed)[0]->getTrack();
+                        const auto bad = call ("video_cut_to_beat", R"({"order":"sideways"})", false);
+                        check (shA.contains ("order: shuffle") && used.size() == 4 && ! anyInPlace && trackOfClips != nullptr && trackOfClips->isMuted (false) && bad.contains ("order is keep"),
+                               "shuffle every 2 beats: the four one-second stretches are all used and none is in its own slot; mute silences the footage's track; a wrong order is refused");
+                        // a video with no sound gets a silent clip, so its picture can be cut too
+                        call ("new_session", R"({"name":"Selftest Silent"})");
+                        const auto si = call ("video_import", "{\"path\":" + asJson (dir.getChildFile ("halves.mp4")) + "}");
+                        auto& ed2 = *session->edit; const auto hin = Frame::probe (dir.getChildFile ("halves.mp4"));
+                        const auto p0 = VideoCuts::read (ed2, hin.seconds);
+                        const auto cutSilent = call ("video_cut_to_beat", R"({"every_beats":1,"order":"reverse","start_seconds":0,"end_seconds":2})");
+                        const auto p1 = VideoCuts::read (ed2, hin.seconds);
+                        const auto sfile = dir.getChildFile ("silentcut.mp4");
+                        const auto sex = call ("video_export", "{\"picture\":\"source\",\"start_seconds\":0,\"end_seconds\":2,\"wait_seconds\":240,\"path\":" + asJson (sfile) + "}");
+                        const auto sp = Frame::probe (sfile); juce::String ge2; const auto simg = sp.ok ? Frame::grabFrame (sfile, sp, 1.2, 128, ge2, false) : juce::Image();
+                        check (si.contains ("silent clip on track") && p0.followsSound && p0.pieces.size() == 1 && std::abs (p0.pieces[0].length - hin.seconds) < 0.05 && cutSilent.contains ("4 pieces") && p1.pieces.size() == 4
+                               && sex.contains ("exported") && sp.ok && sp.width == 128 && sp.height == 64 && simg.isValid() && std::abs ((int) simg.getPixelAt (20, 32).getGreen() - 40) <= 6 && std::abs ((int) simg.getPixelAt (108, 32).getGreen() - 200) <= 6,
+                               "a video with no sound gets a silent clip that carries its picture: it can be cut to the beat (4 pieces) and the cut picture exports");
                     }
                     vc.getPlayer().stopStream();
                 }

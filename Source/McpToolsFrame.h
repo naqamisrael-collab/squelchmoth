@@ -55,6 +55,38 @@ void registerFrameTools()
                  if (ui.refresh) ui.refresh();
                  s << "\nIts sound is on track " << idx << " at " << juce::String (at, 2) << " s (" << wav.getFileName() << ").";
              }
+             else if (! in.hasAudio && in.hasVideo && flag (a, "sound", true))
+             {
+                 // a video with no sound still needs a clip to carry its picture, so it can be cut like any other: a silent one
+                 const auto wav = frameVideoFolder().getNonexistentChildFile (juce::File::createLegalFileName (f.getFileNameWithoutExtension()).substring (0, 50) + " silent", ".wav", false);
+                 wav.getParentDirectory().createDirectory();
+                 bool written = false;
+                 {
+                     juce::WavAudioFormat fmt; auto os = std::make_unique<juce::FileOutputStream> (wav);
+                     if (os->openedOk())
+                         if (auto w = std::unique_ptr<juce::AudioFormatWriter> (fmt.createWriterFor (os.get(), 8000.0, 1, 8, {}, 0)))
+                         {
+                             os.release(); juce::AudioBuffer<float> quiet (1, 8000); quiet.clear();
+                             juce::int64 left = (juce::int64) std::ceil (in.seconds * 8000.0); written = true;
+                             while (left > 0 && written) { const int n = (int) juce::jmin ((juce::int64) 8000, left); written = w->writeFromAudioSampleBuffer (quiet, 0, n); left -= n; }
+                         }
+                 }
+                 if (! written) { wav.deleteFile(); s << "\nIt has no sound to import."; }
+                 else
+                 {
+                     juce::var t (new juce::DynamicObject()); set (t, "kind", "audio"); set (t, "name", f.getFileNameWithoutExtension().substring (0, 30) + " (picture)");
+                     const int idx = firstNumber (call ("add_track", t).text); if (idx <= 0) return ToolResult::error ("Couldn't add a track for the video");
+                     juce::var im (new juce::DynamicObject()); set (im, "track", idx); set (im, "path", wav.getFullPathName()); set (im, "start_seconds", at);
+                     auto r = call ("import_audio", im); if (r.isError) return r;
+                     if (auto* tr = dynamic_cast<te::AudioTrack*> (session.findTrack (juce::var (idx))))
+                     {
+                         te::Clip* last = nullptr; for (auto c : tr->getClips()) last = c;
+                         if (last != nullptr) { e.state.setProperty ("frameVideoClip", last->itemID.toString(), nullptr); if (auto* w = dynamic_cast<te::WaveAudioClip*> (last)) e.state.setProperty ("frameVideoWav", w->getOriginalFile().getFullPathName(), nullptr); }
+                     }
+                     if (ui.refresh) ui.refresh();
+                     s << "\nIt has no sound, so a silent clip on track " << idx << " carries its picture: cut, move or trim that clip to edit the picture.";
+                 }
+             }
              else if (! in.hasAudio) s << "\nIt has no sound to import.";
              return ToolResult::ok (s);
          });
@@ -198,6 +230,63 @@ void registerFrameTools()
              juce::String s = VideoCuts::describe (pic, secs > 0 ? secs : 1.0e9);
              if (pic.followsSound) { juce::StringArray tracks; for (auto* c : VideoCuts::clips (e)) if (auto* t = c->getTrack()) tracks.addIfNotAlreadyThere (t->getName()); if (! tracks.isEmpty()) s << "\nIts sound clips are on: " << tracks.joinIntoString (", ") << "."; }
              else s << "\nNo sound clip is tied to this video (it has no sound, or it was brought in before version 1.30), so it stays one piece. Bring it in again with video_import to cut it.";
+             return ToolResult::ok (s);
+         });
+
+    add ("video_cut_to_beat",
+         "Frame: lays the session's video out on the beat grid of the song (the session's own tempo map) - for a music video. The range is divided every every_beats beats (default 4; 1 = every beat, 0.5 = every half beat) "
+         "and each slot shows a stretch of the video chosen by order: keep (the same moments as now - plain cuts on the grid), reverse (the stretches in the opposite order), shuffle (a seeded reordering in which none "
+         "stays in its own slot; seed picks which), spread (stretches taken evenly through the WHOLE video, condensing long footage into the range). start_seconds / end_seconds give the range (default: where the picture "
+         "is now). mute true silences the footage's own sound so the song is heard alone. It rewrites the clips of the video's sound in that range (one per slot), so every piece can then be moved, trimmed or "
+         "deleted like any clip; clip gain and fades in the range are not kept. video_cuts lists the result.",
+         R"json({"type":"object","properties":{"every_beats":{"type":"number"},"order":{"type":"string","enum":["keep","reverse","shuffle","spread"]},"seed":{"type":"integer"},"start_seconds":{"type":"number"},"end_seconds":{"type":"number"},"mute":{"type":"boolean"}}})json",
+         [this] (const juce::var& a) -> ToolResult
+         {
+             auto& e = edit(); const juce::File video (e.state["frameVideo"].toString());
+             if (! video.existsAsFile()) return ToolResult::error ("This session has no video yet: bring one in with video_import");
+             if (! Frame::ffmpeg().existsAsFile()) return ToolResult::error (Frame::missingText());
+             const auto in = Frame::probe (video); if (! in.ok || ! in.hasVideo) return ToolResult::error (video.getFileName() + " has no picture");
+             const auto wav = VideoCuts::soundFile (e); auto linked = VideoCuts::clips (e);
+             if (wav == juce::File() || linked.empty()) return ToolResult::error ("This video has no clip on the timeline to cut (it was brought in before version 1.35 without sound, or its clips were deleted). Bring it in again with video_import");
+             const auto pic = VideoCuts::read (e, in.seconds);
+             const double every = juce::jlimit (0.125, 256.0, num (a, "every_beats", 4.0));
+             const double from = juce::jmax (0.0, has (a, "start_seconds") ? num (a, "start_seconds") : SqCut::start (pic.pieces)), to = has (a, "end_seconds") ? num (a, "end_seconds") : SqCut::end (pic.pieces);
+             if (to - from < 0.05) return ToolResult::error ("The range is empty: give start_seconds and end_seconds");
+             const auto ord = str (a, "order", "keep").toLowerCase();
+             const int order = ord == "reverse" ? SqBeatCut::reverse : ord == "shuffle" ? SqBeatCut::shuffle : ord == "spread" ? SqBeatCut::spread : ord == "keep" ? SqBeatCut::keep : -1;
+             if (order < 0) return ToolResult::error ("order is keep, reverse, shuffle or spread");
+             // the grid: the range's ends, and every multiple of every_beats between them (beats counted from the session's start)
+             auto& ts = e.tempoSequence; std::vector<double> grid { from };
+             const double b0 = ts.toBeats (te::TimePosition::fromSeconds (from)).inBeats(), b1 = ts.toBeats (te::TimePosition::fromSeconds (to)).inBeats();
+             for (double b = (std::floor (b0 / every + 1.0e-9) + 1.0) * every; b < b1 - 1.0e-9 && grid.size() < 20000; b += every)
+             { const double t = ts.toTime (te::BeatPosition::fromBeats (b)).inSeconds(); if (t > grid.back() + 1.0e-6) grid.push_back (t); }
+             grid.push_back (to);
+             auto slots = SqBeatCut::slots (grid);
+             if (slots.empty()) return ToolResult::error ("No slots in that range");
+             if (slots.size() > 5000) return ToolResult::error ("That would make " + juce::String ((int) slots.size()) + " pieces; use a larger every_beats or a shorter range");
+             const double videoStart = VideoMove::currentStart (e);
+             SqBeatCut::assign (slots, order, videoStart, in.seconds, (std::uint32_t) (juce::int64) num (a, "seed", 1.0));
+             // rewrite the sound clips in the range: cut at its ends, clear what is inside, one clip per slot
+             auto* track = dynamic_cast<te::AudioTrack*> (linked.front()->getTrack()); if (track == nullptr) return ToolResult::error ("The video's sound clip is not on an audio track");
+             auto& um = e.getUndoManager(); um.beginNewTransaction ("Cut video to the beat");
+             const auto tFrom = te::TimePosition::fromSeconds (from), tTo = te::TimePosition::fromSeconds (to);
+             for (double edge : { from, to })
+                 for (auto* c : VideoCuts::clips (e))
+                 { const auto pos = c->getPosition(); if (pos.getStart().inSeconds() < edge - 1.0e-6 && pos.getEnd().inSeconds() > edge + 1.0e-6) if (auto* ct = dynamic_cast<te::ClipTrack*> (c->getTrack())) ct->splitClip (*c, te::TimePosition::fromSeconds (edge)); }
+             for (auto* c : VideoCuts::clips (e))
+             { const auto pos = c->getPosition(); if (pos.getStart() >= tFrom - te::TimeDuration::fromSeconds (1.0e-6) && pos.getEnd() <= tTo + te::TimeDuration::fromSeconds (1.0e-6)) c->removeFromParent(); }
+             int made = 0;
+             for (auto& sl : slots)
+             {
+                 const double offset = juce::jmax (0.0, sl.src + pic.slip);
+                 if (track->insertWaveClip (video.getFileNameWithoutExtension().substring (0, 30), wav, { { te::TimePosition::fromSeconds (sl.at), te::TimeDuration::fromSeconds (sl.length) }, te::TimeDuration::fromSeconds (offset) }, false) != nullptr) ++made;
+             }
+             if (flag (a, "mute")) track->setMute (true);
+             if (ui.refresh) ui.refresh();
+             juce::String s = "The picture is now " + juce::String (made) + (made == 1 ? " piece" : " pieces") + " on the beat grid, one every " + juce::String (every, every == std::floor (every) ? 0 : 3) + (every == 1.0 ? " beat" : " beats")
+                              + ", from " + juce::String (from, 2) + " to " + juce::String (to, 2) + " s (order: " + ord + ").";
+             if (flag (a, "mute")) s << " The footage's own sound is muted (track " << track->getName() << ").";
+             if (made > 0) { s << " First pieces show the video from"; for (size_t i = 0; i < slots.size() && i < 6; ++i) s << (i ? ", " : " ") << juce::String (slots[i].src, 2); s << (slots.size() > 6 ? " s ..." : " s."); }
              return ToolResult::ok (s);
          });
 
