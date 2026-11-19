@@ -893,20 +893,25 @@ public:
         lastMenuHandled = true;
 
         // ---- File
-        if (id == 1) newSessionDialog (false);
-        else if (id == 8) newSessionDialog (true);
+        // 1.36: leaving a session for another always asks first (Save / Don't Save / Cancel), like quitting does
+        if (id == 1) leaveSessionThen ([this] { newSessionDialog (false); });
+        else if (id == 8) leaveSessionThen ([this] { newSessionDialog (true); });
         else if (id == 2)
         {
-            chooser = std::make_unique<juce::FileChooser> ("Open Session", session.sessionsDir, "*.squelch;*.tracktionedit");
-            chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc)
+            leaveSessionThen ([this]
             {
-                if (fc.getResult().existsAsFile()) session.openSession (fc.getResult());
+                chooser = std::make_unique<juce::FileChooser> ("Open Session", session.sessionsDir, "*.squelch;*.tracktionedit");
+                chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc)
+                {
+                    if (fc.getResult().existsAsFile()) session.openSession (fc.getResult());
+                    else session.saveOnNextReplace = true;        // nothing was opened: a later switch saves as usual
+                });
             });
         }
         else if (id >= 50 && id < 80 && id != 60 && id != 61 && id != 62 && id != 63 && id != 64 && id != 65 && id < 70)
         {
             auto files = session.sessionsDir.findChildFiles (juce::File::findFiles, false, "*.squelch");
-            if (id - 50 < files.size()) session.openSession (files[id - 50]);
+            if (id - 50 < files.size()) { const auto f = files[id - 50]; leaveSessionThen ([this, f] { session.openSession (f); }); }
         }
         else if (id == 3) { if (! session.save() && ! session.savingAllowed()) showLicenceDialog (true); }
         else if (id == 4 || id == 9)
@@ -1847,6 +1852,24 @@ private:
         session.log.add ("Squelchmoth", "Make a Beat: " + juce::String (g->name) + " kit in Pattern mode - press Play (Space) to hear it, click steps, Beat Starter for a groove, + CHANNEL for instruments");
     }
 
+    /** Asks what to do with the open session before another takes its place, then carries on (or not, on Cancel).
+        Save writes it; Don't Save leaves the file as it was last saved. The assistant's own new / open tools do not ask. */
+    void leaveSessionThen (std::function<void()> go)
+    {
+        if (session.edit == nullptr || ! session.savingAllowed()) { go(); return; }
+        const bool changed = session.edit->hasChangedSinceSaved();
+        juce::AlertWindow::showYesNoCancelBox (juce::MessageBoxIconType::QuestionIcon, "Leave this session",
+            "Save \"" + session.getFile().getFileNameWithoutExtension() + "\" before leaving it?" + (changed ? "\n\nIt has changes that are not saved yet." : "\n\nNothing has changed since it was last saved."),
+            "Save", "Don't Save", "Cancel", this,
+            juce::ModalCallbackFunction::create ([this, go] (int result)
+            {
+                if (result == 0) return;
+                if (result == 1) { if (! session.save()) { juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Couldn't save", "The session could not be saved, so it is still open. Try File > Save As to another place."); return; } }
+                if (result == 2) session.saveOnNextReplace = false;      // Don't Save: leave the file as it was last saved when the next session opens
+                go();
+            }));
+    }
+
     void newSessionDialog (bool withTemplate)
     {
         auto aw = std::make_shared<juce::AlertWindow> ("New Session", "Name your session" + juce::String (withTemplate ? " and pick a template:" : ":"), juce::MessageBoxIconType::NoIcon);
@@ -1874,7 +1897,7 @@ private:
         aw->enterModalState (true, juce::ModalCallbackFunction::create ([this, aw, withTemplate, userTemplates] (int r)
         {
             aw->setVisible (false);
-            if (r != 1) return;
+            if (r != 1) { session.saveOnNextReplace = true; return; }     // cancelled: the open session stays, and a later switch saves as usual
             auto name = aw->getTextEditorContents ("name");
             int tmpl = withTemplate ? aw->getComboBoxComponent ("template")->getSelectedItemIndex() : 1;
             auto bpm = aw->getComboBoxComponent ("tempo")->getText().getDoubleValue();

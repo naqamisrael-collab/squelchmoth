@@ -2,6 +2,7 @@
 // Squelchmoth 1.28 - the Video window: the session's picture, following the transport.
 // It shows the frame that belongs to the playhead - exact when stopped or scrubbing, decoded ahead while playing - with
 // timecode and frame number. Drop a video on it to bring one in. Editing the picture comes later; this is the viewer.
+// 1.36: Cut button - lay the picture out on the song's beat grid (B key repeats the last choice).
 // 1.34: the picture's shape (vertical / square / wide, filled or fitted) shows as it will export (Shape button; R key).
 // 1.33: titles and captions show over the picture as they will be exported (Text button; T and C keys).
 // 1.32: the picture follows the clips of the video's sound, so cutting those clips cuts the picture.
@@ -29,11 +30,12 @@ public:
     std::function<void (double)> seek;                                 // moves the session's playhead (seconds on the timeline)
     std::function<juce::String (const juce::var&)> textTool;           // runs video_text with these arguments; returns what happened
     std::function<juce::String (const juce::var&)> shapeTool;          // runs video_shape with these arguments; returns what happened
+    std::function<juce::String (const juce::var&)> cutTool;            // runs video_cut_to_beat with these arguments; returns what happened
 
     VideoContent()
     {
         namespace L = Console::Look;
-        for (auto* b : { &importBtn, &toolsBtn, &proxyBtn, &textBtn, &shapeBtn })
+        for (auto* b : { &importBtn, &toolsBtn, &proxyBtn, &textBtn, &shapeBtn, &cutBtn })
         {
             addAndMakeVisible (*b); b->setColour (juce::TextButton::buttonColourId, L::well()); b->setColour (juce::TextButton::textColourOffId, L::text());
         }
@@ -43,6 +45,27 @@ public:
             chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc) { if (fc.getResult().existsAsFile()) bringIn (fc.getResult()); });
         };
         toolsBtn.onClick = [this] { Frame::startInstall(); };
+        cutBtn.setTooltip ("Cut the picture on the beat of the song: every bar, every two beats or every beat, in order, reversed, shuffled or spread through the whole video.");
+        cutBtn.onClick = [this]
+        {
+            juce::PopupMenu m;
+            m.addSectionHeader ("Cut the picture to the beat");
+            m.addItem (1, "On every bar (4 beats)  (B)"); m.addItem (2, "On every 2 beats"); m.addItem (3, "On every beat");
+            m.addSeparator();
+            m.addSectionHeader ("What each piece shows");
+            m.addItem (10, "The same moments as now", true, cutOrder == "keep"); m.addItem (11, "The video in reverse order", true, cutOrder == "reverse");
+            m.addItem (12, "Shuffled", true, cutOrder == "shuffle"); m.addItem (13, "Spread through the whole video", true, cutOrder == "spread");
+            m.addSeparator();
+            m.addItem (20, "Mute the footage's own sound", true, cutMute);
+            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&cutBtn), [safe = juce::Component::SafePointer<VideoContent> (this)] (int r)
+            {
+                if (safe == nullptr || r == 0) return;
+                static const char* orders[] = { "keep", "reverse", "shuffle", "spread" };
+                if (r >= 10 && r <= 13) safe->cutOrder = orders[r - 10];
+                else if (r == 20) safe->cutMute = ! safe->cutMute;
+                else safe->cutToBeat (r == 1 ? 4.0 : r == 2 ? 2.0 : 1.0);
+            });
+        };
         shapeBtn.setTooltip ("The picture's shape for the export: as the video is, vertical, square, tall or wide - filled (cropped) or fitted (bars).");
         shapeBtn.onClick = [this]
         {
@@ -170,6 +193,18 @@ public:
         return { area.getCentreX() - w * 0.5f, area.getCentreY() - h * 0.5f, w, h };
     }
 
+    /** Cuts the picture to the beat with the order and mute chosen in the Cut menu (the menu, the B key and the self-test end here).
+        Shuffling again picks a new order each time. */
+    juce::String cutToBeat (double everyBeats)
+    {
+        cutEvery = everyBeats;
+        juce::var args (new juce::DynamicObject()); auto* o = args.getDynamicObject();
+        o->setProperty ("every_beats", everyBeats); o->setProperty ("order", cutOrder); o->setProperty ("mute", cutMute);
+        if (cutOrder == "shuffle") o->setProperty ("seed", ++cutSeed);
+        note = cutTool ? cutTool (args).upToFirstOccurrenceOf (" First pieces", false, false) : juce::String ("Open a session first.");
+        update(); repaint(); return note;
+    }
+
     /** Runs video_shape (the menu, the R key and the self-test all end here). */
     juce::String runShape (std::initializer_list<std::pair<const char*, juce::var>> fields)
     {
@@ -284,6 +319,7 @@ public:
         if (k.getTextCharacter() == 'p' || k.getTextCharacter() == 'P') { makeProxy(); return true; }
         if (k.getTextCharacter() == 't' || k.getTextCharacter() == 'T') { askForText ("title", -1); return true; }
         if (k.getTextCharacter() == 'r' || k.getTextCharacter() == 'R') { nextShape(); return true; }
+        if (k.getTextCharacter() == 'b' || k.getTextCharacter() == 'B') { cutToBeat (cutEvery); return true; }
         if (k.getTextCharacter() == 'c' || k.getTextCharacter() == 'C') { askForText ("caption", -1); return true; }
         return false;
     }
@@ -306,7 +342,7 @@ public:
         g.setColour (L::dim()); g.setFont (Theme::font (12.0f));
         g.drawText (player.ready() ? player.source().getFileName() + "   " + juce::String (in.width) + " x " + juce::String (in.height) + "   " + juce::String (in.fps, in.fps == std::floor (in.fps) ? 0 : 2) + " fps"
                                    : juce::String ("The session's picture, following the playhead."),
-                    header.withTrimmedLeft (92).withTrimmedRight (432), juce::Justification::centredLeft);
+                    header.withTrimmedLeft (92).withTrimmedRight (500), juce::Justification::centredLeft);
 
         g.setColour (juce::Colours::black); g.fillRoundedRectangle (screen.toFloat(), 6.0f);
         if (shown.isValid())
@@ -378,6 +414,7 @@ public:
         proxyBtn.setBounds (importBtn.getX() - 118, header.getY() + 9, 110, 28);
         textBtn.setBounds (proxyBtn.getX() - 78, header.getY() + 9, 70, 28);
         shapeBtn.setBounds (textBtn.getX() - 82, header.getY() + 9, 74, 28);
+        cutBtn.setBounds (shapeBtn.getX() - 68, header.getY() + 9, 60, 28);
         r.reduce (14, 4);
         noteArea = r.removeFromBottom (18);
         footer = r.removeFromBottom (58); r.removeFromBottom (8);
@@ -389,7 +426,7 @@ private:
     void timerCallback() override { update(); if (Frame::installState().running) repaint(); }
 
     Frame::Player player; Frame::Strip strip; int stripSeen = -1; bool dragging = false; State state; juce::Image shown; juce::int64 shownIndex = -1; double lastPlayhead = -1.0;
-    juce::TextButton importBtn { "Import video..." }, toolsBtn { "Get video tools" }, proxyBtn { "Proxy" }, textBtn { "Text" }, shapeBtn { "Shape" }; int proxyTick = 0; size_t textsSeen = 0; double textsSum = 0; double noteAt = 0;
+    juce::TextButton importBtn { "Import video..." }, toolsBtn { "Get video tools" }, proxyBtn { "Proxy" }, textBtn { "Text" }, shapeBtn { "Shape" }, cutBtn { "Cut" }; juce::String cutOrder { "keep" }; bool cutMute = false; double cutEvery = 4.0; int cutSeed = 0; int proxyTick = 0; size_t textsSeen = 0; double textsSum = 0; double noteAt = 0;
     std::unique_ptr<juce::FileChooser> chooser; juce::String note; bool hover = false;
     juce::Rectangle<int> header, screen, footer, noteArea, stripArea;
 };
@@ -411,6 +448,7 @@ void attachVideo (VideoContent& c, Tools& tools, Sess& session)
         return s;
     };
     c.seek = [&session] (double t) { if (session.edit != nullptr) session.edit->getTransport().setPosition (tracktion::TimePosition::fromSeconds (juce::jmax (0.0, t))); };
+    c.cutTool = [&tools] (const juce::var& args) { return tools.call ("video_cut_to_beat", args).text; };
     c.shapeTool = [&tools] (const juce::var& args) { return tools.call ("video_shape", args).text; };
     c.textTool = [&tools] (const juce::var& args) { return tools.call ("video_text", args).text; };
     c.importVideo = [&tools] (const juce::File& f)

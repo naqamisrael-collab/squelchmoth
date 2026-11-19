@@ -5373,6 +5373,20 @@ inline int runSelfTest()
                         const auto bad = call ("video_cut_to_beat", R"({"order":"sideways"})", false);
                         check (shA.contains ("order: shuffle") && used.size() == 4 && ! anyInPlace && trackOfClips != nullptr && trackOfClips->isMuted (false) && bad.contains ("order is keep"),
                                "shuffle every 2 beats: the four one-second stretches are all used and none is in its own slot; mute silences the footage's track; a wrong order is refused");
+                        // 1.36: the Cut button's action and the B key go through the same call
+                        {
+                            while (count() != 1 && ed.getUndoManager().canUndo()) ed.getUndoManager().undo();
+                            const int clean = count();
+                            vc.cutTool = [&] (const juce::var& args) { return tools.call ("video_cut_to_beat", args).text; };
+                            vc.readState = [&] { VideoContent::State st; st.video = ramp; st.playhead = clock; st.playing = playing; const auto pc = VideoCuts::read (ed, in.seconds); st.cut = true; st.pieces = pc.pieces; st.slip = pc.slip; return st; };
+                            clock = 0.5; pump (150);
+                            const auto byMenu = vc.cutToBeat (2.0); const int afterMenu = count();
+                            ed.getUndoManager().undo(); const int undone = count();
+                            const bool keyOk = vc.keyPressed (juce::KeyPress ('b', juce::ModifierKeys(), 'b')); const int afterKey = count();
+                            check (clean == 1 && byMenu.contains ("on the beat grid, one every 2 beats") && afterMenu >= 4 && afterMenu <= 5 && undone == 1 && keyOk && afterKey == afterMenu,
+                                   "Video window: Cut on every 2 beats makes " + juce::String (afterMenu) + " pieces, one undo takes it back, and the B key repeats the same cut");
+                            vc.readState = nullptr; vc.cutTool = nullptr;
+                        }
                         // a video with no sound gets a silent clip, so its picture can be cut too
                         call ("new_session", R"({"name":"Selftest Silent"})");
                         const auto si = call ("video_import", "{\"path\":" + asJson (dir.getChildFile ("halves.mp4")) + "}");
