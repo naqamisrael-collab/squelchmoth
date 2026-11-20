@@ -5480,7 +5480,7 @@ inline int runSelfTest()
                 check (q8 && juce::roundToInt (vp->quality->getCurrentValue()) == 2 && vp->quality->getCurrentValueAsString() == "16x", "Voltage's Quality is a control the assistant can set: 8x, then 16x (" + qs.substring (0, 60) + ")");
             }
         }
-        // ---- 1.38 Voltage Power: the output stage and transformer as a plug-in (the circuit is checked against a circuit simulator in tests/power_test.cpp)
+        // ---- 1.38 / 1.39 Voltage Power: the output stage and its transformer (iron with saturation and hysteresis since 1.39) as a plug-in; the circuit is checked against a circuit simulator in tests/power_test.cpp
         {
             call ("new_session", R"({"name":"Selftest Voltage Power"})");
             const auto ins = call ("insert_plugin", R"({"track":"Audio 1","plugin":"Voltage Power"})");
@@ -5535,7 +5535,17 @@ inline int runSelfTest()
                 // Iron: the size of the transformer decides where the bass falls away
                 const auto bigIron = render (0.0f, 100.0f, 0.05f, 50.0, 1234, 0, 100.0f), smallIron = render (0.0f, 100.0f, 0.05f, 50.0, 1234, 0, 0.0f);
                 const double lossBig = bin (bigIron.l, 50.0) - inDb, lossSmall = bin (smallIron.l, 50.0) - inDb;
-                check (lossBig > -1.0 && lossSmall < lossBig - 4.0 && lossSmall > -20.0, "Iron: at 50 Hz the largest transformer loses " + juce::String (-lossBig, 2) + " dB and the smallest " + juce::String (-lossSmall, 1) + " dB");
+                check (lossBig > -1.5 && lossSmall < lossBig - 4.0 && lossSmall > -20.0, "Iron: at 50 Hz the largest transformer loses " + juce::String (-lossBig, 2) + " dB and the smallest " + juce::String (-lossSmall, 1) + " dB");
+                // 1.39: the iron saturates - at 50 Hz a small transformer adds upper harmonics that a large one does not, at the same Drive
+                {
+                    auto upper = [&] (const std::vector<float>& y, double f0) { double e = 0; for (int k = 4; k <= 9; ++k) e += std::pow (10.0, bin (y, f0 * k) / 10.0); return 10 * std::log10 (e + 1e-30) - bin (y, f0); };
+                    const auto big50 = render (0.0f, 100.0f, 0.5f, 50.0, 1234, 0, 100.0f), small50 = render (0.0f, 100.0f, 0.5f, 50.0, 1234, 0, 10.0f), big1k = render (0.0f, 100.0f, 0.5f, 1000.0, 1234, 0, 100.0f), small1k = render (0.0f, 100.0f, 0.5f, 1000.0, 1234, 0, 10.0f);
+                    const double ub = upper (big50.l, 50.0), us = upper (small50.l, 50.0), us1k = upper (small1k.l, 1000.0), ub1k = upper (big1k.l, 1000.0);
+                    check (us > ub + 6.0 && us1k < us - 10.0 && std::isfinite (us) && std::isfinite (ub1k),
+                           "the iron saturates in the bass: 50 Hz through a small transformer has harmonics 4 to 9 at " + juce::String (us, 1) + " dBc, through a large one " + juce::String (ub, 1) + " dBc; at 1 kHz the small one is far cleaner (" + juce::String (us1k, 1) + " dBc; large " + juce::String (ub1k, 1) + ")");
+                    const auto shownIron = SqVoltagePowerPlugin::measure (1234, 0, 45.0f, 40.0f, 70.0f, 0.0f, 0.1f);
+                    check (shownIron.ironPercent > 25.0 && shownIron.ironPercent < 80.0, "the face shows where the iron rests: " + juce::String (juce::roundToInt (shownIron.ironPercent)) + " % of saturation, from the tube's steady current");
+                }
                 const auto heavy = render (12.0f, 100.0f, 0.5f, 1000.0, 1234, 0, 70.0f, 1);
                 check (std::abs ((bin (heavy.l, 3000.0) - bin (heavy.l, 1000.0)) - h3) > 0.3, "the Heavy tube distorts differently from the Classic one at the same settings (3rd harmonic " + juce::String (bin (heavy.l, 3000.0) - bin (heavy.l, 1000.0), 1) + " against " + juce::String (h3, 1) + " dBc)");
                 {

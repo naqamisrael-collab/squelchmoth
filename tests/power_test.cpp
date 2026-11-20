@@ -11,6 +11,8 @@ static void check (bool ok, const char* what) { std::printf ("  %s %s\n", ok ? "
 struct Ref { double amp; double h[7]; };
 struct Gain { double hz, db; };
 #include "reference/pentode/reference.inc"
+struct CoreRef { double hz, amp; double h[7]; double flux; };
+#include "reference/pentode/reference_core.inc"
 
 static std::vector<double> run (int os, double amp, double f, double fs, int n, int settle, const Pentode& tube, const PowerCircuit& c = {})
 {
@@ -93,6 +95,95 @@ int main()
         PowerCircuit c3; c3.rk = 470.0; c3.ra = 6000.0; s.setParts (classicBeam(), c3); bool finite = true; for (int i = 0; i < 192000; ++i) finite = finite && std::isfinite (s.process (5.0 * std::sin (i * 0.0327)));
         double tail = 0; for (int i = 0; i < 192000 * 3; ++i) { const double v = s.process (0.0); if (i > 192000 * 3 - 100) tail = std::max (tail, std::abs (v)); }
         std::snprintf (line, sizeof (line), "changing bias and load while running does not reset the stage; it settles by itself (%.2e V left)", tail); check (finite && tail < 1.0e-3, line);
+    }
+    std::printf ("== The transformer's iron (saturation and hysteresis) against the circuit simulator ==\n");
+    {
+        Core iron; iron.on = true;
+        // switched on from nothing, the tone from 0.6 s, measured from 1.0 s - the same history as the simulator's run
+        auto cold = [&] (int os, double rate, double amp, double f, int n, const Core& k, double* fluxAtStart = nullptr, const PowerCircuit& c = {})
+        {
+            PowerStage s; s.prepare (rate * os, classicBeam(), c, k); s.startCold(); Oversampler o; o.prepare (os);
+            const int toneAt = (int) std::lround (0.6 * rate), start = (int) std::lround (1.0 * rate), lag = o.latency(); std::vector<double> y ((size_t) n);
+            for (int i = 0; i < start + n + lag; ++i)
+            {
+                if (i == start && fluxAtStart != nullptr) *fluxAtStart = s.flux();
+                const double v = o.process (i >= toneAt ? amp * std::sin (2.0 * 3.14159265358979323846 * f * (i - toneAt) / rate) : 0.0, [&] (double x) { return s.process (x); });
+                if (i >= start + lag) y[(size_t) (i - start - lag)] = v;
+            }
+            return y;
+        };
+        for (int os : { 4, 8 })
+        {
+            double worstFund = 0, worstHarm = 0; int compared = 0;
+            for (const auto& r : ref_core)
+            {
+                const int cyc = r.hz < 100 ? 8 : 96, n = (int) std::lround (fs * cyc / r.hz); const auto y = cold (os, fs, r.amp, r.hz, n, iron);
+                for (int k = 1; k <= 7; ++k)
+                {
+                    const double got = bin (y, k * cyc), want = r.h[k - 1];
+                    if (k == 1) worstFund = std::max (worstFund, std::abs (got - want));
+                    else if (want > r.h[0] - 100.0) { worstHarm = std::max (worstHarm, std::abs (got - want)); ++compared; }
+                }
+            }
+            std::snprintf (line, sizeof (line), "%dx: 50 Hz at 1, 5, 10, 20 V and 1 kHz at 2, 10, 20 V - fundamental within %.3f dB (gate 0.25), %d harmonics up to the 7th within %.3f dB (gate 1)", os, worstFund, compared, worstHarm);
+            check (worstFund <= 0.25 && worstHarm <= 1.0 && compared >= 38, line);
+        }
+        {
+            // the iron's own state, at the simulator's rate with no oversampler in the way
+            double worst = 0; for (const auto& r : ref_core) { double fl = 0; cold (1, 384000.0, r.amp, r.hz, 16, iron, &fl); worst = std::max (worst, std::abs (fl - r.flux)); }
+            std::snprintf (line, sizeof (line), "the flux in the iron one second after switch-on agrees with the simulator's in all seven runs (largest difference %.2e Vs of about 1.5)", worst); check (worst < 2.0e-3, line);
+        }
+        std::printf ("== What the iron does ==\n");
+        {
+            PowerStage s; s.prepare (192000.0, classicBeam(), {}, iron); double worst = 0; for (int i = 0; i < 19200; ++i) worst = std::max (worst, std::abs (s.process (0.0)));
+            std::snprintf (line, sizeof (line), "with the iron, silence in still gives silence out from the first sample (largest %.2e V); it rests at %.0f %% of its saturation flux because of the tube's steady current", worst, 100.0 * s.flux() / s.fluxAtSaturation());
+            check (worst < 1.0e-4 && s.flux() > 0.2 * s.fluxAtSaturation() && s.flux() < 0.8 * s.fluxAtSaturation(), line);
+            // memory: after a burst of bass that ends, the iron settles at a different flux than before, and stays there
+            const double before = s.flux(); for (int i = 0; i < 192000; ++i) s.process (30.0 * std::sin (2.0 * 3.14159265358979323846 * 30.0 * i / 192000.0) * (i < 96000 ? 1.0 : std::max (0.0, 1.0 - (i - 96000) / 3200.0)));
+            for (int i = 0; i < 192000 * 2; ++i) s.process (0.0); const double after = s.flux(); for (int i = 0; i < 192000 * 2; ++i) s.process (0.0); const double later = s.flux();
+            double quiet = 0; for (int i = 0; i < 1000; ++i) quiet = std::max (quiet, std::abs (s.process (0.0)));
+            std::snprintf (line, sizeof (line), "memory: after a bass burst the iron rests at %.4f Vs instead of %.4f, is still there two seconds later (%.4f), and the output is quiet (%.1e V)", after, before, later, quiet);
+            check (std::abs (after - before) > 1.0e-3 && std::abs (later - after) < 0.1 * std::abs (after - before) && quiet < 1.0e-3, line);
+        }
+        {
+            // saturation is a bass matter: against the plain inductance of the same size, the iron adds upper harmonics at 50 Hz and next to nothing at 1 kHz
+            PowerCircuit lin; lin.lp = 22.0; Core off;
+            auto upper = [&] (const std::vector<double>& y, int cyc) { double e = 0; for (int k = 4; k <= 9; ++k) e += std::pow (10.0, bin (y, k * cyc) / 10.0); return 10 * std::log10 (e) - bin (y, cyc); };
+            const auto a50 = cold (4, fs, 5.0, 50.0, 7680, iron), b50 = cold (4, fs, 5.0, 50.0, 7680, off, nullptr, lin), a1k = cold (4, fs, 10.0, 1000.0, 4608, iron), b1k = cold (4, fs, 10.0, 1000.0, 4608, off, nullptr, lin);
+            double d1k = 0; for (int k = 1; k <= 5; ++k) d1k = std::max (d1k, std::abs (bin (a1k, k * 96) - bin (b1k, k * 96)));
+            std::snprintf (line, sizeof (line), "50 Hz at 5 V: harmonics 4 to 9 are %.1f dB below the fundamental with the iron, %.1f dB with a plain inductance; at 1 kHz the first five harmonics differ by at most %.2f dB", -upper (a50, 8), -upper (b50, 8), d1k);
+            check (upper (a50, 8) > upper (b50, 8) + 3.0 && d1k < 0.5, line);
+            const auto small = cold (4, fs, 10.0, 50.0, 7680, Core::sized (0.3)), big = cold (4, fs, 10.0, 50.0, 7680, Core::sized (1.8));
+            std::snprintf (line, sizeof (line), "less iron saturates sooner: 50 Hz at 10 V, harmonics 4 to 9 at %.1f dB below the fundamental with a third of the iron, %.1f dB with nearly twice", -upper (small, 8), -upper (big, 8));
+            check (upper (small, 8) > upper (big, 8) + 6.0, line);
+            // for the record: how much the bass gain depends on level
+            const auto q = cold (4, fs, 0.05, 30.0, 12800, iron), l = cold (4, fs, 5.0, 30.0, 12800, iron);
+            std::printf ("  NOTE 30 Hz: gain %.2f dB at 0.05 V and %.2f dB at 5 V (plain inductance: the same at both)\n", bin (q, 8) - 20 * std::log10 (0.05), bin (l, 8) - 20 * std::log10 (5.0));
+        }
+        {
+            double a[2]; int ix = 0;
+            for (int os : { 4, 8 })
+            {
+                PowerStage s; s.prepare (fs * os, classicBeam(), {}, iron); Oversampler o; o.prepare (os); std::vector<double> y (48000);
+                for (int i = 0; i < 96000; ++i) { const double v = o.process (20.0 * std::sin (2.0 * 3.14159265358979323846 * 5000.0 * i / fs), [&] (double x) { return s.process (x); }); if (i >= 48000) y[(size_t) (i - 48000)] = v; }
+                double worst = -400; for (int k = 100; k <= 20000; k += 100) if (k % 5000 != 0) worst = std::max (worst, bin (y, k)); a[ix++] = bin (y, 5000) - worst;
+            }
+            std::snprintf (line, sizeof (line), "aliasing with the iron, 5 kHz at 20 V: %.1f dB down at 4x, %.1f dB at 8x (gate 100)", a[0], a[1]); check (a[0] >= 100.0 && a[1] >= 100.0, line);
+            PowerStage s; s.prepare (192000.0, classicBeam(), {}, iron); bool finite = true; int most = 0;
+            for (int i = 0; i < 192000; ++i) { const double v = s.process (80.0 * std::sin (2.0 * 3.14159265358979323846 * 30.0 * i / 192000.0)); finite = finite && std::isfinite (v) && std::abs (v) < 5000.0; most = std::max (most, s.lastIterations()); }
+            std::snprintf (line, sizeof (line), "80 V at 30 Hz (the iron driven far into saturation) is solved in at most %d steps a sample and stays finite", most); check (finite && most < 50, line);
+            for (int i = 0; i < 192000; ++i) finite = finite && std::isfinite (s.process (1000.0 * std::sin (i * 0.01))); check (finite, "1000 V (absurd) stays finite with the iron");
+            PowerStage s2; s2.prepare (192000.0, classicBeam(), {}, iron); for (int i = 0; i < 19200; ++i) s2.process (10.0 * std::sin (i * 0.002));
+            s2.setParts (classicBeam(), {}, Core::sized (0.5)); finite = true; for (int i = 0; i < 192000 * 3; ++i) finite = finite && std::isfinite (s2.process (i < 96000 ? 10.0 * std::sin (i * 0.002) : 0.0));
+            double tail = 0; for (int i = 0; i < 1000; ++i) tail = std::max (tail, std::abs (s2.process (0.0)));
+            std::snprintf (line, sizeof (line), "changing the size of the iron while running keeps the flux and settles by itself (%.1e V left)", tail); check (finite && tail < 1.0e-3, line);
+        }
+        {
+            PowerStage s; s.prepare (fs * 4, classicBeam(), {}, iron); Oversampler o; o.prepare (4); const int n = 48000 * 4; const auto t0 = std::chrono::steady_clock::now(); double acc = 0;
+            for (int i = 0; i < n; ++i) acc += o.process (10.0 * std::sin (i * 0.013), [&] (double x) { return s.process (x); });
+            const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count();
+            std::printf ("  NOTE speed with the iron: one channel at 4x runs %.1f times faster than real time (%.0f %% of one core); acc %.1f\n", 4.0 / secs, secs / 4.0 * 100.0, acc);
+        }
     }
     {
         PowerStage s; s.prepare (fs * 4); Oversampler o; o.prepare (4); const int n = 48000 * 4; const auto t0 = std::chrono::steady_clock::now(); double acc = 0;

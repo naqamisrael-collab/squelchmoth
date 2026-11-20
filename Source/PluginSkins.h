@@ -1050,7 +1050,7 @@ namespace Skins
             row (3, "2ND HARMONIC", juce::String (reading.harmonics[0], 1) + " dB", accent);
             row (4, "3RD HARMONIC", juce::String (reading.harmonics[1], 1) + " dB", accent);
             row (5, "4TH HARMONIC", juce::String (reading.harmonics[2], 1) + " dB", accent.withAlpha (0.8f));
-            row (6, "5TH HARMONIC", juce::String (reading.harmonics[3], 1) + " dB", accent.withAlpha (0.8f));
+            row (6, "IRON AT REST", juce::String (juce::roundToInt (reading.ironPercent)) + " % OF SATURATION", Theme::text());
             if (left.getHeight() > 140.0f) row (7, "GRID", reading.gridConducts ? "CONDUCTS ON PEAKS" : "NOT CONDUCTING", reading.gridConducts ? Theme::amber() : Theme::dim());
             const auto wave = reading.wave; const size_t n = wave.size();
             drawWave (g, r, [] (float t) { return std::sin (t * 12.566f) * 0.9f; }, Theme::dim().withAlpha (0.5f), 1.2f);

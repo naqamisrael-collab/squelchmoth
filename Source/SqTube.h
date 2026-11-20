@@ -226,36 +226,86 @@ namespace SqTube
         if (b > 0.0) { const double pw = std::pow (b, t.ex); is = pw / t.kg2; const double d = t.ex * pw / (b * t.kg2); dIs[1] = d; dIs[2] = d / t.mu; }
     }
 
+    /** The transformer's iron: a gapped core with saturation and hysteresis (the Jiles-Atherton equations, in electrical
+        units). h is the part of the magnetising current that drives the iron and m the iron's magnetisation, both in
+        amperes; the flux linkage is lair (h + m) volt-seconds and the gap takes a further (flux / lg) of current.
+        The direction switch of the published equations is smoothed over v0 volts so that a solver with a variable
+        step (the reference simulator) can follow it; both sides use the same smoothing. */
+    struct Core
+    {
+        bool on = false; double lair = 0.02, ms = 150.0, a = 0.0025, alpha = 1.0e-5, k = 0.004, c = 0.2, lg = 22.0, v0 = 0.01;
+        static double langevin (double x)  { return std::abs (x) > 1.0e-4 ? 1.0 / std::tanh (x) - 1.0 / x : x / 3.0; }
+        static double langevinD (double x) { if (std::abs (x) <= 1.0e-4) return 1.0 / 3.0; const double t = std::tanh (x); return 1.0 / (x * x) - 1.0 / (t * t) + 1.0; }
+        /** dm/dh for the present state and voltage across the winding. */
+        double slope (double h, double m, double u) const
+        {
+            const double q = (h + alpha * m) / a; double lang, langD;
+            if (std::abs (q) > 1.0e-4) { const double th = std::tanh (q); lang = 1.0 / th - 1.0 / q; langD = 1.0 / (q * q) - 1.0 / (th * th) + 1.0; } else { lang = q / 3.0; langD = 1.0 / 3.0; }
+            const double d0 = ms * lang - m, z = (d0 >= 0 ? u : -u) / (2.0 * v0);
+            double d = std::abs (d0) * (z > 20.0 ? 1.0 : z < -20.0 ? 0.0 : 0.5 * (1.0 + std::tanh (z)));
+            d = std::min (d, 0.9 * (1.0 - c) * k / alpha);                                // the published form has no guard here; this keeps its denominator positive
+            const double firr = (1.0 - c) * d / ((1.0 - c) * k - alpha * d), beta = c * ms / a * langD;
+            return std::max (0.0, (firr + beta) / (1.0 - alpha * beta));
+        }
+        /** The same iron, larger or smaller: flux at saturation and inductance both go with size. */
+        static Core sized (double scale, bool isOn = true) { Core k; k.on = isOn; k.lair *= scale; k.lg *= scale; return k; }
+        /** The state the iron sits in with a steady current and no history: on its anhysteretic curve. */
+        void atRest (double current, double& h, double& m) const
+        {
+            const double sign = current < 0 ? -1.0 : 1.0, target = std::abs (current);
+            auto magnetisation = [this] (double hh) { double mm = 0.0; for (int i = 0; i < 200; ++i) { const double n = ms * langevin ((hh + alpha * mm) / a); if (std::abs (n - mm) < 1.0e-14 * (1.0 + std::abs (n))) return n; mm = n; } return mm; };
+            double lo = 0.0, hi = target;                                               // h + lair (h + m(h)) / lg rises with h: halve the interval
+            for (int it = 0; it < 100; ++it) { const double mid = 0.5 * (lo + hi); if (mid + lair * (mid + magnetisation (mid)) / lg > target) hi = mid; else lo = mid; }
+            const double hh = 0.5 * (lo + hi), mm = magnetisation (hh);
+            // the last digits: make the current exact for this m
+            h = sign * (target - lair * mm / lg) / (1.0 + lair / lg); m = sign * mm;
+        }
+    };
+
     /** The power stage. prepare() with the rate it will be run at, then process(): grid volts in, volts across the transformer primary out
-        (no steady part: a transformer passes none). */
+        (no steady part: a transformer passes none). With circuit.core.on the primary inductance is the iron above; otherwise a plain inductance. */
     class PowerStage
     {
     public:
-        void prepare (double sampleRate, const Pentode& tube = {}, const PowerCircuit& circuit = {}) { t = tube; c = circuit; T = 1.0 / sampleRate; reset(); }
+        void prepare (double sampleRate, const Pentode& tube = {}, const PowerCircuit& circuit = {}, const Core& iron = {}) { t = tube; c = circuit; core = iron; T = 1.0 / sampleRate; reset(); }
 
+        /** Settles to the resting point: no signal, capacitors charged, the iron on its anhysteretic curve. */
         void reset()
         {
-            x = { 0.0, 0.0, 0.07 * c.rk, c.bplus - 10.0, c.bplus - 5.0 };
-            for (int pass = 0; pass < 40; ++pass) { solve (0.0, true, 60); }
+            ramp = 1.0; rampStep = 0.0;
+            x = { 0.0, 0.0, 0.07 * c.rk, c.bplus - 10.0, c.bplus - 5.0, c.bplus - 10.0 };
+            for (int pass = 0; pass < 40; ++pass) solve (0.0, true, 60);
             restK = x[2]; restP = x[3]; restS = x[4];
             { double ip, a[3], is, b[3]; pentode (t, x[3] - x[2], x[1] - x[2], x[4] - x[2], ip, a, is, b); restIp = ip; restIs = is; }
             cgkJunction = 10.0e-12 / std::sqrt (1.0 + std::max (0.0, x[2] - x[1]));
             caps[0] = { c.cin, x[0], 0.0 }; caps[1] = { t.ccg + cgkJunction, x[1] - x[2], 0.0 }; caps[2] = { t.cpg, x[1] - x[3], 0.0 };
             caps[3] = { t.ccp, x[3] - x[2], 0.0 }; caps[4] = { c.ck, x[2], 0.0 };
-            iL = (c.bplus - x[3]) / c.rw; uL = 0.0;
+            const double idc = (c.bplus - x[3]) / c.rw; x[5] = x[3]; xPrev = x;
+            iL = idc; uL = 0.0; core.atRest (idc, hC, mC); rateC = 0.0;
         }
 
-        void setParts (const Pentode& tube, const PowerCircuit& circuit)
+        /** Switched on from nothing: everything discharged, the iron unmagnetised, the supply rising over rampSeconds. */
+        void startCold (double rampSeconds = 0.010)
         {
-            t = tube; c = circuit; caps[0].c = c.cin; caps[1].c = t.ccg + cgkJunction; caps[2].c = t.cpg; caps[3].c = t.ccp; caps[4].c = c.ck;
+            x = { 0, 0, 0, 0, 0, 0 }; xPrev = x; for (auto& cp : caps) { cp.v = 0; cp.i = 0; }
+            cgkJunction = 10.0e-12; caps[0].c = c.cin; caps[1].c = t.ccg + cgkJunction; caps[2].c = t.cpg; caps[3].c = t.ccp; caps[4].c = c.ck;
+            iL = uL = hC = mC = rateC = 0.0; ramp = 0.0; rampStep = T / std::max (T, rampSeconds);
         }
+
+        void setParts (const Pentode& tube, const PowerCircuit& circuit, const Core& iron)
+        {
+            t = tube; c = circuit; const bool was = core.on; const double flux = core.lair * (hC + mC);
+            core = iron; caps[0].c = c.cin; caps[1].c = t.ccg + cgkJunction; caps[2].c = t.cpg; caps[3].c = t.ccp; caps[4].c = c.ck;
+            if (core.on && was) { mC = flux / core.lair - hC; }                          // the flux stays; the iron's share of it follows the new core
+            else if (core.on) { core.atRest (iL, hC, mC); rateC = 0.0; }
+        }
+        void setParts (const Pentode& tube, const PowerCircuit& circuit) { setParts (tube, circuit, core); }
 
         /** Mid-band gain for small signals, grid to primary volts (positive: the output is taken so that it does not invert). */
         static double smallSignalGain (const Pentode& t, const PowerCircuit& c)
         {
             PowerStage r; r.t = t; r.c = c; r.T = 1.0 / 192000.0; r.reset();
             double ip, a[3], is, b[3]; pentode (t, r.x[3] - r.x[2], r.x[1] - r.x[2], r.x[4] - r.x[2], ip, a, is, b);
-            // unknowns: cathode, plate, screen for one volt at the grid; the cathode is held by its capacitor when there is one
             const double gk = c.ck > 0 ? 1.0e9 : 1.0 / c.rk, gl = 1.0 / (c.ra + c.rw), gs = 1.0 / c.rs;
             double m[3][4] = {
                 { gk + a[0] + a[1] + a[2] + b[1] + b[2], -a[0], -a[2] - b[2], a[1] + b[1] },
@@ -274,70 +324,118 @@ namespace SqTube
         double restingPlate() const { return restP; }   double restingCathode() const { return restK; }   double restingScreen() const { return restS; }
         double restingPlateCurrent() const { return restIp; }   double restingScreenCurrent() const { return restIs; }
         int lastIterations() const { return iterations; }
+        /** The iron's present flux linkage in volt-seconds (the plain inductance: lp times its current). */
+        double flux() const { return core.on ? core.lair * (hC + mC) : c.lp * iL; }
+        double fluxAtSaturation() const { return core.lair * core.ms; }
+        double coreField() const { return hC; }   double coreMagnetisation() const { return mC; }
 
-        double process (double vin) { return solve (vin, false, 50); }
+        double process (double vin) { if (ramp < 1.0) ramp = std::min (1.0, ramp + rampStep); return solve (vin, false, 50); }
 
     private:
+        // the iron for a trial voltage u across the winding: field at the end of the step (trapezoidal rule), its current and di/du
+        void ironAt (double u, double& h, double& rate, double& current, double& slopeOut) const
+        {
+            const double sum = hC + mC + T / (2.0 * core.lair) * (u + uL);                // h + m at the end of the step: the flux, exactly
+            const double base = hC + 0.5 * T * rateC, gain = 0.5 * T * u / core.lair;     // h = base + gain / (1 + f(h))
+            double f = 0.0; h = hC; bool done = false;
+            for (int it = 0; it < 8 && ! done; ++it)                                     // away from the knee of the curve this settles at once
+            {
+                f = core.slope (h, sum - h, u); const double hn = base + gain / (1.0 + f);
+                done = std::abs (hn - h) < 1.0e-15 + 1.0e-10 * std::abs (hn); h = hn;
+            }
+            if (! done)
+            {
+                // at the knee: the answer lies between no iron (f = 0) and iron that takes all the flux; close in on it (false position, Illinois)
+                double lo = std::min (base, base + gain), hi = std::max (base, base + gain);
+                auto miss = [&] (double hh) { f = core.slope (hh, sum - hh, u); return hh - base - gain / (1.0 + f); };
+                double flo = miss (lo), fhi = miss (hi);
+                if (flo > 0.0 || fhi < 0.0) h = flo > 0.0 ? lo : hi;                       // cannot happen while f >= 0; keep the nearer end
+                else for (int it = 0; it < 60; ++it)
+                {
+                    const double mid = (fhi - flo) != 0.0 ? lo - flo * (hi - lo) / (fhi - flo) : 0.5 * (lo + hi), fm = miss (mid); h = mid;
+                    if (std::abs (fm) < 1.0e-15 + 1.0e-10 * std::abs (mid) || (hi - lo) < 1.0e-15 + 1.0e-11 * std::abs (mid)) break;
+                    if (fm > 0.0) { hi = mid; fhi = fm; flo *= 0.5; } else { lo = mid; flo = fm; fhi *= 0.5; }
+                }
+                f = core.slope (h, sum - h, u);
+            }
+            rate = u / (core.lair * (1.0 + f));
+            current = h + core.lair * sum / core.lg;
+            slopeOut = 0.5 * T * (1.0 / (core.lair * (1.0 + f)) + 1.0 / core.lg);
+        }
+
         // dc: capacitors open, the inductance a plain wire - used to find the resting point
         double solve (double vin, bool dc, int maxIt)
         {
             double g[5], ieq[5];
             for (int i = 0; i < 5; ++i) { g[i] = dc ? 0.0 : 2.0 * caps[i].c / T; ieq[i] = dc ? 0.0 : -(g[i] * caps[i].v + caps[i].i); }
-            // the primary: i = gp u + hL through the inductance and the load together, in series with the winding resistance
-            const double gL = T / (2.0 * c.lp), gp = gL + 1.0 / c.ra, hL = iL + gL * uL;
-            const double geq = dc ? 1.0 / c.rw : 1.0 / (c.rw + 1.0 / gp), heq = dc ? 0.0 : geq * hL / gp;
+            const double gL = T / (2.0 * c.lp), hL = iL + gL * uL, bp = c.bplus * ramp;
             auto v = x; double capV[5] = {}, capI[5] = {}; iterations = 0;
+            if (! dc && ramp >= 1.0)                                                      // start from where the last two answers point, unless they are far apart (clipping: the last answer is the safer start)
+            {
+                double apart = 0.0; for (size_t i = 0; i < 6; ++i) apart = std::max (apart, std::abs (x[i] - xPrev[i]));
+                if (apart < 3.0) for (size_t i = 0; i < 6; ++i) v[i] = 2.0 * x[i] - xPrev[i];
+            }
+            double hNew = hC, rateNew = rateC, iwLast = iL;
             for (int it = 0; it < maxIt; ++it)
             {
                 ++iterations;
-                const double vA = v[0], vG = v[1], vK = v[2], vP = v[3], vS = v[4];
+                const double vA = v[0], vG = v[1], vK = v[2], vP = v[3], vS = v[4], vM = v[5], u = vM - vP;
                 double ip, a[3], is, b[3]; pentode (t, vP - vK, vG - vK, vS - vK, ip, a, is, b);
                 double ig, dIg; grid (tg, vG - vK, ig, dIg);
+                // the winding between M and P: its current and slope against u
+                double iw, gw;
+                if (dc) { gw = 1.0e7; iw = gw * u; }
+                else if (core.on) { ironAt (u, hNew, rateNew, iw, gw); iwLast = iw; }
+                else { gw = gL; iw = gL * u + hL; }
                 capV[0] = vA - vin; capV[1] = vG - vK; capV[2] = vG - vP; capV[3] = vP - vK; capV[4] = vK;
                 for (int i = 0; i < 5; ++i) capI[i] = g[i] * capV[i] + ieq[i];
-                double F[5], J[5][5] = {};
+                double F[6], J[6][6] = {};
                 F[0] = capI[0] + vA / c.rgl + (vA - vG) / c.rgs;
                 J[0][0] = g[0] + 1.0 / c.rgl + 1.0 / c.rgs; J[0][1] = -1.0 / c.rgs;
                 F[1] = (vG - vA) / c.rgs + capI[1] + capI[2] + ig;
                 J[1][0] = -1.0 / c.rgs; J[1][1] = 1.0 / c.rgs + g[1] + g[2] + dIg; J[1][2] = -g[1] - dIg; J[1][3] = -g[2];
                 F[2] = vK / c.rk + capI[4] - capI[1] - ig - ip - is - capI[3];
                 J[2][1] = -g[1] - dIg - a[1] - b[1]; J[2][2] = 1.0 / c.rk + g[4] + g[1] + dIg + a[0] + a[1] + a[2] + b[1] + b[2] + g[3]; J[2][3] = -a[0] - g[3]; J[2][4] = -a[2] - b[2];
-                F[3] = -(geq * (c.bplus - vP) + heq) + ip + capI[3] - capI[2];
-                J[3][1] = a[1] - g[2]; J[3][2] = -a[0] - a[1] - a[2] - g[3]; J[3][3] = geq + a[0] + g[3] + g[2]; J[3][4] = a[2];
-                F[4] = (vS - c.bplus) / c.rs + is;
+                F[3] = -(iw + u / c.ra) + ip + capI[3] - capI[2];
+                J[3][1] = a[1] - g[2]; J[3][2] = -a[0] - a[1] - a[2] - g[3]; J[3][3] = gw + 1.0 / c.ra + a[0] + g[3] + g[2]; J[3][4] = a[2]; J[3][5] = -gw - 1.0 / c.ra;
+                F[4] = (vS - bp) / c.rs + is;
                 J[4][1] = b[1]; J[4][2] = -b[1] - b[2]; J[4][4] = 1.0 / c.rs + b[2];
-                double d[5]; if (! solve5 (J, F, d)) break;
-                const double big = std::max ({ std::abs (d[1] - d[2]) / 2.0, std::abs (d[3]) / 60.0, std::abs (d[4]) / 60.0, 1.0 }), scale = 1.0 / big;
-                double moved = 0.0; for (int i = 0; i < 5; ++i) { v[(size_t) i] -= scale * d[i]; moved = std::max (moved, std::abs (scale * d[i])); }
-                if (moved < 1.0e-10) break;
+                F[5] = (vM - bp) / c.rw + iw + u / c.ra;
+                J[5][3] = -gw - 1.0 / c.ra; J[5][5] = 1.0 / c.rw + gw + 1.0 / c.ra;
+                double d[6]; if (! solveN (J, F, d)) break;
+                const double big = std::max ({ std::abs (d[1] - d[2]) / 2.0, std::abs (d[3]) / 60.0, std::abs (d[4]) / 60.0, std::abs (d[5]) / 60.0, 1.0 }), scale = 1.0 / big;
+                double moved = 0.0; for (int i = 0; i < 6; ++i) { v[(size_t) i] -= scale * d[i]; moved = std::max (moved, std::abs (scale * d[i])); }
+                if (moved < (dc ? 1.0e-10 : 1.0e-8)) break;
             }
-            x = v; if (dc) return 0.0;
+            xPrev = dc ? v : x; x = v; if (dc) return 0.0;
             capV[0] = v[0] - vin; capV[1] = v[1] - v[2]; capV[2] = v[1] - v[3]; capV[3] = v[3] - v[2]; capV[4] = v[2];
             for (int i = 0; i < 5; ++i) { caps[i].i = g[i] * capV[i] + ieq[i]; caps[i].v = capV[i]; }
-            const double i = geq * (c.bplus - v[3]) + heq, u = (i - hL) / gp;
-            iL = gL * u + hL; uL = u;
+            const double u = v[5] - v[3];
+            if (core.on) { const double sum = hC + mC + T / (2.0 * core.lair) * (u + uL); hC = hNew; mC = sum - hNew; rateC = rateNew; iL = iwLast; }      // the iron as found in the last pass (the voltage moved less than the tolerance since); the flux is kept exact
+            else iL = gL * u + hL;
+            uL = u;
             return u;
         }
 
-        static bool solve5 (double a[5][5], const double* b, double* out)
+        static bool solveN (double a[6][6], const double* b, double* out)
         {
-            double m[5][6];
-            for (int i = 0; i < 5; ++i) { for (int j = 0; j < 5; ++j) m[i][j] = a[i][j]; m[i][5] = b[i]; }
-            for (int col = 0; col < 5; ++col)
+            constexpr int n = 6; double m[n][n + 1];
+            for (int i = 0; i < n; ++i) { for (int j = 0; j < n; ++j) m[i][j] = a[i][j]; m[i][n] = b[i]; }
+            for (int col = 0; col < n; ++col)
             {
-                int piv = col; for (int r = col + 1; r < 5; ++r) if (std::abs (m[r][col]) > std::abs (m[piv][col])) piv = r;
+                int piv = col; for (int r = col + 1; r < n; ++r) if (std::abs (m[r][col]) > std::abs (m[piv][col])) piv = r;
                 if (std::abs (m[piv][col]) < 1.0e-300) return false;
-                if (piv != col) for (int j = 0; j < 6; ++j) std::swap (m[piv][j], m[col][j]);
-                for (int r = col + 1; r < 5; ++r) { const double f = m[r][col] / m[col][col]; if (f != 0.0) for (int j = col; j < 6; ++j) m[r][j] -= f * m[col][j]; }
+                if (piv != col) for (int j = 0; j <= n; ++j) std::swap (m[piv][j], m[col][j]);
+                for (int r = col + 1; r < n; ++r) { const double f = m[r][col] / m[col][col]; if (f != 0.0) for (int j = col; j <= n; ++j) m[r][j] -= f * m[col][j]; }
             }
-            for (int i = 4; i >= 0; --i) { double s = m[i][5]; for (int j = i + 1; j < 5; ++j) s -= m[i][j] * out[j]; out[i] = s / m[i][i]; }
+            for (int i = n - 1; i >= 0; --i) { double s = m[i][n]; for (int j = i + 1; j < n; ++j) s -= m[i][j] * out[j]; out[i] = s / m[i][i]; }
             return true;
         }
 
         struct Cap { double c = 0, v = 0, i = 0; };
-        Pentode t; PowerCircuit c; Tube tg = [] { Tube g; g.rgi = 1000; return g; }();
-        double T = 1.0 / 192000.0, cgkJunction = 0, restK = 0, restP = 0, restS = 0, restIp = 0, restIs = 0, iL = 0, uL = 0; int iterations = 0;
-        std::array<double, 5> x { 0, 0, 0, 0, 0 }; Cap caps[5];
+        Pentode t; PowerCircuit c; Core core; Tube tg = [] { Tube g; g.rgi = 1000; return g; }();
+        double T = 1.0 / 192000.0, cgkJunction = 0, restK = 0, restP = 0, restS = 0, restIp = 0, restIs = 0, iL = 0, uL = 0, hC = 0, mC = 0, rateC = 0, ramp = 1.0, rampStep = 0.0; int iterations = 0;
+        std::array<double, 6> x { 0, 0, 0, 0, 0, 0 }, xPrev { 0, 0, 0, 0, 0, 0 }; Cap caps[5];
     };
 
     //============================================================================== oversampling

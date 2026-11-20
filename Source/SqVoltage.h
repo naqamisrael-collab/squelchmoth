@@ -175,8 +175,8 @@ private:
 // Squelchmoth 1.38 - Voltage Power: a single-ended output stage solved as a circuit (SqTube::PowerStage): a beam tube with
 // its screen grid, cathode bias and grid current, working into an output transformer (winding resistance, primary
 // inductance, the reflected load). Drive is level-matched like Voltage. Bias sets the cathode resistor, Load what the
-// tube works into, Iron the size of the transformer (less iron: the bass falls away earlier). The transformer here is
-// linear: its core does not saturate yet.
+// tube works into, Iron the size of the transformer. Since 1.39 the iron is a gapped core with saturation and
+// hysteresis (SqTube::Core): less iron loses bass earlier AND saturates sooner, and it remembers what it was last put through.
 class SqVoltagePowerPlugin : public te::Plugin
 {
 public:
@@ -228,7 +228,7 @@ public:
     static double loadOhms (float pct)    { return 2500.0 * std::pow (8000.0 / 2500.0, juce::jlimit (0.0, 1.0, (double) pct / 100.0)); }
     static double ironHenries (float pct) { return 4.0 * std::pow (10.0, juce::jlimit (0.0, 1.0, (double) pct / 100.0)); }
 
-    static void partsFor (int unitSeed, int channel, int tubeIx, float biasPercent, float loadPercent, float ironPercent, SqTube::Pentode& t, SqTube::PowerCircuit& c)
+    static void partsFor (int unitSeed, int channel, int tubeIx, float biasPercent, float loadPercent, float ironPercent, SqTube::Pentode& t, SqTube::PowerCircuit& c, SqTube::Core& iron)
     {
         t = tubeIx == 1 ? SqTube::heavyBeam() : tubeIx == 2 ? SqTube::boldBeam() : SqTube::classicBeam(); c = {};
         c.rk = 150.0 * std::pow (560.0 / 150.0, juce::jlimit (0.0, 1.0, (double) biasPercent / 100.0));
@@ -241,6 +241,7 @@ public:
         };
         c.rk *= off (0, 0.05); c.ra *= off (1, 0.03); c.lp *= off (2, 0.10); c.rs *= off (3, 0.05); c.ck *= off (4, 0.10);
         t.mu *= off (5, 0.03); t.kg1 *= off (6, 0.05);
+        iron = SqTube::Core::sized (c.lp / 20.0); iron.k *= off (7, 0.05); iron.ms *= off (8, 0.03);      // the iron goes with the nominal inductance: 20 H is the reference core
     }
 
     /** What the stage does to a test sine with these settings, from the same circuit the audio runs through. */
@@ -248,14 +249,14 @@ public:
     {
         std::vector<float> wave;
         double harmonics[4] = { -200, -200, -200, -200 };
-        double plateVolts = 0, cathodeVolts = 0, plateMilliamps = 0, plateWatts = 0, gainDb = 0, levelDb = 0;
+        double plateVolts = 0, cathodeVolts = 0, plateMilliamps = 0, plateWatts = 0, gainDb = 0, levelDb = 0, ironPercent = 0;   // ironPercent: how far the iron sits towards saturation at rest
         bool gridConducts = false;
     };
     static Reading measure (int unitSeed, int tubeIx, float biasPercent, float loadPercent, float ironPercent, float driveDb, float testAmp = 0.9f)
     {
-        Reading r; SqTube::Pentode t; SqTube::PowerCircuit c; partsFor (unitSeed, 0, tubeIx, biasPercent, loadPercent, ironPercent, t, c);
+        Reading r; SqTube::Pentode t; SqTube::PowerCircuit c; SqTube::Core iron; partsFor (unitSeed, 0, tubeIx, biasPercent, loadPercent, ironPercent, t, c, iron);
         const double fs = 192000.0, hz = 1000.0, full = voltsAtFullScale * std::pow (10.0, (double) driveDb / 20.0), volts = full * testAmp;
-        SqTube::PowerStage s; s.prepare (fs, t, c); r.plateVolts = s.restingPlate(); r.cathodeVolts = s.restingCathode();
+        SqTube::PowerStage s; s.prepare (fs, t, c, iron); r.plateVolts = s.restingPlate(); r.cathodeVolts = s.restingCathode(); r.ironPercent = 100.0 * s.flux() / s.fluxAtSaturation();
         r.plateMilliamps = s.restingPlateCurrent() * 1000.0; r.plateWatts = (s.restingPlate() - s.restingCathode()) * s.restingPlateCurrent();
         const double gain = SqTube::PowerStage::smallSignalGain (t, c); r.gainDb = 20.0 * std::log10 (std::abs (gain) + 1.0e-12);
         r.gridConducts = volts > r.cathodeVolts;
@@ -325,8 +326,8 @@ private:
         if (! parts) return;
         for (int ch = 0; ch < 2; ++ch)
         {
-            SqTube::Pentode t; SqTube::PowerCircuit c; partsFor (unit.get(), ch, tb, b, l, ir, t, c);
-            if (rate) chan[ch].stage.prepare (sampleRate * SqVoltagePlugin::factorFor (q), t, c); else chan[ch].stage.setParts (t, c);
+            SqTube::Pentode t; SqTube::PowerCircuit c; SqTube::Core iron; partsFor (unit.get(), ch, tb, b, l, ir, t, c, iron);
+            if (rate) chan[ch].stage.prepare (sampleRate * SqVoltagePlugin::factorFor (q), t, c, iron); else chan[ch].stage.setParts (t, c, iron);
             chan[ch].gain = SqTube::PowerStage::smallSignalGain (t, c);
         }
         usedQuality = q; usedBias = b; usedLoad = l; usedIron = ir; usedTube = tb;
