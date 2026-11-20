@@ -895,6 +895,19 @@ inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
         A ("Hot And Heavy",      { N ("Drive", 8),  N ("Bias", 5),  N ("Tube", 1), N ("Load", 20), N ("Iron", 70), N ("Output", -1), N ("Mix", 100), N ("Quality", 0) }),
         A ("Flat Out",           { N ("Drive", 14), N ("Bias", 45), N ("Tube", 2), N ("Load", 40), N ("Iron", 70), N ("Output", -3), N ("Mix", 100), N ("Quality", 1) }),
         A ("Parallel Crush",     { N ("Drive", 20), N ("Bias", 60), N ("Tube", 2), N ("Load", 70), N ("Iron", 60), N ("Output", -4), N ("Mix", 30), N ("Quality", 1) }) };
+    m["Voltage Tape"] = {
+        B ("Clean Master 30",    { N ("Drive", -3), N ("Bias", 55), N ("Speed", 2), N ("EQ", 1), N ("Wow", 0.02), N ("Flutter", 0.02), N ("Head Bump", 40), N ("Output", 0), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Mix Bus 15",         { N ("Drive", 2),  N ("Bias", 50), N ("Speed", 1), N ("EQ", 0), N ("Wow", 0.04), N ("Flutter", 0.03), N ("Head Bump", 50), N ("Output", 0), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Drum Bus Glue",      { N ("Drive", 8),  N ("Bias", 45), N ("Speed", 1), N ("EQ", 0), N ("Wow", 0.03), N ("Flutter", 0.03), N ("Head Bump", 70), N ("Output", -1), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Bass Weight",        { N ("Drive", 6),  N ("Bias", 50), N ("Speed", 1), N ("EQ", 0), N ("Wow", 0.02), N ("Flutter", 0.02), N ("Head Bump", 100), N ("Output", -1), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Vocal Silk",         { N ("Drive", 3),  N ("Bias", 60), N ("Speed", 1), N ("EQ", 1), N ("Wow", 0.03), N ("Flutter", 0.02), N ("Head Bump", 20), N ("Output", 0), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Keys On Tape",       { N ("Drive", 4),  N ("Bias", 50), N ("Speed", 0), N ("EQ", 0), N ("Wow", 0.12), N ("Flutter", 0.06), N ("Head Bump", 60), N ("Output", 0), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Slow And Dark",      { N ("Drive", 5),  N ("Bias", 55), N ("Speed", 0), N ("EQ", 1), N ("Wow", 0.08), N ("Flutter", 0.05), N ("Head Bump", 60), N ("Output", 0), N ("Mix", 100), N ("Quality", 0) }),
+        A ("Slammed",            { N ("Drive", 16), N ("Bias", 50), N ("Speed", 1), N ("EQ", 0), N ("Wow", 0.04), N ("Flutter", 0.03), N ("Head Bump", 50), N ("Output", -3), N ("Mix", 100), N ("Quality", 1) }),
+        A ("Underbiased Grit",   { N ("Drive", 8),  N ("Bias", 14), N ("Speed", 1), N ("EQ", 0), N ("Wow", 0.05), N ("Flutter", 0.04), N ("Head Bump", 50), N ("Output", 0), N ("Mix", 100), N ("Quality", 1) }),
+        A ("No Bias Gate",       { N ("Drive", 10), N ("Bias", 0),  N ("Speed", 1), N ("EQ", 0), N ("Wow", 0.05), N ("Flutter", 0.04), N ("Head Bump", 50), N ("Output", 0), N ("Mix", 100), N ("Quality", 2) }),
+        A ("Worn Transport",     { N ("Drive", 4),  N ("Bias", 50), N ("Speed", 0), N ("EQ", 0), N ("Wow", 0.6), N ("Flutter", 0.3), N ("Head Bump", 60), N ("Output", 0), N ("Mix", 100), N ("Quality", 0) }),
+        A ("Tape Flange",        { N ("Drive", 0),  N ("Bias", 50), N ("Speed", 1), N ("EQ", 1), N ("Wow", 1.0), N ("Flutter", 0.0), N ("Head Bump", 0), N ("Output", -3), N ("Mix", 50), N ("Quality", 0) }) };
     m["Spindle Delay"] = presets114_spindle();
     m["Fissure Filter"] = presets114_fissure();
     m["Mote"] = presets114_mote();

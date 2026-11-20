@@ -63,6 +63,7 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqKilnPlugin>();
     engine->getPluginManager().createBuiltInType<SqVoltagePlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltagePowerPlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltageTapePlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
@@ -5563,6 +5564,95 @@ inline int runSelfTest()
                        "Voltage Power has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, and a preset sets Drive 14 dB, the Bold tube and 8x");
                 call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Power","params":[{"param":"Tube","text":"Heavy"},{"param":"Quality","text":"4x"}]})");
                 check (juce::roundToInt (vp->tube->getCurrentValue()) == 1 && vp->tube->getCurrentValueAsString() == "Heavy" && juce::roundToInt (vp->quality->getCurrentValue()) == 0, "the assistant sets Tube and Quality by name (Heavy, 4x)");
+            }
+        }
+        // ---- 1.40 Voltage Tape: the tape machine as a plug-in (its parts are checked against their references in tests/tape_test.cpp)
+        {
+            call ("new_session", R"({"name":"Selftest Voltage Tape"})");
+            const auto ins = call ("insert_plugin", R"({"track":"Audio 1","plugin":"Voltage Tape"})");
+            SqVoltageTapePlugin* vp = nullptr;
+            if (auto tt = session->findTrack ("Audio 1")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqVoltageTapePlugin*> (pl)) vp = c;
+            check (vp != nullptr && ins.contains ("Voltage Tape"), "Voltage Tape is registered and inserts by name");
+            if (vp != nullptr)
+            {
+                const double sr = 44100.0; const int N = 44100 * 2, lat = SqVoltageTapePlugin::delaySamplesAt (sr);
+                struct Out { std::vector<float> l, r; };
+                struct Set { float drive = 0, bias = 50, mix = 100, wow = 0, flutter = 0, bump = 0; int speed = 1, eq = 0, quality = 0, unit = 1234; };
+                auto render = [&] (const Set& st, float amp, double hz)
+                {
+                    Out o; auto twin = session->edit->getPluginCache().createNewPlugin (SqVoltageTapePlugin::xmlTypeName, {});
+                    if (auto* tw = dynamic_cast<SqVoltageTapePlugin*> (twin.get()))
+                    {
+                        tw->unit = st.unit; auto setp = [] (te::AutomatableParameter::Ptr& p, float v) { p->setParameter (v, juce::dontSendNotification); };
+                        setp (tw->quality, (float) st.quality); setp (tw->drive, st.drive); setp (tw->bias, st.bias); setp (tw->mix, st.mix); setp (tw->wow, st.wow); setp (tw->flutter, st.flutter);
+                        setp (tw->bump, st.bump); setp (tw->speed, (float) st.speed); setp (tw->eq, (float) st.eq);
+                        tw->baseClassInitialise ({ te::TimePosition(), sr, 512 });
+                        juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                        for (int q = 0; q + 512 <= N; q += 512)
+                        {
+                            for (int i = 0; i < 512; ++i) { const float v = amp * (float) std::sin (juce::MathConstants<double>::twoPi * hz * (q + i) / sr); buf.setSample (0, i, v); buf.setSample (1, i, v); }
+                            te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / sr), te::TimePosition::fromSeconds ((q + 512) / sr)), true, false, true, false);
+                            tw->applyToBuffer (fc);
+                            for (int i = 0; i < 512; ++i) { o.l.push_back (buf.getSample (0, i)); o.r.push_back (buf.getSample (1, i)); }
+                        }
+                        tw->baseClassDeinitialise();
+                    }
+                    return o;
+                };
+                auto bin = [&] (const std::vector<float>& y, double f) { std::complex<double> acc = 0; const int from = 44100, M = 17640; if ((int) y.size() < from + M) return -300.0; for (int i = 0; i < M; ++i) acc += (double) y[(size_t) (from + i)] * std::polar (1.0, -juce::MathConstants<double>::twoPi * f * i / sr); return 20 * std::log10 (2 * std::abs (acc) / M + 1e-15); };
+                Set base;
+                const auto quiet = render (base, 0.05f, 1000.0);
+                const double inDb = 20 * std::log10 (0.05), lvl = bin (quiet.l, 1000.0);
+                double corr = 0; for (int i = 44100; i < 44100 + 4410; ++i) corr += (double) quiet.l[(size_t) i] * 0.05 * std::sin (juce::MathConstants<double>::twoPi * 1000.0 * (i - lat) / sr);
+                check (std::abs (lvl - inDb) < 0.25 && corr > 0 && std::abs (vp->getLatencySeconds() - lat / sr) < 0.25 * lat / sr && lat > 300,
+                       "Voltage Tape at a low level is level-matched (" + juce::String (lvl - inDb, 2) + " dB), the right way up and " + juce::String (lat) + " samples late at 44.1 kHz, as it reports");
+                Set hotSet = base; hotSet.drive = 14.0f; const auto hot = render (hotSet, 0.7f, 1000.0);
+                const double h3 = bin (hot.l, 3000.0) - bin (hot.l, 1000.0), h2 = bin (hot.l, 2000.0) - bin (hot.l, 1000.0), comp = bin (hot.l, 1000.0) - 20 * std::log10 (0.7), h3quiet = bin (quiet.l, 3000.0) - bin (quiet.l, 1000.0);
+                check (h3 > -30.0 && h3 > h3quiet + 15.0 && h2 < -70.0 && comp < -0.5 && comp > -14.0,
+                       "driven hard the 3rd harmonic rises from " + juce::String (h3quiet, 1) + " to " + juce::String (h3, 1) + " dBc, the tape compresses by " + juce::String (-comp, 1) + " dB, and there is no 2nd harmonic (" + juce::String (juce::roundToInt (h2)) + " dBc): tape is symmetrical");
+                Set noBias = base; noBias.bias = 0.0f; const auto dead = render (noBias, 0.05f, 1000.0);
+                const double deadDrop = bin (dead.l, 1000.0) - lvl, deadH3 = bin (dead.l, 3000.0) - bin (dead.l, 1000.0);
+                Set over = hotSet; over.bias = 100.0f; const auto clean = render (over, 0.7f, 1000.0);
+                check (deadDrop < -8.0 && deadH3 > -40.0 && bin (clean.l, 3000.0) - bin (clean.l, 1000.0) < h3 - 6.0,
+                       "Bias: with none a quiet tone all but vanishes (" + juce::String (deadDrop, 1) + " dB against the working range, 3rd harmonic " + juce::String (deadH3, 1) + " dBc); overbiased, the hard-driven tone is cleaner (" + juce::String (bin (clean.l, 3000.0) - bin (clean.l, 1000.0), 1) + " against " + juce::String (h3, 1) + " dBc)");
+                Set slow = base; slow.speed = 0; Set fast = base; fast.speed = 2;
+                const auto s20 = render (slow, 0.05f, 20000.0), f20 = render (fast, 0.05f, 20000.0), s10 = render (slow, 0.05f, 10000.0);
+                check (bin (s20.l, 20000.0) < bin (f20.l, 20000.0) - 1.0 && std::abs (bin (s10.l, 10000.0) - inDb) < 0.6,
+                       "Speed: 20 kHz comes back " + juce::String (bin (s20.l, 20000.0) - inDb, 2) + " dB at 7.5 in/s and " + juce::String (bin (f20.l, 20000.0) - inDb, 2) + " dB at 30 in/s; 10 kHz is level at the slow speed (" + juce::String (bin (s10.l, 10000.0) - inDb, 2) + " dB)");
+                Set bumped = base; bumped.bump = 100.0f; const auto b55 = render (bumped, 0.05f, 55.0), n55 = render (base, 0.05f, 55.0);
+                Set nabHot = base; nabHot.drive = 12.0f; Set iecHot = nabHot; iecHot.eq = 1; const auto nb = render (nabHot, 0.7f, 50.0), ib = render (iecHot, 0.7f, 50.0);
+                check (bin (b55.l, 55.0) > bin (n55.l, 55.0) + 0.8 && (bin (nb.l, 150.0) - bin (nb.l, 50.0)) > (bin (ib.l, 150.0) - bin (ib.l, 50.0)) + 2.0,
+                       "Head Bump lifts 55 Hz by " + juce::String (bin (b55.l, 55.0) - bin (n55.l, 55.0), 2) + " dB at 15 in/s; with NAB the bass goes onto the tape hotter, so 50 Hz distorts more than with IEC (3rd harmonic " + juce::String (bin (nb.l, 150.0) - bin (nb.l, 50.0), 1) + " against " + juce::String (bin (ib.l, 150.0) - bin (ib.l, 50.0), 1) + " dBc)");
+                // wow and flutter: pitch wanders, loudness does not; one transport for both channels
+                {
+                    Set wf = base; wf.wow = 0.6f; wf.flutter = 0.3f; const auto wob = render (wf, 0.05f, 3000.0), still = render (base, 0.05f, 3000.0);
+                    auto wander = [&] (const std::vector<float>& y) { std::complex<double> acc = 0; std::vector<double> ph; const int win = 96; for (int i = 0; i < (int) y.size(); ++i) { auto z = [&] (int k) { return (double) y[(size_t) k] * std::polar (1.0, -juce::MathConstants<double>::twoPi * 3000.0 * k / sr); }; acc += z (i); if (i >= win) acc -= z (i - win); if (i >= 8820 && i % 49 == 0) ph.push_back (std::arg (acc)); }
+                                                              double peak = 0; for (size_t i = 1; i < ph.size(); ++i) { double d = ph[i] - ph[i - 1]; while (d > juce::MathConstants<double>::pi) d -= juce::MathConstants<double>::twoPi; while (d < -juce::MathConstants<double>::pi) d += juce::MathConstants<double>::twoPi; peak = std::max (peak, std::abs (d / juce::MathConstants<double>::twoPi * (sr / 49.0) / 3000.0)); } return peak * 100.0; };
+                    auto rms = [] (const std::vector<float>& y) { double e = 0; for (size_t i = 44100; i < y.size(); ++i) e += (double) y[i] * y[i]; return 10 * std::log10 (e / (double) (y.size() - 44100) + 1e-30); };
+                    const double w1 = wander (wob.l), w0 = wander (still.l), w2 = wander (wob.r);
+                    check (w1 > 0.3 && w1 < 0.95 && w0 < 0.08 && w1 > 8.0 * w0 && std::abs (w1 - w2) < 0.02 && std::abs (rms (wob.l) - rms (still.l)) < 0.1,
+                           "Wow 0.6 % + Flutter 0.3 %: a 3 kHz tone wanders by up to " + juce::String (w1, 2) + " % in pitch (still: " + juce::String (w0, 3) + " %), both channels alike (" + juce::String (w2, 2) + " %), level unchanged (" + juce::String (rms (wob.l) - rms (still.l), 3) + " dB)");
+                    Set other = wf; other.unit = 99999; const auto wob2 = render (other, 0.05f, 3000.0); double diff = 0; for (size_t i = 44100; i < wob.l.size(); ++i) diff = std::max (diff, (double) std::abs (wob.l[i] - wob2.l[i]));
+                    const auto again = render (wf, 0.05f, 3000.0); double same = 0; for (size_t i = 0; i < again.l.size(); ++i) same = std::max (same, (double) std::abs (again.l[i] - wob.l[i]));
+                    check (diff > 0.005 && same < 1.0e-6, "another machine wanders its own way; the same machine wanders the same way every time");
+                }
+                Set dryS = hotSet; dryS.mix = 0.0f; const auto dry = render (dryS, 0.25f, 1000.0);
+                double worstDry = 0; for (int i = 2000; i < 60000; ++i) worstDry = std::max (worstDry, std::abs ((double) dry.l[(size_t) i] - 0.25 * std::sin (juce::MathConstants<double>::twoPi * 1000.0 * (i - lat) / sr)));
+                Set hq = hotSet; hq.quality = 1; const auto hot8 = render (hq, 0.7f, 1000.0);
+                check (worstDry < 1.0e-5 && std::abs ((bin (hot8.l, 3000.0) - bin (hot8.l, 1000.0)) - h3) < 0.1, "Mix at 0 % is the input, delayed by the same " + juce::String (lat) + " samples; 8x gives the same harmonics as 4x (within 0.1 dB)");
+                {
+                    const auto shown = SqVoltageTapePlugin::measure (1234, 14.0f, 50.0f, 1, 0, 0.0f, 0.7f);
+                    check (std::abs (shown.third - h3) < 1.0 && shown.biasState == 1 && shown.highUs == 50.0 && shown.lowUs == 3180.0 && shown.wave.size() == 384 && std::abs (shown.at10k) < 0.3 && shown.at20k < 1.5
+                           && SqVoltageTapePlugin::measure (1234, 0.0f, 0.0f, 1, 0, 0.0f).biasState == 0 && SqVoltageTapePlugin::measure (1234, 0.0f, 100.0f, 2, 1, 0.0f).highUs == 17.5,
+                           "the face shows the machine's own numbers: 3rd harmonic " + juce::String (shown.third, 1) + " dB against " + juce::String (h3, 1) + " dB measured in the audio, flux curve 3180 + 50 us, bias in its working range, 20 kHz at " + juce::String (shown.at20k, 2) + " dB");
+                }
+                int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmVoltageTape") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+                const auto pp = call ("plugin_presets", R"({"track":"Audio 1","slot":"Voltage Tape","preset":"Worn Transport"})");
+                check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && pp.contains ("Worn Transport") && std::abs (vp->wow->getCurrentValue() - 0.6f) < 0.001f && juce::roundToInt (vp->speed->getCurrentValue()) == 0
+                       && Edition::packOf ("sqmVoltageTape") == Edition::Pack::color && vp->unit.get() > 0 && Skins::artFor ("voltagetape").isValid() && Skins::artFor ("voltage").isValid() && Skins::artFor ("voltagepower").isValid(),
+                       "Voltage Tape has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, a preset sets Wow 0.6 % at 7.5 in/s, and all three Voltage plug-ins have their plate artwork");
+                call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Tape","params":[{"param":"Speed","text":"30 in/s"},{"param":"EQ","text":"IEC"},{"param":"Quality","text":"8x"}]})");
+                check (juce::roundToInt (vp->speed->getCurrentValue()) == 2 && vp->speed->getCurrentValueAsString() == "30 in/s" && vp->eq->getCurrentValue() >= 0.5f && juce::roundToInt (vp->quality->getCurrentValue()) == 1, "the assistant sets Speed, EQ and Quality by name (30 in/s, IEC, 8x)");
             }
         }
         // ---- a missing audio file: renders say so instead of waiting for ever
