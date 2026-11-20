@@ -193,6 +193,153 @@ namespace SqTube
         std::array<double, 5> x { 0, 0, 0, 0, 0 }; Cap caps[6];
     };
 
+    //============================================================================== power stage
+    /** A beam tetrode / pentode by its published model parameters. */
+    struct Pentode { double mu = 8.7, ex = 1.35, kg1 = 1460, kg2 = 4500, kp = 48, kvb = 12, rgi = 1000, ccg = 14.0e-12, cpg = 0.85e-12, ccp = 12.0e-12; };
+    inline Pentode classicBeam() { return {}; }
+    inline Pentode heavyBeam()   { Pentode t; t.mu = 7.9; t.kg1 = 890; t.kg2 = 4200; t.kp = 60; t.kvb = 24; return t; }
+    inline Pentode boldBeam()    { Pentode t; t.mu = 8.8; t.kg1 = 730; t.kg2 = 4200; t.kp = 32; t.kvb = 16; return t; }
+
+    /** Single-ended output stage: input capacitor, grid leak, grid stopper, cathode resistor with its capacitor, screen
+        resistor from the supply, and a linear output transformer seen from the primary: winding resistance in series
+        with the primary inductance and the reflected load side by side. */
+    struct PowerCircuit { double bplus = 350.0, ra = 4000.0, rw = 150.0, lp = 20.0, rk = 270.0, ck = 220.0e-6, rs = 1000.0, rgs = 4700.0, rgl = 220.0e3, cin = 100.0e-9; };
+
+    /** Plate and screen currents and their slopes against plate, control grid and screen (all measured from the cathode).
+        E1 = Vs/kp ln(1 + exp(kp (1/mu + Vg/Vs))), Ip = 2 E1^ex / kg1 atan(Vp/kvb); Is = (Vs/mu + Vg)^ex / kg2, nothing where that bracket is negative. */
+    inline void pentode (const Pentode& t, double vp, double vg, double vs, double& ip, double dIp[3], double& is, double dIs[3])
+    {
+        ip = is = 0.0; dIp[0] = dIp[1] = dIp[2] = dIs[0] = dIs[1] = dIs[2] = 0.0;
+        const double s = std::max (vs, 1.0e-3);                                  // a screen at or below the cathode passes nothing
+        const double x = t.kp * (1.0 / t.mu + vg / s);
+        const double soft = x > 40.0 ? x : std::log1p (std::exp (x)), sig = x > 40.0 ? 1.0 : 1.0 / (1.0 + std::exp (-x));
+        const double e1 = s / t.kp * soft;
+        if (e1 > 0.0)
+        {
+            const double pw = std::pow (e1, t.ex), k = 2.0 * pw / t.kg1, at = std::atan (vp / t.kvb), dk = 2.0 * t.ex * pw / (e1 * t.kg1);
+            ip = k * at;
+            dIp[0] = k / (t.kvb * (1.0 + (vp / t.kvb) * (vp / t.kvb)));
+            dIp[1] = dk * sig * at;
+            dIp[2] = vs > 1.0e-3 ? dk * (soft / t.kp - sig * vg / s) * at : 0.0;
+        }
+        const double b = vs / t.mu + vg;
+        if (b > 0.0) { const double pw = std::pow (b, t.ex); is = pw / t.kg2; const double d = t.ex * pw / (b * t.kg2); dIs[1] = d; dIs[2] = d / t.mu; }
+    }
+
+    /** The power stage. prepare() with the rate it will be run at, then process(): grid volts in, volts across the transformer primary out
+        (no steady part: a transformer passes none). */
+    class PowerStage
+    {
+    public:
+        void prepare (double sampleRate, const Pentode& tube = {}, const PowerCircuit& circuit = {}) { t = tube; c = circuit; T = 1.0 / sampleRate; reset(); }
+
+        void reset()
+        {
+            x = { 0.0, 0.0, 0.07 * c.rk, c.bplus - 10.0, c.bplus - 5.0 };
+            for (int pass = 0; pass < 40; ++pass) { solve (0.0, true, 60); }
+            restK = x[2]; restP = x[3]; restS = x[4];
+            { double ip, a[3], is, b[3]; pentode (t, x[3] - x[2], x[1] - x[2], x[4] - x[2], ip, a, is, b); restIp = ip; restIs = is; }
+            cgkJunction = 10.0e-12 / std::sqrt (1.0 + std::max (0.0, x[2] - x[1]));
+            caps[0] = { c.cin, x[0], 0.0 }; caps[1] = { t.ccg + cgkJunction, x[1] - x[2], 0.0 }; caps[2] = { t.cpg, x[1] - x[3], 0.0 };
+            caps[3] = { t.ccp, x[3] - x[2], 0.0 }; caps[4] = { c.ck, x[2], 0.0 };
+            iL = (c.bplus - x[3]) / c.rw; uL = 0.0;
+        }
+
+        void setParts (const Pentode& tube, const PowerCircuit& circuit)
+        {
+            t = tube; c = circuit; caps[0].c = c.cin; caps[1].c = t.ccg + cgkJunction; caps[2].c = t.cpg; caps[3].c = t.ccp; caps[4].c = c.ck;
+        }
+
+        /** Mid-band gain for small signals, grid to primary volts (positive: the output is taken so that it does not invert). */
+        static double smallSignalGain (const Pentode& t, const PowerCircuit& c)
+        {
+            PowerStage r; r.t = t; r.c = c; r.T = 1.0 / 192000.0; r.reset();
+            double ip, a[3], is, b[3]; pentode (t, r.x[3] - r.x[2], r.x[1] - r.x[2], r.x[4] - r.x[2], ip, a, is, b);
+            // unknowns: cathode, plate, screen for one volt at the grid; the cathode is held by its capacitor when there is one
+            const double gk = c.ck > 0 ? 1.0e9 : 1.0 / c.rk, gl = 1.0 / (c.ra + c.rw), gs = 1.0 / c.rs;
+            double m[3][4] = {
+                { gk + a[0] + a[1] + a[2] + b[1] + b[2], -a[0], -a[2] - b[2], a[1] + b[1] },
+                { -a[0] - a[1] - a[2], gl + a[0], a[2], -a[1] },
+                { -b[1] - b[2], 0.0, gs + b[2], -b[1] } };
+            for (int col = 0; col < 3; ++col)
+            {
+                int piv = col; for (int rr = col + 1; rr < 3; ++rr) if (std::abs (m[rr][col]) > std::abs (m[piv][col])) piv = rr;
+                if (piv != col) for (int j = 0; j < 4; ++j) std::swap (m[piv][j], m[col][j]);
+                for (int rr = 0; rr < 3; ++rr) if (rr != col) { const double f = m[rr][col] / m[col][col]; for (int j = col; j < 4; ++j) m[rr][j] -= f * m[col][j]; }
+            }
+            const double vp = m[1][3] / m[1][1];
+            return -vp * c.ra / (c.ra + c.rw);
+        }
+
+        double restingPlate() const { return restP; }   double restingCathode() const { return restK; }   double restingScreen() const { return restS; }
+        double restingPlateCurrent() const { return restIp; }   double restingScreenCurrent() const { return restIs; }
+        int lastIterations() const { return iterations; }
+
+        double process (double vin) { return solve (vin, false, 50); }
+
+    private:
+        // dc: capacitors open, the inductance a plain wire - used to find the resting point
+        double solve (double vin, bool dc, int maxIt)
+        {
+            double g[5], ieq[5];
+            for (int i = 0; i < 5; ++i) { g[i] = dc ? 0.0 : 2.0 * caps[i].c / T; ieq[i] = dc ? 0.0 : -(g[i] * caps[i].v + caps[i].i); }
+            // the primary: i = gp u + hL through the inductance and the load together, in series with the winding resistance
+            const double gL = T / (2.0 * c.lp), gp = gL + 1.0 / c.ra, hL = iL + gL * uL;
+            const double geq = dc ? 1.0 / c.rw : 1.0 / (c.rw + 1.0 / gp), heq = dc ? 0.0 : geq * hL / gp;
+            auto v = x; double capV[5] = {}, capI[5] = {}; iterations = 0;
+            for (int it = 0; it < maxIt; ++it)
+            {
+                ++iterations;
+                const double vA = v[0], vG = v[1], vK = v[2], vP = v[3], vS = v[4];
+                double ip, a[3], is, b[3]; pentode (t, vP - vK, vG - vK, vS - vK, ip, a, is, b);
+                double ig, dIg; grid (tg, vG - vK, ig, dIg);
+                capV[0] = vA - vin; capV[1] = vG - vK; capV[2] = vG - vP; capV[3] = vP - vK; capV[4] = vK;
+                for (int i = 0; i < 5; ++i) capI[i] = g[i] * capV[i] + ieq[i];
+                double F[5], J[5][5] = {};
+                F[0] = capI[0] + vA / c.rgl + (vA - vG) / c.rgs;
+                J[0][0] = g[0] + 1.0 / c.rgl + 1.0 / c.rgs; J[0][1] = -1.0 / c.rgs;
+                F[1] = (vG - vA) / c.rgs + capI[1] + capI[2] + ig;
+                J[1][0] = -1.0 / c.rgs; J[1][1] = 1.0 / c.rgs + g[1] + g[2] + dIg; J[1][2] = -g[1] - dIg; J[1][3] = -g[2];
+                F[2] = vK / c.rk + capI[4] - capI[1] - ig - ip - is - capI[3];
+                J[2][1] = -g[1] - dIg - a[1] - b[1]; J[2][2] = 1.0 / c.rk + g[4] + g[1] + dIg + a[0] + a[1] + a[2] + b[1] + b[2] + g[3]; J[2][3] = -a[0] - g[3]; J[2][4] = -a[2] - b[2];
+                F[3] = -(geq * (c.bplus - vP) + heq) + ip + capI[3] - capI[2];
+                J[3][1] = a[1] - g[2]; J[3][2] = -a[0] - a[1] - a[2] - g[3]; J[3][3] = geq + a[0] + g[3] + g[2]; J[3][4] = a[2];
+                F[4] = (vS - c.bplus) / c.rs + is;
+                J[4][1] = b[1]; J[4][2] = -b[1] - b[2]; J[4][4] = 1.0 / c.rs + b[2];
+                double d[5]; if (! solve5 (J, F, d)) break;
+                const double big = std::max ({ std::abs (d[1] - d[2]) / 2.0, std::abs (d[3]) / 60.0, std::abs (d[4]) / 60.0, 1.0 }), scale = 1.0 / big;
+                double moved = 0.0; for (int i = 0; i < 5; ++i) { v[(size_t) i] -= scale * d[i]; moved = std::max (moved, std::abs (scale * d[i])); }
+                if (moved < 1.0e-10) break;
+            }
+            x = v; if (dc) return 0.0;
+            capV[0] = v[0] - vin; capV[1] = v[1] - v[2]; capV[2] = v[1] - v[3]; capV[3] = v[3] - v[2]; capV[4] = v[2];
+            for (int i = 0; i < 5; ++i) { caps[i].i = g[i] * capV[i] + ieq[i]; caps[i].v = capV[i]; }
+            const double i = geq * (c.bplus - v[3]) + heq, u = (i - hL) / gp;
+            iL = gL * u + hL; uL = u;
+            return u;
+        }
+
+        static bool solve5 (double a[5][5], const double* b, double* out)
+        {
+            double m[5][6];
+            for (int i = 0; i < 5; ++i) { for (int j = 0; j < 5; ++j) m[i][j] = a[i][j]; m[i][5] = b[i]; }
+            for (int col = 0; col < 5; ++col)
+            {
+                int piv = col; for (int r = col + 1; r < 5; ++r) if (std::abs (m[r][col]) > std::abs (m[piv][col])) piv = r;
+                if (std::abs (m[piv][col]) < 1.0e-300) return false;
+                if (piv != col) for (int j = 0; j < 6; ++j) std::swap (m[piv][j], m[col][j]);
+                for (int r = col + 1; r < 5; ++r) { const double f = m[r][col] / m[col][col]; if (f != 0.0) for (int j = col; j < 6; ++j) m[r][j] -= f * m[col][j]; }
+            }
+            for (int i = 4; i >= 0; --i) { double s = m[i][5]; for (int j = i + 1; j < 5; ++j) s -= m[i][j] * out[j]; out[i] = s / m[i][i]; }
+            return true;
+        }
+
+        struct Cap { double c = 0, v = 0, i = 0; };
+        Pentode t; PowerCircuit c; Tube tg = [] { Tube g; g.rgi = 1000; return g; }();
+        double T = 1.0 / 192000.0, cgkJunction = 0, restK = 0, restP = 0, restS = 0, restIp = 0, restIs = 0, iL = 0, uL = 0; int iterations = 0;
+        std::array<double, 5> x { 0, 0, 0, 0, 0 }; Cap caps[5];
+    };
+
     //============================================================================== oversampling
     /** Runs a process at `factor` times the rate: a windowed-sinc (Kaiser) filter up and the same down. Constant delay of
         latency() samples at the outer rate. */

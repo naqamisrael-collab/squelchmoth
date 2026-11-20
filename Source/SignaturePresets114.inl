@@ -882,6 +882,19 @@ inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
         A ("Hot Bias Squash",    { N ("Drive", 10), N ("Bias", 5),  N ("Cathode Cap", 1), N ("Tube", 0), N ("Output", -1), N ("Mix", 100) }),
         A ("Grid Blocking",      { N ("Drive", 24), N ("Bias", 45), N ("Cathode Cap", 1), N ("Tube", 0), N ("Output", -6), N ("Mix", 100) }),
         A ("Parallel Grit",      { N ("Drive", 20), N ("Bias", 60), N ("Cathode Cap", 0), N ("Tube", 0), N ("Output", -3), N ("Mix", 30) }) };
+    m["Voltage Power"] = {
+        B ("Clean Power",        { N ("Drive", -6), N ("Bias", 45), N ("Tube", 0), N ("Load", 40), N ("Iron", 70), N ("Output", 0), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Warm Output",        { N ("Drive", 0),  N ("Bias", 45), N ("Tube", 0), N ("Load", 40), N ("Iron", 70), N ("Output", 0), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Vocal Weight",       { N ("Drive", 3),  N ("Bias", 40), N ("Tube", 0), N ("Load", 55), N ("Iron", 80), N ("Output", 0), N ("Mix", 60), N ("Quality", 0) }),
+        B ("Bass Amp",           { N ("Drive", 6),  N ("Bias", 35), N ("Tube", 1), N ("Load", 30), N ("Iron", 100), N ("Output", -1), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Drum Bus Push",      { N ("Drive", 5),  N ("Bias", 50), N ("Tube", 2), N ("Load", 40), N ("Iron", 85), N ("Output", -1), N ("Mix", 50), N ("Quality", 0) }),
+        B ("Keys Through Iron",  { N ("Drive", 2),  N ("Bias", 55), N ("Tube", 0), N ("Load", 65), N ("Iron", 45), N ("Output", 0), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Mix Bus Touch",      { N ("Drive", -3), N ("Bias", 45), N ("Tube", 1), N ("Load", 40), N ("Iron", 100), N ("Output", 0), N ("Mix", 100), N ("Quality", 0) }),
+        A ("Small Iron",         { N ("Drive", 4),  N ("Bias", 45), N ("Tube", 0), N ("Load", 40), N ("Iron", 5), N ("Output", 0), N ("Mix", 100), N ("Quality", 0) }),
+        A ("Cold Bias Edge",     { N ("Drive", 8),  N ("Bias", 95), N ("Tube", 0), N ("Load", 40), N ("Iron", 70), N ("Output", -1), N ("Mix", 100), N ("Quality", 0) }),
+        A ("Hot And Heavy",      { N ("Drive", 8),  N ("Bias", 5),  N ("Tube", 1), N ("Load", 20), N ("Iron", 70), N ("Output", -1), N ("Mix", 100), N ("Quality", 0) }),
+        A ("Flat Out",           { N ("Drive", 14), N ("Bias", 45), N ("Tube", 2), N ("Load", 40), N ("Iron", 70), N ("Output", -3), N ("Mix", 100), N ("Quality", 1) }),
+        A ("Parallel Crush",     { N ("Drive", 20), N ("Bias", 60), N ("Tube", 2), N ("Load", 70), N ("Iron", 60), N ("Output", -4), N ("Mix", 30), N ("Quality", 1) }) };
     m["Spindle Delay"] = presets114_spindle();
     m["Fissure Filter"] = presets114_fissure();
     m["Mote"] = presets114_mote();

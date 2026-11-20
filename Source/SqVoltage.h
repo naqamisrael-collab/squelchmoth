@@ -20,7 +20,7 @@ public:
         auto um = getUndoManager();
         driveV.referTo (state, "drive", um, 0.0f); biasV.referTo (state, "bias", um, 45.0f); capV.referTo (state, "cathodeCap", um, 1.0f);
         tubeV.referTo (state, "tube", um, 0.0f); outputV.referTo (state, "output", um, 0.0f); mixV.referTo (state, "mix", um, 100.0f);
-        quality.referTo (state, "quality", um, 0); unit.referTo (state, "unit", nullptr, 0);
+        qualityV.referTo (state, "quality", um, 0.0f); unit.referTo (state, "unit", nullptr, 0);
         if (unit.get() == 0) unit = 1 + juce::Random::getSystemRandom().nextInt (1000000);      // this unit's own parts, kept with the session
 
         auto db = [] (float v) { return juce::String (v, 1) + " dB"; };
@@ -32,14 +32,15 @@ public:
         tube   = addParam ("tube",   TRANS("Tube"),   { 0.0f, 1.0f, 1.0f }, [] (float v) { return juce::String (v >= 0.5f ? "Medium gain" : "High gain"); }, [] (const juce::String& s) { return s.containsIgnoreCase ("med") || s.getFloatValue() >= 0.5f ? 1.0f : 0.0f; });
         output = addParam ("output", TRANS("Output"), { -24.0f, 24.0f }, db, num);
         mix    = addParam ("mix",    TRANS("Mix"),    { 0.0f, 100.0f }, pct, num);
+        quality = addParam ("quality", TRANS("Quality"), { 0.0f, 2.0f, 1.0f }, [] (float v) { return qualityNames()[juce::jlimit (0, 2, juce::roundToInt (v))]; }, [] (const juce::String& s) { return qualityFromText (s); });
         drive->attachToCurrentValue (driveV); bias->attachToCurrentValue (biasV); cap->attachToCurrentValue (capV);
-        tube->attachToCurrentValue (tubeV); output->attachToCurrentValue (outputV); mix->attachToCurrentValue (mixV);
+        tube->attachToCurrentValue (tubeV); output->attachToCurrentValue (outputV); mix->attachToCurrentValue (mixV); quality->attachToCurrentValue (qualityV);
     }
 
     ~SqVoltagePlugin() override
     {
         notifyListenersOfDeletion();
-        for (auto* p : { drive.get(), bias.get(), cap.get(), tube.get(), output.get(), mix.get() }) p->detachFromCurrentValue();
+        for (auto* p : { drive.get(), bias.get(), cap.get(), tube.get(), output.get(), mix.get(), quality.get() }) p->detachFromCurrentValue();
     }
 
     static const char* getPluginName()                  { return NEEDS_TRANS("Voltage"); }
@@ -58,6 +59,7 @@ public:
 
     static juce::StringArray qualityNames() { return { "4x", "8x", "16x" }; }
     static int factorFor (int q) { return q <= 0 ? 4 : q == 1 ? 8 : 16; }
+    static float qualityFromText (const juce::String& s) { const int n = s.retainCharacters ("0123456789").getIntValue(); return n >= 16 ? 2.0f : n >= 8 ? 1.0f : n == 4 ? 0.0f : (float) juce::jlimit (0, 2, n); }
 
     /** This unit's parts: nominal values moved by its own small tolerances (the same every time for the same unit and channel). */
     static void partsFor (int unitSeed, int channel, bool mediumGain, float biasPercent, bool cathodeCap, SqTube::Tube& t, SqTube::Circuit& c)
@@ -139,19 +141,19 @@ public:
 
     void restorePluginStateFromValueTree (const juce::ValueTree& v) override
     {
-        te::copyPropertiesToCachedValues (v, driveV, biasV, capV, tubeV, outputV, mixV);
-        te::copyPropertiesToCachedValues (v, quality, unit);
+        te::copyPropertiesToCachedValues (v, driveV, biasV, capV, tubeV, outputV, mixV, qualityV);
+        te::copyPropertiesToCachedValues (v, unit);
         for (auto p : getAutomatableParameters()) p->updateFromAttachedValue();
     }
 
-    juce::CachedValue<float> driveV, biasV, capV, tubeV, outputV, mixV;
-    juce::CachedValue<int> quality, unit;
-    te::AutomatableParameter::Ptr drive, bias, cap, tube, output, mix;
+    juce::CachedValue<float> driveV, biasV, capV, tubeV, outputV, mixV, qualityV;
+    juce::CachedValue<int> unit;
+    te::AutomatableParameter::Ptr drive, bias, cap, tube, output, mix, quality;
 
 private:
     void refresh (bool force)
     {
-        const int q = juce::jlimit (0, 2, quality.get()); const float b = bias->getCurrentValue(); const int cp = cap->getCurrentValue() >= 0.5f ? 1 : 0, tb = tube->getCurrentValue() >= 0.5f ? 1 : 0;
+        const int q = juce::jlimit (0, 2, juce::roundToInt (quality->getCurrentValue())); const float b = bias->getCurrentValue(); const int cp = cap->getCurrentValue() >= 0.5f ? 1 : 0, tb = tube->getCurrentValue() >= 0.5f ? 1 : 0;
         const bool rate = force || q != usedQuality, parts = rate || std::abs (b - usedBias) > 0.01f || cp != usedCap || tb != usedTube;
         if (! parts) return;
         for (int ch = 0; ch < 2; ++ch)
@@ -167,4 +169,171 @@ private:
     Channel chan[2]; double sampleRate = 44100.0; int usedQuality = -1, usedCap = -1, usedTube = -1; float usedBias = -1.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SqVoltagePlugin)
+};
+
+//==============================================================================
+// Squelchmoth 1.38 - Voltage Power: a single-ended output stage solved as a circuit (SqTube::PowerStage): a beam tube with
+// its screen grid, cathode bias and grid current, working into an output transformer (winding resistance, primary
+// inductance, the reflected load). Drive is level-matched like Voltage. Bias sets the cathode resistor, Load what the
+// tube works into, Iron the size of the transformer (less iron: the bass falls away earlier). The transformer here is
+// linear: its core does not saturate yet.
+class SqVoltagePowerPlugin : public te::Plugin
+{
+public:
+    SqVoltagePowerPlugin (te::PluginCreationInfo info) : te::Plugin (info)
+    {
+        auto um = getUndoManager();
+        driveV.referTo (state, "drive", um, 0.0f); biasV.referTo (state, "bias", um, 45.0f); tubeV.referTo (state, "tube", um, 0.0f);
+        loadV.referTo (state, "load", um, 40.0f); ironV.referTo (state, "iron", um, 70.0f); outputV.referTo (state, "output", um, 0.0f); mixV.referTo (state, "mix", um, 100.0f);
+        qualityV.referTo (state, "quality", um, 0.0f); unit.referTo (state, "unit", nullptr, 0);
+        if (unit.get() == 0) unit = 1 + juce::Random::getSystemRandom().nextInt (1000000);
+
+        auto db = [] (float v) { return juce::String (v, 1) + " dB"; };
+        auto pct = [] (float v) { return juce::String (juce::roundToInt (v)) + " %"; };
+        auto num = [] (const juce::String& s) { return s.retainCharacters ("0123456789.-").getFloatValue(); };
+        drive  = addParam ("drive",  TRANS("Drive"),  { -12.0f, 24.0f }, db, num);
+        bias   = addParam ("bias",   TRANS("Bias"),   { 0.0f, 100.0f }, pct, num);
+        tube   = addParam ("tube",   TRANS("Tube"),   { 0.0f, 2.0f, 1.0f }, [] (float v) { return tubeNames()[juce::jlimit (0, 2, juce::roundToInt (v))]; },
+                           [] (const juce::String& s) { return s.containsIgnoreCase ("heav") ? 1.0f : s.containsIgnoreCase ("bold") ? 2.0f : s.containsIgnoreCase ("class") ? 0.0f : (float) juce::jlimit (0, 2, juce::roundToInt (s.getFloatValue())); });
+        load   = addParam ("load",   TRANS("Load"),   { 0.0f, 100.0f }, [] (float v) { return juce::String (loadOhms (v) / 1000.0, 1) + " k"; }, num);
+        iron   = addParam ("iron",   TRANS("Iron"),   { 0.0f, 100.0f }, [] (float v) { return juce::String (ironHenries (v), 1) + " H"; }, num);
+        output = addParam ("output", TRANS("Output"), { -24.0f, 24.0f }, db, num);
+        mix    = addParam ("mix",    TRANS("Mix"),    { 0.0f, 100.0f }, pct, num);
+        drive->attachToCurrentValue (driveV); bias->attachToCurrentValue (biasV); tube->attachToCurrentValue (tubeV); load->attachToCurrentValue (loadV);
+        quality = addParam ("quality", TRANS("Quality"), { 0.0f, 2.0f, 1.0f }, [] (float v) { return SqVoltagePlugin::qualityNames()[juce::jlimit (0, 2, juce::roundToInt (v))]; }, [] (const juce::String& s) { return SqVoltagePlugin::qualityFromText (s); });
+        iron->attachToCurrentValue (ironV); output->attachToCurrentValue (outputV); mix->attachToCurrentValue (mixV); quality->attachToCurrentValue (qualityV);
+    }
+
+    ~SqVoltagePowerPlugin() override
+    {
+        notifyListenersOfDeletion();
+        for (auto* p : { drive.get(), bias.get(), tube.get(), load.get(), iron.get(), output.get(), mix.get(), quality.get() }) p->detachFromCurrentValue();
+    }
+
+    static const char* getPluginName()                  { return NEEDS_TRANS("Voltage Power"); }
+    static constexpr const char* xmlTypeName = "sqmVoltagePower";
+    static constexpr int delaySamples = 96;
+    static constexpr double voltsAtFullScale = 5.0;     // a full-scale sample is five volts at the grid before Drive
+
+    juce::String getName() const override               { return "Voltage Power"; }
+    juce::String getPluginType() override               { return xmlTypeName; }
+    juce::String getShortName (int) override            { return "VPwr"; }
+    juce::String getSelectableDescription() override    { return TRANS("Output stage and transformer (circuit model)"); }
+    bool needsConstantBufferSize() override             { return false; }
+    double getLatencySeconds() override                 { return sampleRate > 0 ? delaySamples / sampleRate : 0.0; }
+    int getNumOutputChannelsGivenInputs (int n) override { return juce::jmin (n, 2); }
+    BusLayout getBusses() const override                { return BusLayout::singleStereoInOut(); }
+
+    static juce::StringArray tubeNames() { return { "Classic", "Heavy", "Bold" }; }
+    static double loadOhms (float pct)    { return 2500.0 * std::pow (8000.0 / 2500.0, juce::jlimit (0.0, 1.0, (double) pct / 100.0)); }
+    static double ironHenries (float pct) { return 4.0 * std::pow (10.0, juce::jlimit (0.0, 1.0, (double) pct / 100.0)); }
+
+    static void partsFor (int unitSeed, int channel, int tubeIx, float biasPercent, float loadPercent, float ironPercent, SqTube::Pentode& t, SqTube::PowerCircuit& c)
+    {
+        t = tubeIx == 1 ? SqTube::heavyBeam() : tubeIx == 2 ? SqTube::boldBeam() : SqTube::classicBeam(); c = {};
+        c.rk = 150.0 * std::pow (560.0 / 150.0, juce::jlimit (0.0, 1.0, (double) biasPercent / 100.0));
+        c.ra = loadOhms (loadPercent); c.lp = ironHenries (ironPercent);
+        auto off = [unitSeed, channel] (int which, double spread)
+        {
+            juce::uint32 h = (juce::uint32) unitSeed * 2654435761u ^ (juce::uint32) (channel + 1) * 40503u ^ (juce::uint32) (which + 11) * 2246822519u;
+            h ^= h >> 15; h *= 2246822519u; h ^= h >> 13; h *= 3266489917u; h ^= h >> 16;
+            return 1.0 + spread * (((double) (h & 0xffffff) / (double) 0xffffff) * 2.0 - 1.0);
+        };
+        c.rk *= off (0, 0.05); c.ra *= off (1, 0.03); c.lp *= off (2, 0.10); c.rs *= off (3, 0.05); c.ck *= off (4, 0.10);
+        t.mu *= off (5, 0.03); t.kg1 *= off (6, 0.05);
+    }
+
+    /** What the stage does to a test sine with these settings, from the same circuit the audio runs through. */
+    struct Reading
+    {
+        std::vector<float> wave;
+        double harmonics[4] = { -200, -200, -200, -200 };
+        double plateVolts = 0, cathodeVolts = 0, plateMilliamps = 0, plateWatts = 0, gainDb = 0, levelDb = 0;
+        bool gridConducts = false;
+    };
+    static Reading measure (int unitSeed, int tubeIx, float biasPercent, float loadPercent, float ironPercent, float driveDb, float testAmp = 0.9f)
+    {
+        Reading r; SqTube::Pentode t; SqTube::PowerCircuit c; partsFor (unitSeed, 0, tubeIx, biasPercent, loadPercent, ironPercent, t, c);
+        const double fs = 192000.0, hz = 1000.0, full = voltsAtFullScale * std::pow (10.0, (double) driveDb / 20.0), volts = full * testAmp;
+        SqTube::PowerStage s; s.prepare (fs, t, c); r.plateVolts = s.restingPlate(); r.cathodeVolts = s.restingCathode();
+        r.plateMilliamps = s.restingPlateCurrent() * 1000.0; r.plateWatts = (s.restingPlate() - s.restingCathode()) * s.restingPlateCurrent();
+        const double gain = SqTube::PowerStage::smallSignalGain (t, c); r.gainDb = 20.0 * std::log10 (std::abs (gain) + 1.0e-12);
+        r.gridConducts = volts > r.cathodeVolts;
+        const int settle = (int) (0.25 * fs), n = 1920;
+        std::vector<double> y ((size_t) n);
+        for (int i = 0; i < settle + n; ++i) { const double v = s.process (volts * std::sin (juce::MathConstants<double>::twoPi * hz * i / fs)); if (i >= settle) y[(size_t) (i - settle)] = v / (gain * full); }
+        double mag[6] = {};
+        for (int k = 1; k <= 5; ++k) { std::complex<double> a = 0; for (int i = 0; i < n; ++i) a += y[(size_t) i] * std::polar (1.0, -juce::MathConstants<double>::twoPi * (k * 10.0) * i / n); mag[k] = std::abs (a) / (n / 2.0); }
+        for (int k = 2; k <= 5; ++k) r.harmonics[k - 2] = 20.0 * std::log10 (mag[k] / juce::jmax (1.0e-12, mag[1]) + 1.0e-12);
+        r.levelDb = 20.0 * std::log10 (mag[1] / (double) testAmp + 1.0e-12);
+        r.wave.resize (384); for (int i = 0; i < 384; ++i) r.wave[(size_t) i] = (float) y[(size_t) i];
+        return r;
+    }
+
+    void initialise (const te::PluginInitialisationInfo& info) override
+    {
+        sampleRate = info.sampleRate > 0 ? info.sampleRate : 44100.0;
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            for (int q = 0; q < 3; ++q) chan[ch].os[q].prepare (SqVoltagePlugin::factorFor (q));
+            chan[ch].dry.assign ((size_t) delaySamples, 0.0f); chan[ch].dryPos = 0;
+        }
+        usedQuality = -1; refresh (true);
+    }
+    void deinitialise() override {}
+    void reset() override { usedQuality = -1; refresh (true); for (auto& c : chan) { std::fill (c.dry.begin(), c.dry.end(), 0.0f); for (auto& o : c.os) o.reset(); } }
+
+    void applyToBuffer (const te::PluginRenderContext& fc) override
+    {
+        if (fc.destBuffer == nullptr) return;
+        SCOPED_REALTIME_CHECK
+        refresh (false);
+        auto& buf = *fc.destBuffer; const int nch = juce::jmin (2, buf.getNumChannels()), q = usedQuality;
+        const double inVolts = voltsAtFullScale * std::pow (10.0, (double) drive->getCurrentValue() / 20.0);
+        const float outGain = std::pow (10.0f, output->getCurrentValue() / 20.0f), wet = juce::jlimit (0.0f, 1.0f, mix->getCurrentValue() / 100.0f);
+        for (int ch = 0; ch < nch; ++ch)
+        {
+            auto& c = chan[ch]; auto* d = buf.getWritePointer (ch, fc.bufferStartSample);
+            const double back = 1.0 / (c.gain * inVolts);
+            for (int i = 0; i < fc.bufferNumSamples; ++i)
+            {
+                const float in = d[i];
+                const double v = c.os[q].process ((double) in * inVolts, [&c] (double x) { return c.stage.process (x); });
+                const float delayed = c.dry[(size_t) c.dryPos]; c.dry[(size_t) c.dryPos] = in; if (++c.dryPos >= delaySamples) c.dryPos = 0;
+                d[i] = (delayed + wet * ((float) (v * back) - delayed)) * outGain;
+            }
+        }
+    }
+
+    void restorePluginStateFromValueTree (const juce::ValueTree& v) override
+    {
+        te::copyPropertiesToCachedValues (v, driveV, biasV, tubeV, loadV, ironV, outputV, mixV, qualityV);
+        te::copyPropertiesToCachedValues (v, unit);
+        for (auto p : getAutomatableParameters()) p->updateFromAttachedValue();
+    }
+
+    juce::CachedValue<float> driveV, biasV, tubeV, loadV, ironV, outputV, mixV, qualityV;
+    juce::CachedValue<int> unit;
+    te::AutomatableParameter::Ptr drive, bias, tube, load, iron, output, mix, quality;
+
+private:
+    void refresh (bool force)
+    {
+        const int q = juce::jlimit (0, 2, juce::roundToInt (quality->getCurrentValue())), tb = juce::jlimit (0, 2, juce::roundToInt (tube->getCurrentValue()));
+        const float b = bias->getCurrentValue(), l = load->getCurrentValue(), ir = iron->getCurrentValue();
+        const bool rate = force || q != usedQuality, parts = rate || std::abs (b - usedBias) > 0.01f || std::abs (l - usedLoad) > 0.01f || std::abs (ir - usedIron) > 0.01f || tb != usedTube;
+        if (! parts) return;
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            SqTube::Pentode t; SqTube::PowerCircuit c; partsFor (unit.get(), ch, tb, b, l, ir, t, c);
+            if (rate) chan[ch].stage.prepare (sampleRate * SqVoltagePlugin::factorFor (q), t, c); else chan[ch].stage.setParts (t, c);
+            chan[ch].gain = SqTube::PowerStage::smallSignalGain (t, c);
+        }
+        usedQuality = q; usedBias = b; usedLoad = l; usedIron = ir; usedTube = tb;
+    }
+
+    struct Channel { SqTube::PowerStage stage; SqTube::Oversampler os[3]; std::vector<float> dry; int dryPos = 0; double gain = 22.0; };
+    Channel chan[2]; double sampleRate = 44100.0; int usedQuality = -1, usedTube = -1; float usedBias = -1.0f, usedLoad = -1.0f, usedIron = -1.0f;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SqVoltagePowerPlugin)
 };
