@@ -993,6 +993,7 @@ namespace Skins
             auto left = r.removeFromLeft (juce::jmin (190.0f, r.getWidth() * 0.34f)).reduced (4.0f); r.removeFromLeft (8.0f);
             auto caption = r.removeFromTop (16.0f);
             g.setColour (juce::Colours::black.withAlpha (0.4f)); g.fillRoundedRectangle (left, 4.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.5f)); g.fillRoundedRectangle (r.getUnion (caption).expanded (4.0f, 2.0f), 4.0f);     // the plate behind is artwork: keep the wave and its caption readable on it
             if (! have) return;
             // the numbers, all from the circuit
             g.setFont (Theme::font (9.0f));
@@ -1014,7 +1015,7 @@ namespace Skins
             const auto wave = reading.wave; const size_t n = wave.size();
             drawWave (g, r, [] (float t) { return std::sin (t * 12.566f) * 0.9f; }, Theme::dim().withAlpha (0.5f), 1.2f);
             if (n > 1) drawWave (g, r, [&wave, n] (float t) { return wave[(size_t) juce::jlimit (0, (int) n - 1, (int) (t * (float) (n - 1)))]; }, accent, 2.0f);
-            g.setFont (Theme::font (9.0f)); g.setColour (Theme::dim());
+            g.setFont (Theme::font (9.0f)); g.setColour (Theme::text().withAlpha (0.8f));
             g.drawText ("worked out from the circuit:  test sine -0.9 dBFS at 1 kHz  ->  out " + juce::String (reading.levelDb + 20.0 * std::log10 (0.9), 1) + " dBFS (level-matched)", caption.toNearestInt(), juce::Justification::centredLeft, true);
         }
         SqVoltagePlugin::Reading reading; bool have = false, lastCap = false, lastTube = false; float lastDrive = 0, lastBias = 0;
@@ -1036,6 +1037,7 @@ namespace Skins
             auto left = r.removeFromLeft (juce::jmin (190.0f, r.getWidth() * 0.34f)).reduced (4.0f); r.removeFromLeft (8.0f);
             auto caption = r.removeFromTop (16.0f);
             g.setColour (juce::Colours::black.withAlpha (0.4f)); g.fillRoundedRectangle (left, 4.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.5f)); g.fillRoundedRectangle (r.getUnion (caption).expanded (4.0f, 2.0f), 4.0f);     // the plate behind is artwork: keep the wave and its caption readable on it
             if (! have) return;
             g.setFont (Theme::font (9.0f));
             auto row = [&] (int i, const juce::String& label, const juce::String& value, juce::Colour c)
@@ -1055,7 +1057,7 @@ namespace Skins
             const auto wave = reading.wave; const size_t n = wave.size();
             drawWave (g, r, [] (float t) { return std::sin (t * 12.566f) * 0.9f; }, Theme::dim().withAlpha (0.5f), 1.2f);
             if (n > 1) drawWave (g, r, [&wave, n] (float t) { return wave[(size_t) juce::jlimit (0, (int) n - 1, (int) (t * (float) (n - 1)))]; }, accent, 2.0f);
-            g.setFont (Theme::font (9.0f)); g.setColour (Theme::dim());
+            g.setFont (Theme::font (9.0f)); g.setColour (Theme::text().withAlpha (0.8f));
             g.drawText ("worked out from the circuit:  test sine -0.9 dBFS at 1 kHz  ->  out " + juce::String (reading.levelDb + 20.0 * std::log10 (0.9), 1) + " dBFS (level-matched)", caption.toNearestInt(), juce::Justification::centredLeft, true);
         }
         SqVoltagePowerPlugin::Reading reading; bool have = false; int lastTube = -1; float lastDrive = 0, lastBias = 0, lastLoad = 0, lastIron = 0;
