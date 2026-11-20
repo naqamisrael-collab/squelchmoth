@@ -61,6 +61,7 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqSibylDeEssPlugin>();
     engine->getPluginManager().createBuiltInType<SqPortcullisGatePlugin>();
     engine->getPluginManager().createBuiltInType<SqKilnPlugin>();
+    engine->getPluginManager().createBuiltInType<SqVoltagePlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
@@ -5404,6 +5405,73 @@ inline int runSelfTest()
                     vc.getPlayer().stopStream();
                 }
                 dir.deleteRecursively();
+            }
+        }
+        // ---- 1.37 Voltage: the triode stage as a plug-in (the circuit itself is checked against a circuit simulator in tests/tube_test.cpp)
+        {
+            call ("new_session", R"({"name":"Selftest Voltage"})");
+            const auto ins = call ("insert_plugin", R"({"track":"Audio 1","plugin":"Voltage"})");
+            SqVoltagePlugin* vp = nullptr;
+            if (auto tt = session->findTrack ("Audio 1")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqVoltagePlugin*> (pl)) vp = c;
+            check (vp != nullptr && ins.contains ("Voltage"), "Voltage is registered and inserts by name");
+            if (vp != nullptr)
+            {
+                const double sr = 44100.0; const int N = 44100;
+                struct Out { std::vector<float> l, r; };
+                auto render = [&] (float driveDb, float mixPct, float amp, double hz, int unitSeed, int qualityIx = 0)
+                {
+                    Out o; auto twin = session->edit->getPluginCache().createNewPlugin (SqVoltagePlugin::xmlTypeName, {});
+                    if (auto* tw = dynamic_cast<SqVoltagePlugin*> (twin.get()))
+                    {
+                        tw->unit = unitSeed; tw->quality = qualityIx; tw->drive->setParameter (driveDb, juce::dontSendNotification); tw->mix->setParameter (mixPct, juce::dontSendNotification);
+                        tw->baseClassInitialise ({ te::TimePosition(), sr, 512 });
+                        juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                        for (int q = 0; q + 512 <= N; q += 512)
+                        {
+                            for (int i = 0; i < 512; ++i) { const float v = amp * (float) std::sin (juce::MathConstants<double>::twoPi * hz * (q + i) / sr); buf.setSample (0, i, v); buf.setSample (1, i, v); }
+                            te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / sr), te::TimePosition::fromSeconds ((q + 512) / sr)), true, false, true, false);
+                            tw->applyToBuffer (fc);
+                            for (int i = 0; i < 512; ++i) { o.l.push_back (buf.getSample (0, i)); o.r.push_back (buf.getSample (1, i)); }
+                        }
+                        tw->baseClassDeinitialise();
+                    }
+                    return o;
+                };
+                // a bin of exactly 1 kHz over 441 * 40 samples (40 Hz steps would not land; 1000 Hz * 17640 / 44100 = 400 cycles)
+                auto bin = [&] (const std::vector<float>& y, double f) { std::complex<double> acc = 0; const int from = 22050, M = 17640; if ((int) y.size() < from + M) return -300.0; for (int i = 0; i < M; ++i) acc += (double) y[(size_t) (from + i)] * std::polar (1.0, -juce::MathConstants<double>::twoPi * f * i / sr); return 20 * std::log10 (2 * std::abs (acc) / M + 1e-15); };
+                const auto quiet = render (0.0f, 100.0f, 0.05f, 1000.0, 1234);
+                const double inDb = 20 * std::log10 (0.05), lvl = bin (quiet.l, 1000.0);
+                double corr = 0; for (int i = 22050; i < 22050 + 4410; ++i) corr += (double) quiet.l[(size_t) i] * 0.05 * std::sin (juce::MathConstants<double>::twoPi * 1000.0 * (i - SqVoltagePlugin::delaySamples) / sr);
+                check (std::abs (lvl - inDb) < 0.3 && corr > 0 && std::abs (vp->getLatencySeconds() - 96.0 / 44100.0) < 1.0e-9 + 96.0 / 44100.0 * 0.2,
+                       "Voltage at a low level is level-matched (" + juce::String (lvl - inDb, 2) + " dB), the right way up and 96 samples late, as it reports");
+                const auto hot = render (18.0f, 100.0f, 0.25f, 1000.0, 1234);
+                const double h2 = bin (hot.l, 2000.0) - bin (hot.l, 1000.0), h3 = bin (hot.l, 3000.0) - bin (hot.l, 1000.0), comp = bin (hot.l, 1000.0) - 20 * std::log10 (0.25);
+                const double h2quiet = bin (quiet.l, 2000.0) - bin (quiet.l, 1000.0);
+                check (h2 > -30.0 && h2 > h2quiet + 15.0 && comp < -0.1 && comp > -6.0 && std::isfinite (h3),
+                       "driven 18 dB harder the 2nd harmonic rises from " + juce::String (h2quiet, 1) + " to " + juce::String (h2, 1) + " dBc (3rd " + juce::String (h3, 1) + ") and the stage compresses by " + juce::String (-comp, 1) + " dB");
+                const auto other = render (18.0f, 100.0f, 0.25f, 1000.0, 99999);
+                const double dUnit = std::abs ((bin (other.l, 2000.0) - bin (other.l, 1000.0)) - h2), dLR = std::abs ((bin (hot.r, 2000.0) - bin (hot.r, 1000.0)) - h2);
+                const auto again = render (18.0f, 100.0f, 0.25f, 1000.0, 1234);
+                double same = 0; for (size_t i = 0; i < again.l.size() && i < hot.l.size(); ++i) same = std::max (same, (double) std::abs (again.l[i] - hot.l[i]));
+                check (dUnit > 0.01 && dUnit < 3.0 && dLR > 0.01 && dLR < 3.0 && same < 1.0e-6,
+                       "two units differ slightly (2nd harmonic " + juce::String (dUnit, 2) + " dB apart), left and right are two tubes (" + juce::String (dLR, 2) + " dB apart), and the same unit is the same every time");
+                const auto dry = render (18.0f, 0.0f, 0.25f, 1000.0, 1234);
+                double worstDry = 0; for (int i = 2000; i < 30000; ++i) worstDry = std::max (worstDry, std::abs ((double) dry.l[(size_t) i] - 0.25 * std::sin (juce::MathConstants<double>::twoPi * 1000.0 * (i - SqVoltagePlugin::delaySamples) / sr)));
+                const auto hq = render (18.0f, 100.0f, 0.25f, 1000.0, 1234, 1);
+                check (worstDry < 1.0e-5 && std::abs ((bin (hq.l, 2000.0) - bin (hq.l, 1000.0)) - h2) < 0.1, "Mix at 0 % is the input, delayed by the same 96 samples; 8x gives the same harmonics as 4x (within 0.1 dB)");
+                // the display's numbers come from the same circuit: they must agree with what the audio path does
+                {
+                    const auto shown = SqVoltagePlugin::measure (1234, false, 45.0f, true, 18.0f, 0.25f);
+                    const auto restful = SqVoltagePlugin::measure (1234, false, 45.0f, true, 0.0f, 0.1f);
+                    check (std::abs (shown.harmonics[0] - h2) < 1.0 && std::abs (shown.harmonics[1] - h3) < 2.0 && shown.plateVolts > 150.0 && shown.plateVolts < 260.0 && shown.cathodeVolts > 0.8 && shown.cathodeVolts < 2.5
+                           && shown.gainDb > 30.0 && shown.gainDb < 40.0 && std::abs (restful.levelDb) < 0.2 && ! restful.gridConducts && shown.wave.size() == 384,
+                           "the face shows the circuit's own numbers: 2nd harmonic " + juce::String (shown.harmonics[0], 1) + " dB against " + juce::String (h2, 1) + " dB measured in the audio, plate " + juce::String (shown.plateVolts, 1)
+                           + " V and cathode " + juce::String (shown.cathodeVolts, 2) + " V at rest, stage gain " + juce::String (shown.gainDb, 1) + " dB");
+                }
+                int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmVoltage") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+                const auto pp = call ("plugin_presets", R"({"track":"Audio 1","slot":"Voltage","preset":"Pushed Hard"})");
+                check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && pp.contains ("Pushed Hard") && std::abs (vp->drive->getCurrentValue() - 14.0f) < 0.01f && Edition::packOf ("sqmVoltage") == Edition::Pack::color && vp->unit.get() > 0,
+                       "Voltage has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, and a preset sets Drive to 14 dB");
             }
         }
         // ---- a missing audio file: renders say so instead of waiting for ever

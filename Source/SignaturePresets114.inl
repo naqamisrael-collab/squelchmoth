@@ -869,6 +869,19 @@ inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
     m["Sibyl De-Ess"] = presets114_sibyl();
     m["Portcullis Gate"] = presets114_portcullis();
     m["Kiln"] = presets114_kiln();
+    m["Voltage"] = {
+        B ("Clean Glass",        { N ("Drive", -6), N ("Bias", 45), N ("Cathode Cap", 0), N ("Tube", 1), N ("Output", 0), N ("Mix", 100) }),
+        B ("Gentle Warmth",      { N ("Drive", 0),  N ("Bias", 45), N ("Cathode Cap", 1), N ("Tube", 0), N ("Output", 0), N ("Mix", 100) }),
+        B ("Vocal Body",         { N ("Drive", 4),  N ("Bias", 40), N ("Cathode Cap", 1), N ("Tube", 0), N ("Output", 0), N ("Mix", 70) }),
+        B ("Bass Thicken",       { N ("Drive", 8),  N ("Bias", 30), N ("Cathode Cap", 1), N ("Tube", 0), N ("Output", -1), N ("Mix", 100) }),
+        B ("Drum Bus Colour",    { N ("Drive", 6),  N ("Bias", 50), N ("Cathode Cap", 0), N ("Tube", 0), N ("Output", 0), N ("Mix", 60) }),
+        B ("Keys Glow",          { N ("Drive", 3),  N ("Bias", 55), N ("Cathode Cap", 1), N ("Tube", 1), N ("Output", 0), N ("Mix", 100) }),
+        B ("Mix Bus Touch",      { N ("Drive", -2), N ("Bias", 45), N ("Cathode Cap", 0), N ("Tube", 1), N ("Output", 0), N ("Mix", 100) }),
+        A ("Pushed Hard",        { N ("Drive", 14), N ("Bias", 45), N ("Cathode Cap", 1), N ("Tube", 0), N ("Output", -2), N ("Mix", 100) }),
+        A ("Cold Bias Bite",     { N ("Drive", 10), N ("Bias", 90), N ("Cathode Cap", 1), N ("Tube", 0), N ("Output", -1), N ("Mix", 100) }),
+        A ("Hot Bias Squash",    { N ("Drive", 10), N ("Bias", 5),  N ("Cathode Cap", 1), N ("Tube", 0), N ("Output", -1), N ("Mix", 100) }),
+        A ("Grid Blocking",      { N ("Drive", 24), N ("Bias", 45), N ("Cathode Cap", 1), N ("Tube", 0), N ("Output", -6), N ("Mix", 100) }),
+        A ("Parallel Grit",      { N ("Drive", 20), N ("Bias", 60), N ("Cathode Cap", 0), N ("Tube", 0), N ("Output", -3), N ("Mix", 30) }) };
     m["Spindle Delay"] = presets114_spindle();
     m["Fissure Filter"] = presets114_fissure();
     m["Mote"] = presets114_mote();

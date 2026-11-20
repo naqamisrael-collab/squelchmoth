@@ -975,6 +975,51 @@ namespace Skins
     };
 
     // --- Saturation ---------------------------------------------------------------
+    /** Voltage: everything shown is worked out from the plug-in's own circuit at its present settings - the wave a test
+        sine comes out as, its harmonics, the resting voltages and the stage's gain. Recalculated only when a setting changes. */
+    struct VoltageViz : public Viz, private juce::Timer
+    {
+        VoltageViz (HandleMap& hm, te::Plugin& p, juce::Colour c) : Viz (hm, p, c) { startTimerHz (8); }
+        void timerCallback() override
+        {
+            auto* vp = dynamic_cast<SqVoltagePlugin*> (&plugin); if (vp == nullptr) return;
+            const float d = vp->drive->getCurrentValue(), b = vp->bias->getCurrentValue(); const bool cp = vp->cap->getCurrentValue() >= 0.5f, tb = vp->tube->getCurrentValue() >= 0.5f;
+            if (have && d == lastDrive && b == lastBias && cp == lastCap && tb == lastTube) return;
+            reading = SqVoltagePlugin::measure (vp->unit.get(), tb, b, cp, d); lastDrive = d; lastBias = b; lastCap = cp; lastTube = tb; have = true; repaint();
+        }
+        void paint (juce::Graphics& g) override
+        {
+            auto r = getLocalBounds().toFloat().reduced (6.0f);
+            auto left = r.removeFromLeft (juce::jmin (190.0f, r.getWidth() * 0.34f)).reduced (4.0f); r.removeFromLeft (8.0f);
+            auto caption = r.removeFromTop (16.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.4f)); g.fillRoundedRectangle (left, 4.0f);
+            if (! have) return;
+            // the numbers, all from the circuit
+            g.setFont (Theme::font (9.0f));
+            auto row = [&] (int i, const juce::String& label, const juce::String& value, juce::Colour c)
+            {
+                auto line = left.reduced (8.0f, 6.0f).withHeight (15.0f).translated (0.0f, (float) i * 16.0f);
+                g.setColour (Theme::dim()); g.drawText (label, line.toNearestInt(), juce::Justification::centredLeft);
+                g.setColour (c); g.drawText (value, line.toNearestInt(), juce::Justification::centredRight);
+            };
+            row (0, "PLATE AT REST", juce::String (reading.plateVolts, 1) + " V", Theme::text());
+            row (1, "CATHODE AT REST", juce::String (reading.cathodeVolts, 2) + " V", Theme::text());
+            row (2, "STAGE GAIN", juce::String (reading.gainDb, 1) + " dB", Theme::text());
+            row (3, "2ND HARMONIC", juce::String (reading.harmonics[0], 1) + " dB", accent);
+            row (4, "3RD HARMONIC", juce::String (reading.harmonics[1], 1) + " dB", accent);
+            row (5, "4TH HARMONIC", juce::String (reading.harmonics[2], 1) + " dB", accent.withAlpha (0.8f));
+            row (6, "5TH HARMONIC", juce::String (reading.harmonics[3], 1) + " dB", accent.withAlpha (0.8f));
+            if (left.getHeight() > 140.0f) row (7, "GRID", reading.gridConducts ? "CONDUCTS ON PEAKS" : "NOT CONDUCTING", reading.gridConducts ? Theme::amber() : Theme::dim());
+            // the test sine before and after
+            const auto wave = reading.wave; const size_t n = wave.size();
+            drawWave (g, r, [] (float t) { return std::sin (t * 12.566f) * 0.9f; }, Theme::dim().withAlpha (0.5f), 1.2f);
+            if (n > 1) drawWave (g, r, [&wave, n] (float t) { return wave[(size_t) juce::jlimit (0, (int) n - 1, (int) (t * (float) (n - 1)))]; }, accent, 2.0f);
+            g.setFont (Theme::font (9.0f)); g.setColour (Theme::dim());
+            g.drawText ("worked out from the circuit:  test sine -0.9 dBFS at 1 kHz  ->  out " + juce::String (reading.levelDb + 20.0 * std::log10 (0.9), 1) + " dBFS (level-matched)", caption.toNearestInt(), juce::Justification::centredLeft, true);
+        }
+        SqVoltagePlugin::Reading reading; bool have = false, lastCap = false, lastTube = false; float lastDrive = 0, lastBias = 0;
+    };
+
     struct SatViz : public Viz
     {
         using Viz::Viz;
@@ -1791,7 +1836,7 @@ namespace Skins
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, voltage, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -1836,6 +1881,7 @@ namespace Skins
         else if (name == "Snap Transient") { s.family = Family::transient; s.knob = KnobStyle::flat; s.groups = { G ("TRANSIENT", { "Point", "Reaction Speed" }, true), G ("INPUT", { "Input Trim" }) }; }
         else if (name == "Pop Knock")     { s.family = Family::transient; s.knob = KnobStyle::chicken; s.groups = { G ("KNOCK", { "Intenst", "Output" }, true) }; }
         else if (name == "Ember Tape")    { s.family = Family::tape; s.knob = KnobStyle::vintage; s.width = 700; s.groups = { G ("TAPE", { "Louder", "Softer", "Fatter", "Flutter" }, true), G ("OUTPUT", { "Output" }) }; }
+        else if (name == "Voltage")       { s.family = Family::voltage; s.knob = KnobStyle::vintage; s.groups = { G ("STAGE", { "Drive", "Bias" }, true), G ("CIRCUIT", { "Cathode Cap", "Tube" }), G ("OUTPUT", { "Output", "Mix" }) }; }
         else if (name == "Scorch Drive")  { s.family = Family::sat; s.knob = KnobStyle::chicken; s.groups = { G ("DRIVE", { "Drive", "Highpass", "Out Level" }, true) }; }
         else if (name == "Lumen Channel" || name == "Lumen Buss") { s.family = Family::console; s.knob = KnobStyle::vintage; s.groups = { G ("CONSOLE", { "Input" }, true) }; }
         else if (name == "Ashen Desk")    { s.family = Family::sat; s.knob = KnobStyle::vintage; s.groups = { G ("DESK", { "Overdrive", "Hi Choke", "Power Sag", "Frequency" }, true), G ("OUTPUT", { "Output Trim" }) }; }
@@ -3393,6 +3439,7 @@ namespace Skins
                 case Family::chrysalis2: viz = std::make_unique<Chrysalis2Viz> (handles, plugin, accent); break;
                 case Family::mandible:  viz = std::make_unique<MandibleViz> (handles, plugin, accent); break;
                 case Family::pollen:    { auto pv = std::make_unique<PollenViz> (handles, plugin, accent); pv->onChange = [this] { repaintControls(); }; viz = std::move (pv); break; }
+                case Family::voltage:   viz = std::make_unique<VoltageViz> (handles, plugin, accent); break;
                 case Family::generic:   break;
             }
             if (viz) addAndMakeVisible (*viz);

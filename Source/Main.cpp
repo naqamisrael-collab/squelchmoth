@@ -261,6 +261,7 @@ public:
         engine->getPluginManager().createBuiltInType<SqSibylDeEssPlugin>();
         engine->getPluginManager().createBuiltInType<SqPortcullisGatePlugin>();
         engine->getPluginManager().createBuiltInType<SqKilnPlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltagePlugin>();
         engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
         engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
         engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
