@@ -1276,7 +1276,7 @@ namespace Skins
         void timerCallback() override
         {
             auto* vp = dynamic_cast<SqVoltageBrigadePlugin*> (&plugin); if (vp == nullptr) return;
-            const float key[4] = { vp->stages->getCurrentValue(), vp->time->getCurrentValue(), vp->tone->getCurrentValue(), vp->feedback->getCurrentValue() };
+            const bool synced = vp->sync->getCurrentValue() >= 0.5f; const float key[4] = { vp->stages->getCurrentValue(), synced ? vp->currentAskedMs() : vp->time->getCurrentValue(), vp->tone->getCurrentValue(), vp->feedback->getCurrentValue() };
             bool changed = ! have; for (int i = 0; i < 4; ++i) changed = changed || key[i] != last[i];
             if (changed) { reading = SqVoltageBrigadePlugin::measure (juce::roundToInt (key[0]), key[1], key[2], key[3]); for (int i = 0; i < 4; ++i) last[i] = key[i]; have = true; repaint(); }
             const float ck = vp->currentClockHz(); if (std::abs (ck - shownClock) > 20.0f) { shownClock = ck; repaint(); }
@@ -1318,6 +1318,57 @@ namespace Skins
             g.drawText ("from the chip's arithmetic:  the 1st repeat (bright line) and the 4th (faint) in dB against Hz;  shaded: above half the clock, where it folds over", caption.toNearestInt(), juce::Justification::centredLeft, true);
         }
         SqVoltageBrigadePlugin::Reading reading; bool have = false; float last[4] = {}, shownClock = 0;
+    };
+    /** Voltage Spring: the numbers and the picture come from the springs' own arithmetic at the present settings. The picture is
+        what a spring does to a click: each trip down the coil arrives later the higher the pitch, up to where waves stop travelling. */
+    struct VoltageSpringViz : public Viz, private juce::Timer
+    {
+        VoltageSpringViz (HandleMap& hm, te::Plugin& p, juce::Colour c) : Viz (hm, p, c) { startTimerHz (8); }
+        void timerCallback() override
+        {
+            auto* vp = dynamic_cast<SqVoltageSpringPlugin*> (&plugin); if (vp == nullptr) return;
+            const float key[5] = { vp->tank->getCurrentValue(), vp->length->getCurrentValue(), vp->decay->getCurrentValue(), vp->damping->getCurrentValue(), vp->lowCut->getCurrentValue() };
+            bool changed = ! have; for (int i = 0; i < 5; ++i) changed = changed || key[i] != last[i];
+            if (changed) { reading = SqVoltageSpringPlugin::measure (vp->unit.get(), juce::roundToInt (key[0]), key[1], key[2], key[3], key[4]); for (int i = 0; i < 5; ++i) last[i] = key[i]; have = true; repaint(); }
+        }
+        void paint (juce::Graphics& g) override
+        {
+            auto r = getLocalBounds().toFloat().reduced (6.0f);
+            auto left = r.removeFromLeft (juce::jmin (225.0f, r.getWidth() * 0.38f)).reduced (4.0f); r.removeFromLeft (8.0f);
+            auto caption = r.removeFromTop (16.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.5f)); g.fillRoundedRectangle (left, 4.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.6f)); g.fillRoundedRectangle (r.getUnion (caption).expanded (4.0f, 2.0f), 4.0f);
+            if (! have) return;
+            g.setFont (Theme::font (9.0f));
+            auto row = [&] (int i, const juce::String& label, const juce::String& value, juce::Colour c)
+            {
+                auto line = left.reduced (8.0f, 6.0f).withHeight (15.0f).translated (0.0f, (float) i * 16.0f);
+                g.setColour (Theme::dim()); g.drawText (label, line.toNearestInt(), juce::Justification::centredLeft);
+                g.setColour (c); g.drawText (value, line.toNearestInt(), juce::Justification::centredRight);
+            };
+            juce::String echoes, turns; for (int i = 0; i < reading.springs; ++i) { echoes += (i ? " / " : "") + juce::String (reading.echoMs[i], 1); turns += (i ? " / " : "") + juce::String (reading.transitionHz[i] / 1000.0, 2); }
+            row (0, "SPRINGS", juce::String (reading.springs), accent);
+            row (1, "ECHO EVERY", echoes + " ms", Theme::text());
+            row (2, "CHIRPS TOP OUT AT", turns + " kHz", Theme::text());
+            row (3, "MODES SOUNDING", juce::String (reading.modes), accent.withAlpha (0.85f));
+            row (4, "60 dB DOWN, 500 Hz", juce::String (reading.decayLow, 2) + " s", Theme::text());
+            row (5, "60 dB DOWN, 5 kHz", juce::String (reading.decayHigh, 2) + " s", Theme::text());
+            // arrival time (across, ms) against pitch (up, kHz) for the first three trips down each spring
+            auto plot = r.reduced (6.0f, 4.0f); float maxMs = 60.0f, maxK = 4.0f; for (int i = 0; i < reading.springs; ++i) { maxMs = juce::jmax (maxMs, (float) reading.echoMs[i] * 2.6f); maxK = juce::jmax (maxK, (float) reading.transitionHz[i] / 1000.0f * 1.08f); }
+            auto px = [&] (float ms) { return plot.getX() + juce::jlimit (0.0f, 1.0f, ms / maxMs) * plot.getWidth(); };
+            auto py = [&] (float khz) { return plot.getBottom() - juce::jlimit (0.0f, 1.0f, khz / maxK) * plot.getHeight(); };
+            g.setFont (Theme::font (8.0f));
+            for (float ms = 50.0f; ms < maxMs; ms += 50.0f) { g.setColour (Theme::dim().withAlpha (0.25f)); g.drawVerticalLine (juce::roundToInt (px (ms)), plot.getY(), plot.getBottom()); g.setColour (Theme::dim()); g.drawText (juce::String (juce::roundToInt (ms)), juce::Rectangle<float> (px (ms) - 14.0f, plot.getBottom() - 11.0f, 28.0f, 10.0f).toNearestInt(), juce::Justification::centred); }
+            for (float kz = 1.0f; kz < maxK; kz += 1.0f) { g.setColour (Theme::dim().withAlpha (0.25f)); g.drawHorizontalLine (juce::roundToInt (py (kz)), plot.getX(), plot.getRight()); g.setColour (Theme::dim()); g.drawText (juce::String (juce::roundToInt (kz)) + "k", juce::Rectangle<float> (plot.getX() + 1.0f, py (kz) - 5.0f, 22.0f, 10.0f).toNearestInt(), juce::Justification::centredLeft); }
+            for (int i = 0; i < reading.springs; ++i) for (int trip = 1; trip <= 5; trip += 2)
+            {
+                juce::Path p; bool started = false; for (int j = 0; j < 24; ++j) { const float ms = reading.curveMs[i][j] * (float) trip; if (ms > maxMs) break; const float x = px (ms), y = py (reading.curveHz[i][j] / 1000.0f); if (! started) { p.startNewSubPath (x, y); started = true; } else p.lineTo (x, y); }
+                g.setColour (accent.withRotatedHue (0.06f * (float) i).withAlpha (trip == 1 ? 1.0f : trip == 3 ? 0.6f : 0.35f)); g.strokePath (p, juce::PathStrokeType (trip == 1 ? 2.0f : 1.4f));
+            }
+            g.setFont (Theme::font (9.0f)); g.setColour (Theme::text().withAlpha (0.8f));
+            g.drawText ("from the springs' equations:  when each pitch (up, kHz) reaches the far end (across, ms) on its 1st, 2nd and 3rd pass - every echo is a chirp", caption.toNearestInt(), juce::Justification::centredLeft, true);
+        }
+        SqVoltageSpringPlugin::Reading reading; bool have = false; float last[5] = {};
     };
     /** Voltage Tape: the numbers and the wave come from the machine's own parts at its present settings. */
     struct VoltageTapeViz : public Viz, private juce::Timer
@@ -2222,7 +2273,7 @@ namespace Skins
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, voltage, voltagePower, voltageTape, voltageConsole, voltageClip, voltageComp, voltageOpto, voltageMu, voltageBrigade, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, voltage, voltagePower, voltageTape, voltageConsole, voltageClip, voltageComp, voltageOpto, voltageMu, voltageBrigade, voltageSpring, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -2273,7 +2324,8 @@ namespace Skins
         else if (name == "Voltage Comp")  { s.family = Family::voltageComp; s.knob = KnobStyle::vintage; s.width = 820; s.groups = { G ("LEVEL", { "Input", "Output" }, true), G ("COMPRESSION", { "Ratio", "Attack", "Release" }), G ("OUTPUT", { "Mix", "Quality" }) }; }
         else if (name == "Voltage Opto")  { s.family = Family::voltageOpto; s.knob = KnobStyle::vintage; s.width = 760; s.groups = { G ("LEVELLING", { "Reduction", "Gain" }, true), G ("CHARACTER", { "Mode" }), G ("OUTPUT", { "Mix", "Quality" }) }; }
         else if (name == "Voltage Mu")    { s.family = Family::voltageMu; s.knob = KnobStyle::vintage; s.width = 900; s.groups = { G ("LEVEL", { "Input", "Threshold", "Output" }, true), G ("TIMING", { "Attack", "Recovery", "Mode" }), G ("OUTPUT", { "Mix", "Quality" }) }; }
-        else if (name == "Voltage Brigade") { s.family = Family::voltageBrigade; s.knob = KnobStyle::vintage; s.width = 980; s.groups = { G ("ECHO", { "Time", "Feedback", "Stages", "Tone" }, true), G ("CLOCK WOBBLE", { "Rate", "Depth", "Width" }), G ("OUTPUT", { "Mix", "Output", "Quality" }) }; }
+        else if (name == "Voltage Brigade") { s.family = Family::voltageBrigade; s.knob = KnobStyle::vintage; s.width = 1080; s.groups = { G ("ECHO", { "Time", "Sync", "Feedback", "Stages", "Tone" }, true), G ("CLOCK WOBBLE", { "Rate", "Depth", "Width" }), G ("OUTPUT", { "Mix", "Output", "Quality" }) }; }
+        else if (name == "Voltage Spring") { s.family = Family::voltageSpring; s.knob = KnobStyle::vintage; s.width = 940; s.groups = { G ("TANK", { "Tank", "Length" }, true), G ("RING", { "Decay", "Damping", "Low Cut" }), G ("OUTPUT", { "Width", "Mix", "Output" }) }; }
         else if (name == "Voltage Tape")  { s.family = Family::voltageTape; s.knob = KnobStyle::vintage; s.width = 820; s.groups = { G ("TAPE", { "Drive", "Bias" }, true), G ("MACHINE", { "Speed", "EQ", "Head Bump" }), G ("TRANSPORT", { "Wow", "Flutter" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Voltage Power") { s.family = Family::voltagePower; s.knob = KnobStyle::vintage; s.groups = { G ("STAGE", { "Drive", "Bias", "Tube" }, true), G ("TRANSFORMER", { "Load", "Iron" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Scorch Drive")  { s.family = Family::sat; s.knob = KnobStyle::chicken; s.groups = { G ("DRIVE", { "Drive", "Highpass", "Out Level" }, true) }; }
@@ -3840,6 +3892,7 @@ namespace Skins
                 case Family::voltageOpto: viz = std::make_unique<VoltageOptoViz> (handles, plugin, accent); break;
                 case Family::voltageMu: viz = std::make_unique<VoltageMuViz> (handles, plugin, accent); break;
                 case Family::voltageBrigade: viz = std::make_unique<VoltageBrigadeViz> (handles, plugin, accent); break;
+                case Family::voltageSpring: viz = std::make_unique<VoltageSpringViz> (handles, plugin, accent); break;
                 case Family::voltageClip: viz = std::make_unique<VoltageClipViz> (handles, plugin, accent); break;
                 case Family::voltageConsole: viz = std::make_unique<VoltageConsoleViz> (handles, plugin, accent); break;
                 case Family::generic:   break;

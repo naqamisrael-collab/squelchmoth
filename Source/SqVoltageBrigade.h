@@ -3,7 +3,8 @@
 // The delay comes from a chip that passes each sample along a row of buckets, one step per clock edge:
 // delay = stages / (2 x clock). Time moves the clock (between 5 and 100 kHz), so a longer delay is a slower clock:
 // darker, and above half the clock rate the sound folds over - the dirt these echoes are loved for. Turning Time
-// while it plays bends the pitch, and Rate / Depth wobble the clock for chorus and vibrato. Feedback sends the
+// while it plays bends the pitch, and Rate / Depth wobble the clock for chorus and vibrato. Sync sets the delay to a
+// note length at the session's tempo instead of the Time knob (still held inside what the chip's clock can do). Feedback sends the
 // output round again through the chip and both filters, so every repeat is darker and a little more bent; past
 // 100 % it feeds itself and howls, held by the buckets' own limit.
 // Tone is the corner of the two analog filters round the chip. Every instance has its own chips and capacitors.
@@ -22,7 +23,7 @@ public:
     {
         auto um = getUndoManager();
         timeV.referTo (state, "time", um, 180.0f); stagesV.referTo (state, "stages", um, 2.0f); feedbackV.referTo (state, "feedback", um, 35.0f); toneV.referTo (state, "tone", um, 4.5f);
-        rateV.referTo (state, "rate", um, 0.5f); depthV.referTo (state, "depth", um, 0.0f); widthV.referTo (state, "width", um, 0.0f);
+        syncV.referTo (state, "sync", um, 0.0f); rateV.referTo (state, "rate", um, 0.5f); depthV.referTo (state, "depth", um, 0.0f); widthV.referTo (state, "width", um, 0.0f);
         mixV.referTo (state, "mix", um, 30.0f); outputV.referTo (state, "output", um, 0.0f); qualityV.referTo (state, "quality", um, 0.0f); unit.referTo (state, "unit", nullptr, 0);
         if (unit.get() == 0) unit = 1 + juce::Random::getSystemRandom().nextInt (1000000);
         auto db = [] (float v) { return juce::String (v, 1) + " dB"; };
@@ -33,6 +34,8 @@ public:
         time     = addParam ("time",     TRANS("Time"),     timeRange, [] (float v) { return (v < 10.0f ? juce::String (v, 1) : juce::String (juce::roundToInt (v))) + " ms"; }, num);
         stages   = addParam ("stages",   TRANS("Stages"),   { 0.0f, 3.0f, 1.0f }, [] (float v) { return juce::String (stagesAt (juce::roundToInt (v))); },
                              [] (const juce::String& s) { const int n = s.retainCharacters ("0123456789").getIntValue(); return n >= 6000 ? 3.0f : n >= 2500 ? 2.0f : n >= 600 ? 1.0f : n >= 4 ? 0.0f : (float) juce::jlimit (0, 3, n); });
+        sync     = addParam ("sync",     TRANS("Sync"),     { 0.0f, 7.0f, 1.0f }, [] (float v) { return syncNames()[juce::jlimit (0, 7, juce::roundToInt (v))]; },
+                             [] (const juce::String& s) { const auto t = s.trim().toLowerCase().removeCharacters (" "); const auto names = syncNames(); for (int i = 0; i < names.size(); ++i) if (names[i].toLowerCase().removeCharacters (" ") == t) return (float) i; return t.startsWith ("o") ? 0.0f : (float) juce::jlimit (0, 7, t.getIntValue()); });
         feedback = addParam ("feedback", TRANS("Feedback"), { 0.0f, 110.0f }, pct, num);
         tone     = addParam ("tone",     TRANS("Tone"),     { 1.5f, 12.0f }, [] (float v) { return juce::String (v, 1) + " kHz"; }, num);
         rate     = addParam ("rate",     TRANS("Rate"),     rateRange, [] (float v) { return juce::String (v, 2) + " Hz"; }, num);
@@ -41,14 +44,14 @@ public:
         mix      = addParam ("mix",      TRANS("Mix"),      { 0.0f, 100.0f }, pct, num);
         output   = addParam ("output",   TRANS("Output"),   { -24.0f, 12.0f }, db, num);
         quality  = addParam ("quality",  TRANS("Quality"),  { 0.0f, 2.0f, 1.0f }, [] (float v) { return SqVoltagePlugin::qualityNames()[juce::jlimit (0, 2, juce::roundToInt (v))]; }, [] (const juce::String& s) { return SqVoltagePlugin::qualityFromText (s); });
-        time->attachToCurrentValue (timeV); stages->attachToCurrentValue (stagesV); feedback->attachToCurrentValue (feedbackV); tone->attachToCurrentValue (toneV); rate->attachToCurrentValue (rateV);
+        time->attachToCurrentValue (timeV); sync->attachToCurrentValue (syncV); stages->attachToCurrentValue (stagesV); feedback->attachToCurrentValue (feedbackV); tone->attachToCurrentValue (toneV); rate->attachToCurrentValue (rateV);
         depth->attachToCurrentValue (depthV); width->attachToCurrentValue (widthV); mix->attachToCurrentValue (mixV); output->attachToCurrentValue (outputV); quality->attachToCurrentValue (qualityV);
     }
 
     ~SqVoltageBrigadePlugin() override
     {
         notifyListenersOfDeletion();
-        for (auto* p : { time.get(), stages.get(), feedback.get(), tone.get(), rate.get(), depth.get(), width.get(), mix.get(), output.get(), quality.get() }) p->detachFromCurrentValue();
+        for (auto* p : { time.get(), sync.get(), stages.get(), feedback.get(), tone.get(), rate.get(), depth.get(), width.get(), mix.get(), output.get(), quality.get() }) p->detachFromCurrentValue();
     }
 
     static const char* getPluginName()                  { return NEEDS_TRANS("Voltage Brigade"); }
@@ -66,6 +69,10 @@ public:
     int getNumOutputChannelsGivenInputs (int n) override { return juce::jmin (n, 2); }
     BusLayout getBusses() const override                { return BusLayout::singleStereoInOut(); }
 
+    static juce::StringArray syncNames() { return { "Off", "1/32", "1/16", "1/8 T", "1/8", "1/8 D", "1/4", "1/2" }; }
+    static double syncBeats (int ix) { static const double b[8] = { 0.0, 0.125, 0.25, 1.0 / 3.0, 0.5, 0.75, 1.0, 2.0 }; return b[juce::jlimit (0, 7, ix)]; }
+    /** The delay asked for in ms: the Time knob, or with Sync on that note length at the session's tempo. */
+    static double askedMs (float timeKnobMs, int syncIx, double bpm) { return syncIx > 0 ? syncBeats (syncIx) * 60000.0 / juce::jmax (20.0, bpm) : (double) timeKnobMs; }
     static int stagesAt (int ix) { static const int n[4] = { 256, 1024, 4096, 8192 }; return n[juce::jlimit (0, 3, ix)]; }
     /** The clock that gives this delay with this many stages, kept inside the range the chip is run at. */
     static double clockFor (int stageCount, double timeMs) { return juce::jlimit (clockLow, clockHigh, stageCount / (2.0 * juce::jmax (0.01, timeMs) / 1000.0)); }
@@ -120,7 +127,8 @@ public:
         auto& buf = *fc.destBuffer; const int nch = juce::jmin (2, buf.getNumChannels()), q = juce::jlimit (0, 2, juce::roundToInt (quality->getCurrentValue()));
         const int stageIx = juce::roundToInt (stages->getCurrentValue()), stageCount = stagesAt (stageIx);
         if (stageIx != stagesWas) { for (auto& c : chan) for (int k = 0; k < 3; ++k) { c.line[k].setStages (stageCount); c.line[k].reset(); c.last[k] = 0.0; } stagesWas = stageIx; }
-        const double trim = tolerance (unit.get(), 0, 0, 0.01), target = clockFor (stageCount, (double) time->getCurrentValue()) * trim; if (clockNow <= 0.0) clockNow = target;
+        const double bpm = edit.tempoSequence.getBpmAt (fc.editTime.getStart()), asked = askedMs (time->getCurrentValue(), juce::roundToInt (sync->getCurrentValue()), bpm); askedShown.store ((float) asked);
+        const double trim = tolerance (unit.get(), 0, 0, 0.01), target = clockFor (stageCount, asked) * trim; if (clockNow <= 0.0) clockNow = target;
         const double glide = 1.0 - std::exp (-1.0 / (0.03 * sampleRate));       // the clock's own smoothing: moving Time bends the pitch for a moment, as on the hardware
         for (int ch = 0; ch < 2; ++ch) for (int k = 0; k < 3; ++k) chan[ch].line[k].setCutoff (1000.0 * (double) tone->getCurrentValue() * tolerance (unit.get(), 1, ch, 0.03));
         const double fb = juce::jlimit (0.0, 1.1, (double) feedback->getCurrentValue() / 100.0), wobble = wobbleAtFull * juce::jlimit (0.0, 1.0, (double) depth->getCurrentValue() / 100.0);
@@ -143,21 +151,23 @@ public:
 
     /** The clock right now in hertz (before the wobble), for the face. */
     float currentClockHz() const { return clockShown.load(); }
+    /** The delay being asked for right now in ms (the knob, or the synced note at the tempo), for the face. */
+    float currentAskedMs() const { return askedShown.load(); }
 
     void restorePluginStateFromValueTree (const juce::ValueTree& v) override
     {
-        te::copyPropertiesToCachedValues (v, timeV, stagesV, feedbackV, toneV, rateV, depthV, widthV, mixV, outputV, qualityV);
+        te::copyPropertiesToCachedValues (v, timeV, syncV, stagesV, feedbackV, toneV, rateV, depthV, widthV, mixV, outputV, qualityV);
         te::copyPropertiesToCachedValues (v, unit);
         for (auto p : getAutomatableParameters()) p->updateFromAttachedValue();
     }
 
-    juce::CachedValue<float> timeV, stagesV, feedbackV, toneV, rateV, depthV, widthV, mixV, outputV, qualityV;
+    juce::CachedValue<float> timeV, syncV, stagesV, feedbackV, toneV, rateV, depthV, widthV, mixV, outputV, qualityV;
     juce::CachedValue<int> unit;
-    te::AutomatableParameter::Ptr time, stages, feedback, tone, rate, depth, width, mix, output, quality;
+    te::AutomatableParameter::Ptr time, sync, stages, feedback, tone, rate, depth, width, mix, output, quality;
 
 private:
     struct Channel { SqTube::Oversampler os[3]; SqBbd::Line line[3]; double last[3] = {}; std::vector<float> dry; int dryPos = 0; };
-    Channel chan[2]; double sampleRate = 44100.0, clockNow = 0.0, phase = 0.0; int stagesWas = -1; std::atomic<float> clockShown { 0.0f };
+    Channel chan[2]; double sampleRate = 44100.0, clockNow = 0.0, phase = 0.0; int stagesWas = -1; std::atomic<float> clockShown { 0.0f }, askedShown { 180.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SqVoltageBrigadePlugin)
 };

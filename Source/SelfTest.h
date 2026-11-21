@@ -70,6 +70,7 @@ inline int runSelfTest()
         engine->getPluginManager().createBuiltInType<SqVoltageOptoPlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageMuPlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageBrigadePlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltageSpringPlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
@@ -6090,14 +6091,14 @@ inline int runSelfTest()
             {
                 const double sr = 44100.0, twoPi = juce::MathConstants<double>::twoPi; const int lat = SqVoltageBrigadePlugin::delaySamples;
                 struct Out { std::vector<float> l, r; };
-                struct Set { float time = 100, feedback = 0, tone = 4.5f, rate = 0.5f, depth = 0, width = 0, mix = 100, output = 0; int stages = 2, quality = 0, unit = 1234; };
+                struct Set { float time = 100, feedback = 0, tone = 4.5f, rate = 0.5f, depth = 0, width = 0, mix = 100, output = 0; int stages = 2, quality = 0, unit = 1234, sync = 0; };
                 auto render = [&] (const Set& st, int N, const std::function<float (int)>& left, const std::function<float (int)>& right)
                 {
                     Out o; auto twin = session->edit->getPluginCache().createNewPlugin (SqVoltageBrigadePlugin::xmlTypeName, {});
                     if (auto* tw = dynamic_cast<SqVoltageBrigadePlugin*> (twin.get()))
                     {
                         tw->unit = st.unit; auto setp = [] (te::AutomatableParameter::Ptr& p, float v) { p->setParameter (v, juce::dontSendNotification); };
-                        setp (tw->quality, (float) st.quality); setp (tw->time, st.time); setp (tw->stages, (float) st.stages); setp (tw->feedback, st.feedback); setp (tw->tone, st.tone); setp (tw->rate, st.rate); setp (tw->depth, st.depth); setp (tw->width, st.width); setp (tw->mix, st.mix); setp (tw->output, st.output);
+                        setp (tw->quality, (float) st.quality); setp (tw->time, st.time); setp (tw->sync, (float) st.sync); setp (tw->stages, (float) st.stages); setp (tw->feedback, st.feedback); setp (tw->tone, st.tone); setp (tw->rate, st.rate); setp (tw->depth, st.depth); setp (tw->width, st.width); setp (tw->mix, st.mix); setp (tw->output, st.output);
                         tw->baseClassInitialise ({ te::TimePosition(), sr, 512 });
                         juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
                         for (int q = 0; q + 512 <= N; q += 512)
@@ -6148,6 +6149,13 @@ inline int runSelfTest()
                 Set wide = vib; wide.width = 100.0f; const auto wd = both (wide, 0.2f, 1000.0, 88200); double dNarrow = 0, dWide = 0; for (size_t i = 44100; i < vb.l.size(); ++i) { dNarrow = std::max (dNarrow, (double) std::abs (vb.l[i] - vb.r[i])); dWide = std::max (dWide, (double) std::abs (wd.l[i] - wd.r[i])); }
                 check ((fhi - flo) / 2 > 13.0 && (fhi - flo) / 2 < 19.0 && dWide > 0.05 && dWide > 5.0 * dNarrow,
                        "Depth 20 % at 5 Hz through 1024 stages swings a 1 kHz tone " + juce::String ((fhi - flo) / 2, 1) + " Hz either way (the arithmetic says about 16); Width 100 % sets the two sides against each other (they differ by " + juce::String (dWide, 3) + ", against " + juce::String (dNarrow, 4) + " at Width 0)");
+                // Sync: the delay is a note length at the session's tempo, exactly as if Time had been set to it
+                {
+                    const double bpm = session->edit->tempoSequence.getBpmAt (te::TimePosition()), eighth = 30000.0 / bpm; Set synced = base; synced.stages = 3; synced.sync = 4; synced.time = 30.0f; Set byHand = base; byHand.stages = 3; byHand.time = (float) eighth;
+                    const auto ys = render (synced, 22016, burst, burst), yh = render (byHand, 22016, burst, burst); double worstSync = 0, heard = 0; for (size_t i = 0; i < ys.l.size(); ++i) { worstSync = std::max (worstSync, (double) std::abs (ys.l[i] - yh.l[i])); heard = std::max (heard, (double) std::abs (ys.l[i])); }
+                    check (worstSync < 1.0e-6 && heard > 0.05 && SqVoltageBrigadePlugin::syncNames()[4] == "1/8" && std::abs (SqVoltageBrigadePlugin::askedMs (30.0f, 5, 120.0) - 375.0) < 1.0e-9 && std::abs (SqVoltageBrigadePlugin::askedMs (30.0f, 0, 120.0) - 30.0) < 1.0e-9,
+                           "Sync 1/8 at the session's " + juce::String (bpm, 1) + " BPM gives the same sound as Time set by hand to " + juce::String (eighth, 1) + " ms (largest difference " + juce::String (worstSync, 8) + "); a dotted eighth at 120 BPM asks for 375 ms; Sync off leaves the knob in charge");
+                }
                 Set dryS = base; dryS.mix = 0.0f; dryS.feedback = 60.0f; const auto dry = both (dryS, 0.5f, 1000.0, 33075); double worstDry = 0; for (int i = 2000; i < 30000; ++i) worstDry = std::max (worstDry, std::abs ((double) dry.l[(size_t) i] - 0.5 * std::sin (twoPi * 1000.0 * (i - lat) / sr)));
                 Set other = base; other.unit = 99999; Set hq = base; hq.quality = 2; Set up = base; up.output = 6.0f; const auto a1 = both (base, 0.5f, 1000.0, 22050), a2 = both (base, 0.5f, 1000.0, 22050);
                 double same = 0; for (size_t i = 0; i < a1.l.size(); ++i) same = std::max (same, (double) std::abs (a1.l[i] - a2.l[i]));
@@ -6158,10 +6166,88 @@ inline int runSelfTest()
                 int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmVoltageBrigade") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
                 const auto pp = call ("plugin_presets", R"({"track":"Audio 1","slot":"Voltage Brigade","preset":"Wide Chorus"})");
                 const bool presetOk = pp.contains ("Wide Chorus") && vp->stages->getCurrentValueAsString() == "256" && std::abs (vp->width->getCurrentValue() - 100.0f) < 0.01f;
-                call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Brigade","params":[{"param":"Stages","text":"8192"},{"param":"Time","text":"400"},{"param":"Feedback","text":"50"},{"param":"Quality","text":"8x"}]})");
-                check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && vp->stages->getCurrentValueAsString() == "8192" && std::abs (vp->time->getCurrentValue() - 400.0f) < 0.5f && std::abs (vp->feedback->getCurrentValue() - 50.0f) < 0.01f && juce::roundToInt (vp->quality->getCurrentValue()) == 1
+                call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Brigade","params":[{"param":"Stages","text":"8192"},{"param":"Time","text":"400"},{"param":"Feedback","text":"50"},{"param":"Sync","text":"1/8 D"},{"param":"Quality","text":"8x"}]})");
+                check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && vp->stages->getCurrentValueAsString() == "8192" && std::abs (vp->time->getCurrentValue() - 400.0f) < 0.5f && std::abs (vp->feedback->getCurrentValue() - 50.0f) < 0.01f && juce::roundToInt (vp->quality->getCurrentValue()) == 1 && vp->sync->getCurrentValueAsString() == "1/8 D"
                        && Edition::packOf ("sqmVoltageBrigade") == Edition::Pack::color && Skins::artFor ("voltagebrigade").isValid(),
-                       "Voltage Brigade has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets the 256-stage chip and full Width, and the assistant sets Stages, Time, Feedback and Quality by name");
+                       "Voltage Brigade has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets the 256-stage chip and full Width, and the assistant sets Stages, Time, Feedback, Sync and Quality by name");
+            }
+        }
+        // ---- 1.47 Voltage Spring: the spring reverb as a plug-in (the spring's modes are checked against the equations stepped directly in time in tests/spring_test.cpp)
+        {
+            call ("new_session", R"({"name":"Selftest Voltage Spring"})");
+            const auto ins = call ("insert_plugin", R"({"track":"Audio 1","plugin":"Voltage Spring"})");
+            SqVoltageSpringPlugin* vp = nullptr;
+            if (auto tt = session->findTrack ("Audio 1")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqVoltageSpringPlugin*> (pl)) vp = c;
+            check (vp != nullptr && ins.contains ("Voltage Spring") && vp->tank->getCurrentValueAsString() == "Long trio" && vp->decay->getCurrentValueAsString() == "2.5 s" && vp->getLatencySeconds() == 0.0, "Voltage Spring is registered, inserts by name on its first preset (the long trio, 2.5 s) and adds no delay");
+            if (vp != nullptr)
+            {
+                const double sr = 44100.0, twoPi = juce::MathConstants<double>::twoPi;
+                struct Out { std::vector<float> l, r; };
+                struct Set { float length = 100, decay = 2.5f, damping = 4, lowCut = 60, width = 0, mix = 100, output = 0; int tank = 0, unit = 1234; };
+                auto render = [&] (const Set& st, int N, const std::function<float (int)>& left, const std::function<float (int)>& right)
+                {
+                    Out o; auto twin = session->edit->getPluginCache().createNewPlugin (SqVoltageSpringPlugin::xmlTypeName, {});
+                    if (auto* tw = dynamic_cast<SqVoltageSpringPlugin*> (twin.get()))
+                    {
+                        tw->unit = st.unit; auto setp = [] (te::AutomatableParameter::Ptr& p, float v) { p->setParameter (v, juce::dontSendNotification); };
+                        setp (tw->tank, (float) st.tank); setp (tw->length, st.length); setp (tw->decay, st.decay); setp (tw->damping, st.damping); setp (tw->lowCut, st.lowCut); setp (tw->width, st.width); setp (tw->mix, st.mix); setp (tw->output, st.output);
+                        tw->baseClassInitialise ({ te::TimePosition(), sr, 512 });
+                        juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                        for (int q = 0; q + 512 <= N; q += 512)
+                        {
+                            for (int i = 0; i < 512; ++i) { buf.setSample (0, i, left (q + i)); buf.setSample (1, i, right (q + i)); }
+                            te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / sr), te::TimePosition::fromSeconds ((q + 512) / sr)), true, false, true, false);
+                            tw->applyToBuffer (fc);
+                            for (int i = 0; i < 512; ++i) { o.l.push_back (buf.getSample (0, i)); o.r.push_back (buf.getSample (1, i)); }
+                        }
+                        tw->baseClassDeinitialise();
+                    }
+                    return o;
+                };
+                auto same = [&] (const Set& st, int N, const std::function<float (int)>& f) { return render (st, N, f, f); };
+                auto tone = [&] (float amp, double hz) { return std::function<float (int)> ([=] (int i) { return amp * (float) std::sin (twoPi * hz * i / sr); }); };
+                std::vector<float> noise ((size_t) 300000); { juce::Random rng (4242); for (auto& v : noise) v = 0.1f * 1.7320508f * (rng.nextFloat() * 2.0f - 1.0f); }      // white, rms 0.1
+                auto white = std::function<float (int)> ([&noise] (int i) { return i < (int) noise.size() ? noise[(size_t) i] : 0.0f; });
+                auto rms = [&] (const std::vector<float>& y, double fromS, double toS) { double s = 0; int n = 0; for (int i = (int) (fromS * sr); i < (int) (toS * sr) && i < (int) y.size(); ++i) { s += (double) y[(size_t) i] * y[(size_t) i]; ++n; } return 10 * std::log10 (s / juce::jmax (1, n) + 1e-30); };
+                auto lvl = [&] (const std::vector<float>& y, double f) { std::complex<double> acc = 0; const int M = 22050, from = (int) y.size() - M; if (from < 0) return -300.0; for (int i = 0; i < M; ++i) acc += (double) y[(size_t) (from + i)] * std::polar (1.0, -twoPi * f * (from + i) / sr); return 20 * std::log10 (2 * std::abs (acc) / M + 1e-15); };
+                Set base;
+                Set dryS = base; dryS.mix = 0.0f; const auto dry = same (dryS, 22016, white); double worstDry = 0; for (int i = 0; i < 22016; ++i) worstDry = std::max (worstDry, (double) std::abs (dry.l[(size_t) i] - noise[(size_t) i]));
+                // every echo is a chirp: a low burst reaches the far end after half the echo spacing, a high one later
+                const auto spring = SqVoltageSpringPlugin::springFor (1234, 0, 0, 100.0f);
+                auto arrival = [&] (double f) { const double t0 = 0.005, wdt = 0.0012; const auto y = same (base, 4096, std::function<float (int)> ([=] (int i) { const double t = i / sr, x = (t - t0) / wdt; return (float) (std::exp (-0.5 * x * x) * std::sin (twoPi * f * t)); }));
+                    double er = 0, ei = 0, best = 0, at = 0; const double a = std::exp (-1.0 / (0.0005 * sr)); for (int i = 0; i < (int) y.l.size(); ++i) { const double t = i / sr; er = a * er + (1 - a) * y.l[(size_t) i] * std::cos (twoPi * f * t); ei = a * ei + (1 - a) * y.l[(size_t) i] * std::sin (twoPi * f * t); const double env = er * er + ei * ei, arr = t - t0 - 0.0005; if (arr > 0.016 && arr < 0.045 && env > best) { best = env; at = arr; } } return at * 1000.0; };
+                const double aLow = arrival (500.0), aHigh = arrival (3500.0), half = 500.0 * spring.echoSeconds();
+                check (worstDry < 1.0e-7 && std::abs (aLow - half) < 0.06 * half && aHigh > aLow + 5.0 && aHigh < aLow + 11.0,
+                       "Mix at 0 % is the input untouched; through one spring a 500 Hz burst reaches the far end after " + juce::String (aLow, 1) + " ms (half the " + juce::String (2.0 * half, 1) + " ms echo spacing its turns, coil and wire give) and a 3.5 kHz burst " + juce::String (aHigh - aLow, 1) + " ms later still - every echo is a chirp");
+                // decay: after a burst of low noise, the tail falls at the rate asked for
+                std::vector<float> lowNoise ((size_t) 8820); { float a1 = 0, a2 = 0; for (int i = 0; i < 8820; ++i) { a1 += 0.15f * (noise[(size_t) i] * 6.0f - a1); a2 += 0.15f * (a1 - a2); lowNoise[(size_t) i] = a2; } }
+                auto burstIn = std::function<float (int)> ([&lowNoise] (int i) { return i < (int) lowNoise.size() ? lowNoise[(size_t) i] : 0.0f; });
+                Set d1 = base; d1.decay = 1.0f; d1.damping = 12.0f; Set d4 = d1; d4.decay = 4.0f; const auto y1 = same (d1, 88064, burstIn), y4 = same (d4, 88064, burstIn);
+                const double fall1 = rms (y1.l, 0.5, 0.7) - rms (y1.l, 1.5, 1.7), fall4 = rms (y4.l, 0.5, 0.7) - rms (y4.l, 1.5, 1.7);
+                check (fall1 > 54.0 && fall1 < 76.0 && fall4 > 13.5 && fall4 < 19.5, "Decay: the tail of a burst falls " + juce::String (fall1, 1) + " dB in a second at 1 s and " + juce::String (fall4, 1) + " dB at 4 s (60 and 15 for the lowest modes; higher ones die a little faster)");
+                // level: steady noise in comes out at about its own level whatever the decay (the plug-in sets its level from the modes' sum)
+                Set dA = base; dA.decay = 1.0f; Set dB = base; dB.decay = 4.0f; const double lA = rms (same (dA, 264600, white).l, 4.0, 5.9), lB = rms (same (dB, 264600, white).l, 4.0, 5.9);
+                check (std::abs (lA + 20.0) < 1.5 && std::abs (lB + 20.0) < 2.0, "steady noise at -20 dB comes out at " + juce::String (lA, 1) + " dB with a 1 s decay and " + juce::String (lB, 1) + " dB with 4 s: the level is set from the springs' own modes, so a longer decay is longer, not louder");
+                Set cutLo = base; cutLo.lowCut = 20.0f; Set cutHi = base; cutHi.lowCut = 300.0f; const double c20 = lvl (same (cutLo, 132096, tone (0.5f, 70.0)).l, 70.0), c300 = lvl (same (cutHi, 132096, tone (0.5f, 70.0)).l, 70.0);
+                Set trio = base; trio.tank = 2; Set wideS = trio; wideS.width = 100.0f; const auto n0 = same (trio, 44032, white), nw = same (wideS, 44032, white); double dMid = 0, dWide = 0; for (size_t i = 0; i < n0.l.size(); ++i) { dMid = std::max (dMid, (double) std::abs (n0.l[i] - n0.r[i])); dWide = std::max (dWide, (double) std::abs (nw.l[i] - nw.r[i])); }
+                check (c300 < c20 - 10.0 && dMid < 1.0e-6 && dWide > 0.02, "Low Cut at 300 Hz takes a 70 Hz tone down " + juce::String (c20 - c300, 1) + " dB (its modes are left out); Width 0 puts all three springs in the middle (the two sides are the same), Width 100 spreads them (they differ by " + juce::String (dWide, 2) + ")");
+                // it is a sum of resonators: nothing new is made, and twice the input is twice the output
+                Set lin = base; lin.decay = 0.8f; const auto t1 = same (lin, 132096, tone (0.25f, 1000.0)), t2 = same (lin, 132096, tone (0.5f, 1000.0)); const double h2 = lvl (t1.l, 2000.0) - lvl (t1.l, 1000.0), h3 = lvl (t1.l, 3000.0) - lvl (t1.l, 1000.0), dbl = lvl (t2.l, 1000.0) - lvl (t1.l, 1000.0);
+                Set other = base; other.unit = 99999; const auto u1 = same (base, 22016, white), u2 = same (base, 22016, white), u3 = same (other, 22016, white); double sameU = 0, differ = 0; for (size_t i = 0; i < u1.l.size(); ++i) { sameU = std::max (sameU, (double) std::abs (u1.l[i] - u2.l[i])); differ = std::max (differ, (double) std::abs (u1.l[i] - u3.l[i])); }
+                check (h2 < -100.0 && h3 < -100.0 && std::abs (dbl - 6.0206) < 0.001 && sameU < 1.0e-7 && differ > 0.01,
+                       "a tone in is the same tone out and nothing else (2nd and 3rd harmonics " + juce::String (juce::roundToInt (h2)) + " and " + juce::String (juce::roundToInt (h3)) + " dB); twice the input is " + juce::String (dbl, 3) + " dB more out; the same unit is the same every time and two units are wound differently (" + juce::String (differ, 2) + ")");
+                {
+                    const auto shown = SqVoltageSpringPlugin::measure (1234, 2, 100.0f, 2.5f, 4.0f, 60.0f);
+                    check (shown.springs == 3 && shown.modes > 2500 && shown.modes < 3300 && std::abs (shown.echoMs[0] - 40.5) < 1.5 && std::abs (shown.transitionHz[0] - 5038.0) < 150.0 && shown.echoMs[2] > shown.echoMs[0] + 6.0 && std::abs (shown.decayLow - 2.5 / (1.0 + 1.0 / 64.0)) < 0.01 && std::abs (shown.decayHigh - 2.5 / 2.5625) < 0.01 && shown.curveMs[0][23] > 2.0f * shown.curveMs[0][0],
+                           "the face shows the springs' own numbers: three springs, " + juce::String (shown.modes) + " modes sounding, echoes every " + juce::String (shown.echoMs[0], 1) + " / " + juce::String (shown.echoMs[1], 1) + " / " + juce::String (shown.echoMs[2], 1) + " ms, chirps topping out at " + juce::String (juce::roundToInt (shown.transitionHz[0])) + " Hz, 60 dB down in " + juce::String (shown.decayLow, 2) + " s at 500 Hz and " + juce::String (shown.decayHigh, 2) + " s at 5 kHz");
+                }
+                int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmVoltageSpring") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+                const auto pp = call ("plugin_presets", R"({"track":"Audio 1","slot":"Voltage Spring","preset":"Guitar Amp"})");
+                const bool presetOk = pp.contains ("Guitar Amp") && vp->tank->getCurrentValueAsString() == "Short pair" && std::abs (vp->decay->getCurrentValue() - 2.0f) < 0.01f;
+                call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Spring","params":[{"param":"Tank","text":"Single"},{"param":"Decay","text":"3"},{"param":"Low Cut","text":"200"}]})");
+                check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && vp->tank->getCurrentValueAsString() == "Single" && std::abs (vp->decay->getCurrentValue() - 3.0f) < 0.01f && std::abs (vp->lowCut->getCurrentValue() - 200.0f) < 0.5f
+                       && Edition::packOf ("sqmVoltageSpring") == Edition::Pack::color && Skins::artFor ("voltagespring").isValid(),
+                       "Voltage Spring has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset picks the short pair, and the assistant sets Tank, Decay and Low Cut by name");
             }
         }
         // ---- a missing audio file: renders say so instead of waiting for ever
