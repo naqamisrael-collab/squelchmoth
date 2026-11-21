@@ -68,6 +68,7 @@ inline int runSelfTest()
         engine->getPluginManager().createBuiltInType<SqVoltageClipPlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageCompPlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageOptoPlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltageMuPlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
@@ -5988,6 +5989,93 @@ inline int runSelfTest()
                 check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && vp->mode->getCurrentValueAsString() == "Compress" && std::abs (vp->reduce->getCurrentValue() - 70.0f) < 0.01f && juce::roundToInt (vp->quality->getCurrentValue()) == 1
                        && Edition::packOf ("sqmVoltageOpto") == Edition::Pack::color && Skins::artFor ("voltageopto").isValid(),
                        "Voltage Opto has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets Reduction and Limit, and the assistant sets Mode, Reduction and Quality by name");
+            }
+        }
+        // ---- 1.45 Voltage Mu: the variable-mu compressor as a plug-in (the tubes and the loop are checked against a circuit simulator in tests/mu_test.cpp)
+        {
+            call ("new_session", R"({"name":"Selftest Voltage Mu"})");
+            const auto ins = call ("insert_plugin", R"({"track":"Audio 1","plugin":"Voltage Mu"})");
+            SqVoltageMuPlugin* vp = nullptr;
+            if (auto tt = session->findTrack ("Audio 1")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqVoltageMuPlugin*> (pl)) vp = c;
+            check (vp != nullptr && ins.contains ("Voltage Mu") && juce::roundToInt (vp->quality->getCurrentValue()) == 0 && vp->mode->getCurrentValueAsString() == "Compress" && vp->recovery->getCurrentValueAsString() == "0.6 s", "Voltage Mu is registered, inserts by name and starts at 4x in Compress with a 0.6 s recovery");
+            if (vp != nullptr)
+            {
+                const double sr = 44100.0, twoPi = juce::MathConstants<double>::twoPi; const int lat = SqVoltageMuPlugin::delaySamples;
+                struct Out { std::vector<float> l, r; };
+                struct Set { float input = 0, threshold = -14, attack = 50, output = 0, mix = 100; int recovery = 2, mode = 0, quality = 0, unit = 1234; };
+                auto render = [&] (const Set& st, int N, const std::function<float (int)>& left, const std::function<float (int)>& right)
+                {
+                    Out o; auto twin = session->edit->getPluginCache().createNewPlugin (SqVoltageMuPlugin::xmlTypeName, {});
+                    if (auto* tw = dynamic_cast<SqVoltageMuPlugin*> (twin.get()))
+                    {
+                        tw->unit = st.unit; auto setp = [] (te::AutomatableParameter::Ptr& p, float v) { p->setParameter (v, juce::dontSendNotification); };
+                        setp (tw->quality, (float) st.quality); setp (tw->input, st.input); setp (tw->threshold, st.threshold); setp (tw->attack, st.attack); setp (tw->recovery, (float) st.recovery); setp (tw->mode, (float) st.mode); setp (tw->output, st.output); setp (tw->mix, st.mix);
+                        tw->baseClassInitialise ({ te::TimePosition(), sr, 512 });
+                        juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                        for (int q = 0; q + 512 <= N; q += 512)
+                        {
+                            for (int i = 0; i < 512; ++i) { buf.setSample (0, i, left (q + i)); buf.setSample (1, i, right (q + i)); }
+                            te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / sr), te::TimePosition::fromSeconds ((q + 512) / sr)), true, false, true, false);
+                            tw->applyToBuffer (fc);
+                            for (int i = 0; i < 512; ++i) { o.l.push_back (buf.getSample (0, i)); o.r.push_back (buf.getSample (1, i)); }
+                        }
+                        tw->baseClassDeinitialise();
+                    }
+                    return o;
+                };
+                auto tone = [&] (float amp, double hz) { return std::function<float (int)> ([=] (int i) { return amp * (float) std::sin (twoPi * hz * i / sr); }); };
+                auto both = [&] (const Set& st, float amp, double hz, int N = 132300) { return render (st, N, tone (amp, hz), tone (amp, hz)); };
+                auto lvl = [&] (const std::vector<float>& y, double f) { std::complex<double> acc = 0; const int M = 8820, from = (int) y.size() - M; if (from < 0) return -300.0; for (int i = 0; i < M; ++i) acc += (double) y[(size_t) (from + i)] * std::polar (1.0, -twoPi * f * (from + i) / sr); return 20 * std::log10 (2 * std::abs (acc) / M + 1e-15); };
+                auto peakIn = [&] (const std::vector<float>& y, double fromS, double toS) { float p = 0; for (int i = (int) (fromS * sr); i < (int) (toS * sr) && i < (int) y.size(); ++i) p = std::max (p, std::abs (y[(size_t) i])); return 20 * std::log10 ((double) p + 1e-15); };
+                Set base; Set lim = base; lim.mode = 1;
+                const auto quiet = both (base, 0.05f, 1000.0, 22050); const double quietDb = 20 * std::log10 (0.05), q0 = lvl (quiet.l, 1000.0) - quietDb;
+                double corr = 0; for (int i = 11025; i < 11025 + 4410; ++i) corr += (double) quiet.l[(size_t) i] * 0.05 * std::sin (twoPi * 1000.0 * (i - lat) / sr);
+                check (std::abs (q0) < 0.05 && corr > 0 && std::abs (vp->getLatencySeconds() - 96.0 / 44100.0) < 1.0e-9 + 96.0 / 44100.0 * 0.2,
+                       "Voltage Mu leaves a tone under its threshold alone (" + juce::String (q0, 3) + " dB), the right way up and 96 samples late, as it reports");
+                const double fullC = lvl (both (base, 1.0f, 1000.0).l, 1000.0), fullL = lvl (both (lim, 1.0f, 1000.0).l, 1000.0);
+                const double atC = lvl (both (base, 0.2f, 1000.0).l, 1000.0), upC = lvl (both (base, 0.794f, 1000.0).l, 1000.0), atL = lvl (both (lim, 0.2f, 1000.0).l, 1000.0), upL = lvl (both (lim, 0.794f, 1000.0).l, 1000.0);
+                const double ratioC = 11.98 / (upC - atC), ratioL = 11.98 / (upL - atL);
+                check (std::abs (ratioC - 1.5) < 0.15 && std::abs (ratioL - 4.0) < 0.5 && fullL < fullC - 3.0 && fullC < -3.0,
+                       "over the first 12 dB above the threshold Compress measures " + juce::String (ratioC, 2) + " : 1 and Limit " + juce::String (ratioL, 2) + " : 1; a full-scale tone comes out at " + juce::String (fullC, 1) + " and " + juce::String (fullL, 1) + " dBFS");
+                {
+                    const auto shown = SqVoltageMuPlugin::measure (1234, false, -14.0f, 0.0f, 50.0f, 2), shownL = SqVoltageMuPlugin::measure (1234, true, -14.0f, 0.0f, 50.0f, 2);
+                    check (std::abs (shown.reductionAtFull - fullC) < 0.5 && std::abs (shownL.reductionAtFull - fullL) < 0.5 && std::abs (shown.ratio - ratioC) < 0.2 && std::abs (shownL.ratio - ratioL) < 0.5 && shownL.third < -55.0 && shownL.third > -95.0 && shownL.gridsAtFull < -4.0 && shownL.gridsAtFull > -13.5
+                           && std::abs (shown.out[0] - shown.in[0]) < 0.05,
+                           "the face works the same numbers out from the tubes without running the audio: a full-scale tone at " + juce::String (shown.reductionAtFull, 1) + " dB (audio " + juce::String (fullC, 1) + ") and in Limit " + juce::String (shownL.reductionAtFull, 1) + " dB (audio " + juce::String (fullL, 1)
+                           + "), ratios " + juce::String (shown.ratio, 2) + " and " + juce::String (shownL.ratio, 2) + " : 1, grids at " + juce::String (shownL.gridsAtFull, 1) + " V, 3rd harmonic " + juce::String (shownL.third, 0) + " dB");
+                }
+                // recovery: after a loud passage stops, a quiet tone is back quickly at 0.2 s and held down at 8 s
+                auto drop = std::function<float (int)> ([=] (int i) { return (i < (int) (1.5 * sr) ? 1.0f : 0.05f) * (float) std::sin (twoPi * 1000.0 * i / sr); });
+                Set fastR = lim; fastR.recovery = 0; Set slowR = lim; slowR.recovery = 4;
+                const double rFast = peakIn (render (fastR, 88200, drop, drop).l, 1.8, 1.85) - quietDb, rSlow = peakIn (render (slowR, 88200, drop, drop).l, 1.8, 1.85) - quietDb;
+                Set fastA = lim; fastA.attack = 25.0f; Set slowA = lim; slowA.attack = 70.0f;
+                const double pFast = peakIn (both (fastA, 1.0f, 1000.0, 4410).l, 0.005, 0.015), pSlow = peakIn (both (slowA, 1.0f, 1000.0, 4410).l, 0.005, 0.015), pFirst = peakIn (both (fastA, 1.0f, 1000.0, 4410).l, 0.0, 0.004);
+                check (rFast > -3.0 && rSlow < rFast - 5.0 && pSlow > pFast + 1.5 && pFirst > pFast + 3.0,
+                       "Recovery: 0.3 s after a loud passage a quiet tone is " + juce::String (rFast, 1) + " dB down at 0.2 s and " + juce::String (rSlow, 1) + " dB down at 8 s; Attack: a sudden full-scale tone starts at " + juce::String (pFirst, 1) + " dBFS and 5 to 15 ms in has come down to "
+                       + juce::String (pFast, 1) + " at 25 ms and " + juce::String (pSlow, 1) + " at 70 ms - it is slow on purpose");
+                // Input pushes into the threshold and drives the tubes harder
+                Set pushed = lim; pushed.input = 6.0f; const double in6 = lvl (both (pushed, 0.2f, 1000.0).l, 1000.0) - atL;
+                Set clean = base; clean.threshold = 0.0f; Set hot = clean; hot.input = 12.0f; const auto yc = both (clean, 0.2f, 1000.0, 44100), yh = both (hot, 0.2f, 1000.0, 44100);
+                const double h3c = lvl (yc.l, 3000.0) - lvl (yc.l, 1000.0), h3h = lvl (yh.l, 3000.0) - lvl (yh.l, 1000.0), hotGain = lvl (yh.l, 1000.0) - lvl (yc.l, 1000.0);
+                Set loud = base; loud.output = 6.0f; const double up6 = lvl (both (loud, 1.0f, 1000.0).l, 1000.0) - fullC;
+                check (in6 > 0.5 && in6 < 4.0 && h3h > h3c + 15.0 && h3h < -60.0 && std::abs (hotGain - 12.0) < 0.1 && std::abs (up6 - 6.0) < 0.02,
+                       "Input 6 dB up brings a tone at the threshold up only " + juce::String (in6, 1) + " dB in Limit; with no compression Input 12 dB up is " + juce::String (hotGain, 2) + " dB up and the tubes' 3rd harmonic rises from " + juce::String (h3c, 0) + " to " + juce::String (h3h, 0) + " dB; Output 6 dB up is " + juce::String (up6, 2) + " dB up");
+                const auto link = render (lim, 132300, tone (1.0f, 1000.0), tone (0.01f, 700.0)); const double gl = lvl (link.l, 1000.0), gr = lvl (link.r, 700.0) + 40.0;
+                const auto solo = render (lim, 132300, tone (0.0f, 1000.0), tone (1.0f, 700.0)); const double gs = lvl (solo.r, 700.0);
+                check (gl < -8.0 && std::abs (gl - gr) < 0.5 && gs < -8.0, "both channels share one sidechain: a full-scale left (" + juce::String (gl, 2) + " dB) takes a quiet right down with it (" + juce::String (gr, 2) + " dB), and a loud right on its own is compressed too (" + juce::String (gs, 2) + " dB)");
+                Set dryS = lim; dryS.mix = 0.0f; const auto dry = both (dryS, 0.5f, 1000.0, 33075); double worstDry = 0; for (int i = 2000; i < 30000; ++i) worstDry = std::max (worstDry, std::abs ((double) dry.l[(size_t) i] - 0.5 * std::sin (twoPi * 1000.0 * (i - lat) / sr)));
+                Set other = lim; other.unit = 99999; Set hq = lim; hq.quality = 2; const auto a1 = both (lim, 1.0f, 1000.0, 22050), a2 = both (lim, 1.0f, 1000.0, 22050);
+                double same = 0; for (size_t i = 0; i < a1.l.size(); ++i) same = std::max (same, (double) std::abs (a1.l[i] - a2.l[i]));
+                const double dUnit = std::abs (lvl (both (other, 1.0f, 1000.0).l, 1000.0) - fullL), d16 = std::abs (lvl (both (hq, 1.0f, 1000.0).l, 1000.0) - fullL);
+                check (worstDry < 1.0e-5 && dUnit > 0.003 && dUnit < 2.0 && same < 1.0e-6 && d16 < 0.05,
+                       "Mix at 0 % is the input delayed by the same 96 samples; two units differ slightly (" + juce::String (dUnit, 3) + " dB of reduction), the same unit is the same every time, 16x compresses as 4x does (" + juce::String (d16, 3) + " dB apart)");
+                int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmVoltageMu") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+                const auto pp = call ("plugin_presets", R"({"track":"Audio 1","slot":"Voltage Mu","preset":"Bass Bus"})");
+                const bool presetOk = pp.contains ("Bass Bus") && std::abs (vp->threshold->getCurrentValue() + 16.0f) < 0.01f && vp->mode->getCurrentValueAsString() == "Limit";
+                call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Mu","params":[{"param":"Mode","text":"Compress"},{"param":"Recovery","text":"4 s"},{"param":"Threshold","text":"-20"},{"param":"Quality","text":"8x"}]})");
+                check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && vp->mode->getCurrentValueAsString() == "Compress" && vp->recovery->getCurrentValueAsString() == "4 s" && std::abs (vp->threshold->getCurrentValue() + 20.0f) < 0.01f && juce::roundToInt (vp->quality->getCurrentValue()) == 1
+                       && Edition::packOf ("sqmVoltageMu") == Edition::Pack::color && Skins::artFor ("voltagemu").isValid(),
+                       "Voltage Mu has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets Threshold and Limit, and the assistant sets Mode, Recovery, Threshold and Quality by name");
             }
         }
         // ---- a missing audio file: renders say so instead of waiting for ever

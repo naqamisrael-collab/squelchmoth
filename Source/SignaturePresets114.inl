@@ -956,6 +956,18 @@ inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
         A ("Vocal Ceiling",      { N ("Reduction", 65), N ("Gain", 6),  N ("Mode", 1), N ("Mix", 100), N ("Quality", 0) }),
         A ("Parallel Thick",     { N ("Reduction", 85), N ("Gain", 12), N ("Mode", 0), N ("Mix", 40),  N ("Quality", 0) }),
         A ("Pinned",             { N ("Reduction", 90), N ("Gain", 14), N ("Mode", 1), N ("Mix", 100), N ("Quality", 1) }) };
+    m["Voltage Mu"] = {
+        B ("Mix Bus Glue",        { N ("Input", 0), N ("Threshold", -12), N ("Attack", 50), N ("Recovery", 2), N ("Mode", 0), N ("Output", 1.5), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Master Gentle",       { N ("Input", 0), N ("Threshold", -8), N ("Attack", 60), N ("Recovery", 3), N ("Mode", 0), N ("Output", 1), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Drum Bus Weight",     { N ("Input", 3), N ("Threshold", -14), N ("Attack", 25), N ("Recovery", 1), N ("Mode", 0), N ("Output", 2), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Vocal Bus",           { N ("Input", 0), N ("Threshold", -16), N ("Attack", 40), N ("Recovery", 2), N ("Mode", 0), N ("Output", 3), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Piano Warmth",        { N ("Input", 4), N ("Threshold", -12), N ("Attack", 60), N ("Recovery", 2), N ("Mode", 0), N ("Output", 1), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Bass Bus",            { N ("Input", 2), N ("Threshold", -16), N ("Attack", 45), N ("Recovery", 2), N ("Mode", 1), N ("Output", 3), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Strings Hold",        { N ("Input", 0), N ("Threshold", -14), N ("Attack", 70), N ("Recovery", 3), N ("Mode", 0), N ("Output", 2), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Beat Glue",           { N ("Input", 2), N ("Threshold", -12), N ("Attack", 35), N ("Recovery", 1), N ("Mode", 0), N ("Output", 2), N ("Mix", 100), N ("Quality", 0) }),
+        A ("Slow Limiter",        { N ("Input", 0), N ("Threshold", -10), N ("Attack", 25), N ("Recovery", 3), N ("Mode", 1), N ("Output", 3), N ("Mix", 100), N ("Quality", 0) }),
+        A ("Driven Tubes",        { N ("Input", 12), N ("Threshold", -6), N ("Attack", 50), N ("Recovery", 2), N ("Mode", 0), N ("Output", -8), N ("Mix", 100), N ("Quality", 0) }),
+        A ("Parallel Bus",        { N ("Input", 6), N ("Threshold", -24), N ("Attack", 25), N ("Recovery", 0), N ("Mode", 1), N ("Output", 8), N ("Mix", 40), N ("Quality", 0) }) };
     m["Spindle Delay"] = presets114_spindle();
     m["Fissure Filter"] = presets114_fissure();
     m["Mote"] = presets114_mote();
