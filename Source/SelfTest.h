@@ -65,6 +65,7 @@ inline int runSelfTest()
         engine->getPluginManager().createBuiltInType<SqVoltagePowerPlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageTapePlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageConsolePlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltageClipPlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
@@ -5749,6 +5750,79 @@ inline int runSelfTest()
                 check (byHand == 1 && ! ConsoleMode::status (*session).on() && left == 1 && byHandAfter == 1 && off.contains ("removed " + juce::String (tracks + 2)), "Console Mode off removes exactly the ones it placed (" + juce::String (tracks + 2) + ") and leaves the one inserted by hand");
                 session->edit->getUndoManager().undo(); const bool back = ConsoleMode::status (*session).complete(); session->edit->getUndoManager().redo();
                 check (back && ! ConsoleMode::status (*session).on(), "one undo brings the whole console back; redo takes it away again");
+            }
+        }
+        // ---- 1.42 Voltage Clip: the diode clipper as a plug-in (the circuit is checked against a circuit simulator in tests/clip_test.cpp)
+        {
+            call ("new_session", R"({"name":"Selftest Voltage Clip"})");
+            const auto ins = call ("insert_plugin", R"({"track":"Audio 1","plugin":"Voltage Clip"})");
+            SqVoltageClipPlugin* vp = nullptr;
+            if (auto tt = session->findTrack ("Audio 1")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqVoltageClipPlugin*> (pl)) vp = c;
+            check (vp != nullptr && ins.contains ("Voltage Clip") && vp != nullptr && juce::roundToInt (vp->quality->getCurrentValue()) == 1, "Voltage Clip is registered, inserts by name and starts at 8x");
+            if (vp != nullptr)
+            {
+                const double sr = 44100.0; const int N = 44100, lat = SqVoltageClipPlugin::delaySamples;
+                struct Out { std::vector<float> l, r; };
+                struct Set { float drive = 0, tone = 90, mix = 100; int diodes = 0, sym = 0, quality = 1, unit = 1234; };
+                auto render = [&] (const Set& st, float amp, double hz)
+                {
+                    Out o; auto twin = session->edit->getPluginCache().createNewPlugin (SqVoltageClipPlugin::xmlTypeName, {});
+                    if (auto* tw = dynamic_cast<SqVoltageClipPlugin*> (twin.get()))
+                    {
+                        tw->unit = st.unit; auto setp = [] (te::AutomatableParameter::Ptr& p, float v) { p->setParameter (v, juce::dontSendNotification); };
+                        setp (tw->quality, (float) st.quality); setp (tw->drive, st.drive); setp (tw->tone, st.tone); setp (tw->mix, st.mix); setp (tw->diodes, (float) st.diodes); setp (tw->symmetry, (float) st.sym);
+                        tw->baseClassInitialise ({ te::TimePosition(), sr, 512 });
+                        juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                        for (int q = 0; q + 512 <= N; q += 512)
+                        {
+                            for (int i = 0; i < 512; ++i) { const float v = amp * (float) std::sin (juce::MathConstants<double>::twoPi * hz * (q + i) / sr); buf.setSample (0, i, v); buf.setSample (1, i, v); }
+                            te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / sr), te::TimePosition::fromSeconds ((q + 512) / sr)), true, false, true, false);
+                            tw->applyToBuffer (fc);
+                            for (int i = 0; i < 512; ++i) { o.l.push_back (buf.getSample (0, i)); o.r.push_back (buf.getSample (1, i)); }
+                        }
+                        tw->baseClassDeinitialise();
+                    }
+                    return o;
+                };
+                auto bin = [&] (const std::vector<float>& y, double f) { std::complex<double> acc = 0; const int from = 22050, M = 17640; if ((int) y.size() < from + M) return -300.0; for (int i = 0; i < M; ++i) acc += (double) y[(size_t) (from + i)] * std::polar (1.0, -juce::MathConstants<double>::twoPi * f * i / sr); return 20 * std::log10 (2 * std::abs (acc) / M + 1e-15); };
+                auto peak = [] (const std::vector<float>& y) { float p = 0; for (size_t i = 8000; i < y.size(); ++i) p = std::max (p, std::abs (y[i])); return (double) p; };
+                Set base;
+                const auto quiet = render (base, 0.02f, 1000.0); const double inDb = 20 * std::log10 (0.02), lvl = bin (quiet.l, 1000.0);
+                double corr = 0; for (int i = 22050; i < 22050 + 4410; ++i) corr += (double) quiet.l[(size_t) i] * 0.02 * std::sin (juce::MathConstants<double>::twoPi * 1000.0 * (i - lat) / sr);
+                check (std::abs (lvl - inDb) < 0.1 && corr > 0 && std::abs (vp->getLatencySeconds() - 96.0 / 44100.0) < 1.0e-9 + 96.0 / 44100.0 * 0.2,
+                       "Voltage Clip passes a quiet tone at its own level (" + juce::String (lvl - inDb, 3) + " dB), the right way up and 96 samples late, as it reports");
+                // the ceiling: however hard it is driven, the output stays at or under full scale
+                double worstPeak = 0; juce::String peaks;
+                for (float dr : { 0.0f, 12.0f, 30.0f }) for (int dk = 0; dk < 3; ++dk) for (int sy = 0; sy < 2; ++sy) { Set s2 = base; s2.drive = dr; s2.diodes = dk; s2.sym = sy; const double p = peak (render (s2, 1.0f, 220.0).l); worstPeak = std::max (worstPeak, p); if (dk == 0 && sy == 0) peaks += juce::String (20 * std::log10 (p), 2) + " "; }
+                check (worstPeak <= 1.0 && worstPeak > 0.9, "the diodes hold under full scale: a full-scale tone at Drive 0, 12 and 30 dB through every diode pair, even and lopsided, peaks at most " + juce::String (20 * std::log10 (worstPeak), 3) + " dBFS (silicon: " + peaks.trim() + ")");
+                Set hot = base; hot.drive = 12.0f; const auto h = render (hot, 0.7f, 1000.0);
+                const double h3 = bin (h.l, 3000.0) - bin (h.l, 1000.0), h2 = bin (h.l, 2000.0) - bin (h.l, 1000.0);
+                Set lop = hot; lop.sym = 1; const auto hl = render (lop, 0.7f, 1000.0); const double l2 = bin (hl.l, 2000.0) - bin (hl.l, 1000.0);
+                check (h3 > -20.0 && h2 < -70.0 && l2 > -35.0, "driven 12 dB: 3rd harmonic " + juce::String (h3, 1) + " dBc and no 2nd (" + juce::String (juce::roundToInt (h2)) + " dBc) with an even pair; Lopsided brings the 2nd up to " + juce::String (l2, 1) + " dBc");
+                Set softS = hot; softS.diodes = 1; Set sharpS = hot; sharpS.diodes = 2; const auto hs = render (softS, 0.7f, 1000.0), hh = render (sharpS, 0.7f, 1000.0);
+                const double f5 = bin (h.l, 5000.0) - bin (h.l, 1000.0), s5 = bin (hs.l, 5000.0) - bin (hs.l, 1000.0), k5 = bin (hh.l, 5000.0) - bin (hh.l, 1000.0);
+                check (std::abs (s5 - f5) > 0.3 && std::abs (k5 - f5) > 0.3 && std::abs (k5 - s5) > 0.3, "the three diode pairs clip differently at the same Drive: 5th harmonic " + juce::String (f5, 1) + " (silicon), " + juce::String (s5, 1) + " (soft), " + juce::String (k5, 1) + " dBc (sharp)");
+                Set dark = base; dark.tone = 0.0f; const auto d10 = render (dark, 0.02f, 10000.0), b10 = render (base, 0.02f, 10000.0);
+                check (bin (d10.l, 10000.0) < bin (b10.l, 10000.0) - 6.0, "Tone: 10 kHz comes back " + juce::String (bin (d10.l, 10000.0) - inDb, 1) + " dB at its darkest and " + juce::String (bin (b10.l, 10000.0) - inDb, 1) + " dB at the default");
+                Set dryS = hot; dryS.mix = 0.0f; const auto dry = render (dryS, 0.25f, 1000.0); double worstDry = 0; for (int i = 2000; i < 30000; ++i) worstDry = std::max (worstDry, std::abs ((double) dry.l[(size_t) i] - 0.25 * std::sin (juce::MathConstants<double>::twoPi * 1000.0 * (i - lat) / sr)));
+                Set other = hot; other.unit = 99999; const auto ho = render (other, 0.7f, 1000.0), again = render (hot, 0.7f, 1000.0);
+                double same = 0; for (size_t i = 0; i < again.l.size(); ++i) same = std::max (same, (double) std::abs (again.l[i] - h.l[i]));
+                const double dUnit = std::abs ((bin (ho.l, 5000.0) - bin (ho.l, 1000.0)) - f5), dLR = std::abs ((bin (h.r, 5000.0) - bin (h.r, 1000.0)) - f5);
+                Set hq = hot; hq.quality = 2; const auto h16 = render (hq, 0.7f, 1000.0);
+                check (worstDry < 1.0e-5 && dUnit > 0.001 && dUnit < 3.0 && dLR > 0.001 && dLR < 3.0 && same < 1.0e-6 && std::abs ((bin (h16.l, 3000.0) - bin (h16.l, 1000.0)) - h3) < 0.2,
+                       "Mix at 0 % is the input delayed by the same 96 samples; two units differ slightly (" + juce::String (dUnit, 2) + " dB in the 5th harmonic), left and right are two pairs (" + juce::String (dLR, 2) + " dB), the same unit is the same every time, 16x gives the same harmonics as 8x");
+                {
+                    const auto shown = SqVoltageClipPlugin::measure (1234, 0, false, 90.0f, 12.0f, 0.7f);
+                    check (std::abs (shown.harmonics[1] - h3) < 1.0 && shown.harmonics[0] < -100.0 && shown.kneeVolts > 0.4 && shown.kneeVolts < 0.6 && shown.ceilingVolts > shown.kneeVolts && shown.ceilingVolts < 1.0 && shown.peakDb <= 0.0 && shown.wave.size() == 384,
+                           "the face shows the circuit's own numbers: 3rd harmonic " + juce::String (shown.harmonics[1], 1) + " dB against " + juce::String (h3, 1) + " dB measured in the audio, diodes start at " + juce::String (shown.kneeVolts, 2) + " V and hold at " + juce::String (shown.ceilingVolts, 2) + " V, peak " + juce::String (shown.peakDb, 1) + " dBFS");
+                }
+                int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmVoltageClip") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+                const auto pp = call ("plugin_presets", R"({"track":"Audio 1","slot":"Voltage Clip","preset":"Bass Growl"})");
+                const bool presetOk = pp.contains ("Bass Growl") && std::abs (vp->drive->getCurrentValue() - 12.0f) < 0.01f && juce::roundToInt (vp->diodes->getCurrentValue()) == 1 && vp->symmetry->getCurrentValue() >= 0.5f;
+                call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Clip","params":[{"param":"Diodes","text":"Sharp"},{"param":"Symmetry","text":"Even"},{"param":"Quality","text":"16x"}]})");
+                check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && juce::roundToInt (vp->diodes->getCurrentValue()) == 2 && vp->diodes->getCurrentValueAsString() == "Sharp" && vp->symmetry->getCurrentValue() < 0.5f && juce::roundToInt (vp->quality->getCurrentValue()) == 2
+                       && Edition::packOf ("sqmVoltageClip") == Edition::Pack::color && Skins::artFor ("voltageclip").isValid(),
+                       "Voltage Clip has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets the soft lopsided pair, and the assistant sets Diodes, Symmetry and Quality by name");
             }
         }
         // ---- a missing audio file: renders say so instead of waiting for ever

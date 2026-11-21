@@ -1063,6 +1063,50 @@ namespace Skins
         }
         SqVoltageConsolePlugin::Reading reading; juce::String role; bool have = false; float lastDrive = 0, lastIron = 0, lastLeak = 0;
     };
+    /** Voltage Clip: numbers and wave from the clipper circuit at its present settings (1 kHz test tone; 1 on the wave is full scale). */
+    struct VoltageClipViz : public Viz, private juce::Timer
+    {
+        VoltageClipViz (HandleMap& hm, te::Plugin& p, juce::Colour c) : Viz (hm, p, c) { startTimerHz (8); }
+        void timerCallback() override
+        {
+            auto* vp = dynamic_cast<SqVoltageClipPlugin*> (&plugin); if (vp == nullptr) return;
+            const float d = vp->drive->getCurrentValue(), t = vp->tone->getCurrentValue(); const int dk = juce::roundToInt (vp->diodes->getCurrentValue()), sy = vp->symmetry->getCurrentValue() >= 0.5f ? 1 : 0;
+            if (have && d == lastDrive && t == lastTone && dk == lastDiodes && sy == lastSym) return;
+            reading = SqVoltageClipPlugin::measure (vp->unit.get(), dk, sy == 1, t, d); lastDrive = d; lastTone = t; lastDiodes = dk; lastSym = sy; have = true; repaint();
+        }
+        void paint (juce::Graphics& g) override
+        {
+            auto r = getLocalBounds().toFloat().reduced (6.0f);
+            auto left = r.removeFromLeft (juce::jmin (200.0f, r.getWidth() * 0.36f)).reduced (4.0f); r.removeFromLeft (8.0f);
+            auto caption = r.removeFromTop (16.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.4f)); g.fillRoundedRectangle (left, 4.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.5f)); g.fillRoundedRectangle (r.getUnion (caption).expanded (4.0f, 2.0f), 4.0f);
+            if (! have) return;
+            g.setFont (Theme::font (9.0f));
+            auto row = [&] (int i, const juce::String& label, const juce::String& value, juce::Colour c)
+            {
+                auto line = left.reduced (8.0f, 6.0f).withHeight (15.0f).translated (0.0f, (float) i * 16.0f);
+                g.setColour (Theme::dim()); g.drawText (label, line.toNearestInt(), juce::Justification::centredLeft);
+                g.setColour (c); g.drawText (value, line.toNearestInt(), juce::Justification::centredRight);
+            };
+            row (0, "DIODES START AT", juce::String (reading.kneeVolts, 2) + " V", Theme::text());
+            row (1, "FULL SCALE AT", juce::String (reading.ceilingVolts, 2) + " V", Theme::text());
+            row (2, "OUTPUT PEAK", juce::String (reading.peakDb, 1) + " dBFS", reading.peakDb > -1.0 ? Theme::amber() : Theme::text());
+            row (3, "2ND HARMONIC", reading.harmonics[0] < -120.0 ? juce::String ("NONE") : juce::String (reading.harmonics[0], 1) + " dB", accent.withAlpha (0.8f));
+            row (4, "3RD HARMONIC", juce::String (reading.harmonics[1], 1) + " dB", accent);
+            row (5, "5TH HARMONIC", juce::String (reading.harmonics[3], 1) + " dB", accent.withAlpha (0.8f));
+            row (6, "TOP 3 DB DOWN AT", reading.cornerHz >= 1000.0 ? juce::String (reading.cornerHz / 1000.0, 1) + " kHz" : juce::String (juce::roundToInt (reading.cornerHz)) + " Hz", Theme::text());
+            const auto wave = reading.wave; const size_t n = wave.size();
+            // full scale marked: the clipper never passes these lines
+            g.setColour (Theme::dim().withAlpha (0.35f)); const float mid = r.getCentreY(), half = r.getHeight() * 0.5f;
+            juce::ignoreUnused (mid, half);
+            drawWave (g, r, [] (float t) { return std::sin (t * 12.566f) * 0.9f; }, Theme::dim().withAlpha (0.5f), 1.2f);
+            if (n > 1) drawWave (g, r, [&wave, n] (float t) { return wave[(size_t) juce::jlimit (0, (int) n - 1, (int) (t * (float) (n - 1)))]; }, accent, 2.0f);
+            g.setFont (Theme::font (9.0f)); g.setColour (Theme::text().withAlpha (0.8f));
+            g.drawText ("worked out from the circuit:  test sine -0.9 dBFS at 1 kHz  ->  peak " + juce::String (reading.peakDb, 1) + " dBFS", caption.toNearestInt(), juce::Justification::centredLeft, true);
+        }
+        SqVoltageClipPlugin::Reading reading; bool have = false; int lastDiodes = -1, lastSym = -1; float lastDrive = 0, lastTone = 0;
+    };
     /** Voltage Tape: the numbers and the wave come from the machine's own parts at its present settings. */
     struct VoltageTapeViz : public Viz, private juce::Timer
     {
@@ -1966,7 +2010,7 @@ namespace Skins
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, voltage, voltagePower, voltageTape, voltageConsole, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, voltage, voltagePower, voltageTape, voltageConsole, voltageClip, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -2013,6 +2057,7 @@ namespace Skins
         else if (name == "Ember Tape")    { s.family = Family::tape; s.knob = KnobStyle::vintage; s.width = 700; s.groups = { G ("TAPE", { "Louder", "Softer", "Fatter", "Flutter" }, true), G ("OUTPUT", { "Output" }) }; }
         else if (name == "Voltage")       { s.family = Family::voltage; s.knob = KnobStyle::vintage; s.groups = { G ("STAGE", { "Drive", "Bias" }, true), G ("CIRCUIT", { "Cathode Cap", "Tube" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Voltage Console") { s.family = Family::voltageConsole; s.knob = KnobStyle::vintage; s.groups = { G ("TRANSFORMER", { "Drive", "Iron" }, true), G ("BUS", { "Crosstalk" }), G ("OUTPUT", { "Output", "Mix" }) }; }
+        else if (name == "Voltage Clip")  { s.family = Family::voltageClip; s.knob = KnobStyle::vintage; s.groups = { G ("CLIP", { "Drive", "Tone" }, true), G ("DIODES", { "Diodes", "Symmetry" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Voltage Tape")  { s.family = Family::voltageTape; s.knob = KnobStyle::vintage; s.width = 820; s.groups = { G ("TAPE", { "Drive", "Bias" }, true), G ("MACHINE", { "Speed", "EQ", "Head Bump" }), G ("TRANSPORT", { "Wow", "Flutter" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Voltage Power") { s.family = Family::voltagePower; s.knob = KnobStyle::vintage; s.groups = { G ("STAGE", { "Drive", "Bias", "Tube" }, true), G ("TRANSFORMER", { "Load", "Iron" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Scorch Drive")  { s.family = Family::sat; s.knob = KnobStyle::chicken; s.groups = { G ("DRIVE", { "Drive", "Highpass", "Out Level" }, true) }; }
@@ -3575,6 +3620,7 @@ namespace Skins
                 case Family::voltage:   viz = std::make_unique<VoltageViz> (handles, plugin, accent); break;
                 case Family::voltagePower: viz = std::make_unique<VoltagePowerViz> (handles, plugin, accent); break;
                 case Family::voltageTape: viz = std::make_unique<VoltageTapeViz> (handles, plugin, accent); break;
+                case Family::voltageClip: viz = std::make_unique<VoltageClipViz> (handles, plugin, accent); break;
                 case Family::voltageConsole: viz = std::make_unique<VoltageConsoleViz> (handles, plugin, accent); break;
                 case Family::generic:   break;
             }

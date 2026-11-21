@@ -920,6 +920,18 @@ inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
         A ("Tired Old Desk",     { N ("Drive", 8),  N ("Iron", 10), N ("Crosstalk", -60),  N ("Output", 0), N ("Mix", 100) }),
         A ("Leaky Rails",        { N ("Drive", 0),  N ("Iron", 70), N ("Crosstalk", -50),  N ("Output", 0), N ("Mix", 100) }),
         A ("Iron Overload",      { N ("Drive", 18), N ("Iron", 0),  N ("Crosstalk", -80),  N ("Output", -2), N ("Mix", 100) }) };
+    m["Voltage Clip"] = {
+        B ("808 Clip",           { N ("Drive", 8),  N ("Diodes", 0), N ("Symmetry", 0), N ("Tone", 70), N ("Output", -1), N ("Mix", 100), N ("Quality", 1) }),
+        B ("Kick Knock",         { N ("Drive", 6),  N ("Diodes", 2), N ("Symmetry", 0), N ("Tone", 90), N ("Output", -1), N ("Mix", 100), N ("Quality", 1) }),
+        B ("Snare Crack",        { N ("Drive", 7),  N ("Diodes", 2), N ("Symmetry", 0), N ("Tone", 100), N ("Output", -1), N ("Mix", 100), N ("Quality", 1) }),
+        B ("Drum Bus Shave",     { N ("Drive", 3),  N ("Diodes", 0), N ("Symmetry", 0), N ("Tone", 100), N ("Output", 0), N ("Mix", 100), N ("Quality", 1) }),
+        B ("Bass Growl",         { N ("Drive", 12), N ("Diodes", 1), N ("Symmetry", 1), N ("Tone", 55), N ("Output", -3), N ("Mix", 100), N ("Quality", 1) }),
+        B ("Vocal Edge",         { N ("Drive", 4),  N ("Diodes", 1), N ("Symmetry", 0), N ("Tone", 85), N ("Output", 0), N ("Mix", 40), N ("Quality", 1) }),
+        B ("Peak Safety",        { N ("Drive", 0),  N ("Diodes", 2), N ("Symmetry", 0), N ("Tone", 100), N ("Output", 0), N ("Mix", 100), N ("Quality", 1) }),
+        A ("Lopsided Heat",      { N ("Drive", 10), N ("Diodes", 0), N ("Symmetry", 1), N ("Tone", 80), N ("Output", -3), N ("Mix", 100), N ("Quality", 1) }),
+        A ("Square It",          { N ("Drive", 30), N ("Diodes", 2), N ("Symmetry", 0), N ("Tone", 100), N ("Output", -6), N ("Mix", 100), N ("Quality", 2) }),
+        A ("Dark Fuzz",          { N ("Drive", 24), N ("Diodes", 1), N ("Symmetry", 0), N ("Tone", 10), N ("Output", -4), N ("Mix", 100), N ("Quality", 2) }),
+        A ("Parallel Smash",     { N ("Drive", 20), N ("Diodes", 0), N ("Symmetry", 0), N ("Tone", 90), N ("Output", -4), N ("Mix", 35), N ("Quality", 2) }) };
     m["Spindle Delay"] = presets114_spindle();
     m["Fissure Filter"] = presets114_fissure();
     m["Mote"] = presets114_mote();
