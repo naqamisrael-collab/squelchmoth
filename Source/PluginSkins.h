@@ -1268,6 +1268,57 @@ namespace Skins
         }
         SqVoltageMuPlugin::Reading reading; bool have = false; float last[5] = {}, shownNow = 0, shownGrids = -1.5f;
     };
+    /** Voltage Brigade: the numbers and the two curves (the first and the fourth repeat against frequency) are worked out from
+        the chip's own arithmetic at the present settings; the clock is read from the running plug-in. */
+    struct VoltageBrigadeViz : public Viz, private juce::Timer
+    {
+        VoltageBrigadeViz (HandleMap& hm, te::Plugin& p, juce::Colour c) : Viz (hm, p, c) { startTimerHz (15); }
+        void timerCallback() override
+        {
+            auto* vp = dynamic_cast<SqVoltageBrigadePlugin*> (&plugin); if (vp == nullptr) return;
+            const float key[4] = { vp->stages->getCurrentValue(), vp->time->getCurrentValue(), vp->tone->getCurrentValue(), vp->feedback->getCurrentValue() };
+            bool changed = ! have; for (int i = 0; i < 4; ++i) changed = changed || key[i] != last[i];
+            if (changed) { reading = SqVoltageBrigadePlugin::measure (juce::roundToInt (key[0]), key[1], key[2], key[3]); for (int i = 0; i < 4; ++i) last[i] = key[i]; have = true; repaint(); }
+            const float ck = vp->currentClockHz(); if (std::abs (ck - shownClock) > 20.0f) { shownClock = ck; repaint(); }
+        }
+        void paint (juce::Graphics& g) override
+        {
+            auto r = getLocalBounds().toFloat().reduced (6.0f);
+            auto left = r.removeFromLeft (juce::jmin (220.0f, r.getWidth() * 0.36f)).reduced (4.0f); r.removeFromLeft (8.0f);
+            auto caption = r.removeFromTop (16.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.5f)); g.fillRoundedRectangle (left, 4.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.6f)); g.fillRoundedRectangle (r.getUnion (caption).expanded (4.0f, 2.0f), 4.0f);
+            if (! have) return;
+            g.setFont (Theme::font (9.0f));
+            auto row = [&] (int i, const juce::String& label, const juce::String& value, juce::Colour c)
+            {
+                auto line = left.reduced (8.0f, 6.0f).withHeight (15.0f).translated (0.0f, (float) i * 16.0f);
+                g.setColour (Theme::dim()); g.drawText (label, line.toNearestInt(), juce::Justification::centredLeft);
+                g.setColour (c); g.drawText (value, line.toNearestInt(), juce::Justification::centredRight);
+            };
+            auto hz = [] (double f) { return f >= 1000.0 ? juce::String (f / 1000.0, 1) + " kHz" : juce::String (juce::roundToInt (f)) + " Hz"; };
+            row (0, "DELAY", juce::String (reading.delayMs, reading.delayMs < 100.0 ? 2 : 1) + " ms", accent);
+            row (1, "STAGES", juce::String (SqVoltageBrigadePlugin::stagesAt (juce::roundToInt (last[0]))), Theme::text());
+            row (2, "CLOCK SET / NOW", juce::String (reading.clockKHz, 2) + " / " + juce::String (shownClock / 1000.0f, 2) + " kHz", Theme::text());
+            row (3, "FOLDS OVER ABOVE", hz (reading.foldHz), reading.foldHz < 1000.0 * last[2] ? Theme::amber() : Theme::text());
+            row (4, "1ST REPEAT -3 dB AT", hz (reading.reachHz), Theme::text());
+            row (5, "EACH REPEAT", last[3] > 0.5f ? juce::String (20.0 * std::log10 ((double) last[3] / 100.0), 1) + " dB" : juce::String ("none"), Theme::text());
+            row (6, "DOWN 60 dB AFTER", reading.tailSeconds < 0.0 ? juce::String ("never (howls)") : juce::String (reading.tailSeconds, 1) + " s", reading.tailSeconds < 0.0 ? Theme::amber() : Theme::text());
+            auto plot = r.reduced (6.0f, 4.0f); const float lo = -48.0f, hi = 6.0f;
+            auto px = [&] (float f) { return plot.getX() + std::log10 (f / 20.0f) / 3.0f * plot.getWidth(); };
+            auto py = [&] (float db) { return plot.getBottom() - (juce::jlimit (lo, hi, db) - lo) / (hi - lo) * plot.getHeight(); };
+            g.setFont (Theme::font (8.0f));
+            for (float f : { 100.0f, 1000.0f, 10000.0f }) { g.setColour (Theme::dim().withAlpha (0.25f)); g.drawVerticalLine (juce::roundToInt (px (f)), plot.getY(), plot.getBottom()); g.setColour (Theme::dim()); g.drawText (f >= 1000.0f ? juce::String (juce::roundToInt (f / 1000.0f)) + "k" : juce::String (juce::roundToInt (f)), juce::Rectangle<float> (px (f) - 14.0f, plot.getBottom() - 11.0f, 28.0f, 10.0f).toNearestInt(), juce::Justification::centred); }
+            for (float db = -48.0f; db <= 0.0f; db += 12.0f) { g.setColour (Theme::dim().withAlpha (0.25f)); g.drawHorizontalLine (juce::roundToInt (py (db)), plot.getX(), plot.getRight()); g.setColour (Theme::dim()); g.drawText (juce::String (juce::roundToInt (db)), juce::Rectangle<float> (plot.getX() + 1.0f, py (db) - 5.0f, 22.0f, 10.0f).toNearestInt(), juce::Justification::centredLeft); }
+            if (reading.foldHz < 20000.0) { const float x = px ((float) reading.foldHz); g.setColour (Theme::amber().withAlpha (0.18f)); g.fillRect (juce::Rectangle<float> (x, plot.getY(), plot.getRight() - x, plot.getHeight())); g.setColour (Theme::amber().withAlpha (0.8f)); g.drawVerticalLine (juce::roundToInt (x), plot.getY(), plot.getBottom()); }
+            auto draw = [&] (const float* v, juce::Colour c, float thick) { juce::Path p; for (int i = 0; i < 48; ++i) { const float x = px (SqVoltageBrigadePlugin::hzAt (i)), y = py (v[i]); if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y); } g.setColour (c); g.strokePath (p, juce::PathStrokeType (thick)); };
+            if (last[3] > 0.5f) draw (reading.fourth, accent.withAlpha (0.45f), 1.5f);
+            draw (reading.first, accent, 2.0f);
+            g.setFont (Theme::font (9.0f)); g.setColour (Theme::text().withAlpha (0.8f));
+            g.drawText ("from the chip's arithmetic:  the 1st repeat (bright line) and the 4th (faint) in dB against Hz;  shaded: above half the clock, where it folds over", caption.toNearestInt(), juce::Justification::centredLeft, true);
+        }
+        SqVoltageBrigadePlugin::Reading reading; bool have = false; float last[4] = {}, shownClock = 0;
+    };
     /** Voltage Tape: the numbers and the wave come from the machine's own parts at its present settings. */
     struct VoltageTapeViz : public Viz, private juce::Timer
     {
@@ -2171,7 +2222,7 @@ namespace Skins
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, voltage, voltagePower, voltageTape, voltageConsole, voltageClip, voltageComp, voltageOpto, voltageMu, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, voltage, voltagePower, voltageTape, voltageConsole, voltageClip, voltageComp, voltageOpto, voltageMu, voltageBrigade, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -2222,6 +2273,7 @@ namespace Skins
         else if (name == "Voltage Comp")  { s.family = Family::voltageComp; s.knob = KnobStyle::vintage; s.width = 820; s.groups = { G ("LEVEL", { "Input", "Output" }, true), G ("COMPRESSION", { "Ratio", "Attack", "Release" }), G ("OUTPUT", { "Mix", "Quality" }) }; }
         else if (name == "Voltage Opto")  { s.family = Family::voltageOpto; s.knob = KnobStyle::vintage; s.width = 760; s.groups = { G ("LEVELLING", { "Reduction", "Gain" }, true), G ("CHARACTER", { "Mode" }), G ("OUTPUT", { "Mix", "Quality" }) }; }
         else if (name == "Voltage Mu")    { s.family = Family::voltageMu; s.knob = KnobStyle::vintage; s.width = 900; s.groups = { G ("LEVEL", { "Input", "Threshold", "Output" }, true), G ("TIMING", { "Attack", "Recovery", "Mode" }), G ("OUTPUT", { "Mix", "Quality" }) }; }
+        else if (name == "Voltage Brigade") { s.family = Family::voltageBrigade; s.knob = KnobStyle::vintage; s.width = 980; s.groups = { G ("ECHO", { "Time", "Feedback", "Stages", "Tone" }, true), G ("CLOCK WOBBLE", { "Rate", "Depth", "Width" }), G ("OUTPUT", { "Mix", "Output", "Quality" }) }; }
         else if (name == "Voltage Tape")  { s.family = Family::voltageTape; s.knob = KnobStyle::vintage; s.width = 820; s.groups = { G ("TAPE", { "Drive", "Bias" }, true), G ("MACHINE", { "Speed", "EQ", "Head Bump" }), G ("TRANSPORT", { "Wow", "Flutter" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Voltage Power") { s.family = Family::voltagePower; s.knob = KnobStyle::vintage; s.groups = { G ("STAGE", { "Drive", "Bias", "Tube" }, true), G ("TRANSFORMER", { "Load", "Iron" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Scorch Drive")  { s.family = Family::sat; s.knob = KnobStyle::chicken; s.groups = { G ("DRIVE", { "Drive", "Highpass", "Out Level" }, true) }; }
@@ -3787,6 +3839,7 @@ namespace Skins
                 case Family::voltageComp: viz = std::make_unique<VoltageCompViz> (handles, plugin, accent); break;
                 case Family::voltageOpto: viz = std::make_unique<VoltageOptoViz> (handles, plugin, accent); break;
                 case Family::voltageMu: viz = std::make_unique<VoltageMuViz> (handles, plugin, accent); break;
+                case Family::voltageBrigade: viz = std::make_unique<VoltageBrigadeViz> (handles, plugin, accent); break;
                 case Family::voltageClip: viz = std::make_unique<VoltageClipViz> (handles, plugin, accent); break;
                 case Family::voltageConsole: viz = std::make_unique<VoltageConsoleViz> (handles, plugin, accent); break;
                 case Family::generic:   break;

@@ -85,7 +85,7 @@ namespace Edition
             { "sqmCinder", Pack::color }, { "sqmWingbeat", Pack::color }, { "sqmFoilPlate", Pack::color }, { "sqmRadiant", Pack::color }, { "sqmMaw", Pack::color },
             { "sqmVellum", Pack::color }, { "sqmTremor", Pack::color }, { "sqmOrbitPan", Pack::color }, { "sqmMirrorShift", Pack::color }, { "sqmShutter", Pack::color },
             { "sqmShard", Pack::color }, { "sqmMurmuration", Pack::color }, { "sqmMasquerade", Pack::color },
-            { "sqmLarvaFilter2", Pack::color }, { "sqmPhase12v2", Pack::color }, { "sqmHiveRack", Pack::color }, { "sqmAtriumVerb", Pack::color }, { "sqmKiln", Pack::color }, { "sqmVoltage", Pack::color }, { "sqmVoltagePower", Pack::color }, { "sqmVoltageTape", Pack::color }, { "sqmVoltageConsole", Pack::color }, { "sqmVoltageClip", Pack::color }, { "sqmVoltageComp", Pack::color }, { "sqmVoltageOpto", Pack::color }, { "sqmVoltageMu", Pack::color }, { "sqmSpindle", Pack::color }, { "sqmFissure", Pack::color } };
+            { "sqmLarvaFilter2", Pack::color }, { "sqmPhase12v2", Pack::color }, { "sqmHiveRack", Pack::color }, { "sqmAtriumVerb", Pack::color }, { "sqmKiln", Pack::color }, { "sqmVoltage", Pack::color }, { "sqmVoltagePower", Pack::color }, { "sqmVoltageTape", Pack::color }, { "sqmVoltageConsole", Pack::color }, { "sqmVoltageClip", Pack::color }, { "sqmVoltageComp", Pack::color }, { "sqmVoltageOpto", Pack::color }, { "sqmVoltageMu", Pack::color }, { "sqmVoltageBrigade", Pack::color }, { "sqmSpindle", Pack::color }, { "sqmFissure", Pack::color } };
         auto it = m.find (type); return it != m.end() ? it->second : Pack::none;
     }
     /** The Demo's basic set: 16 effects, 6 instruments and what the rack needs to run. */

@@ -69,6 +69,7 @@ inline int runSelfTest()
         engine->getPluginManager().createBuiltInType<SqVoltageCompPlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageOptoPlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageMuPlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltageBrigadePlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
@@ -6076,6 +6077,91 @@ inline int runSelfTest()
                 check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && vp->mode->getCurrentValueAsString() == "Compress" && vp->recovery->getCurrentValueAsString() == "4 s" && std::abs (vp->threshold->getCurrentValue() + 20.0f) < 0.01f && juce::roundToInt (vp->quality->getCurrentValue()) == 1
                        && Edition::packOf ("sqmVoltageMu") == Edition::Pack::color && Skins::artFor ("voltagemu").isValid(),
                        "Voltage Mu has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets Threshold and Limit, and the assistant sets Mode, Recovery, Threshold and Quality by name");
+            }
+        }
+        // ---- 1.46 Voltage Brigade: the bucket-brigade delay as a plug-in (the line is checked against a circuit simulator and a brute-force simulation in tests/bbd_test.cpp)
+        {
+            call ("new_session", R"({"name":"Selftest Voltage Brigade"})");
+            const auto ins = call ("insert_plugin", R"({"track":"Audio 1","plugin":"Voltage Brigade"})");
+            SqVoltageBrigadePlugin* vp = nullptr;
+            if (auto tt = session->findTrack ("Audio 1")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqVoltageBrigadePlugin*> (pl)) vp = c;
+            check (vp != nullptr && ins.contains ("Voltage Brigade") && juce::roundToInt (vp->quality->getCurrentValue()) == 0 && vp->stages->getCurrentValueAsString() == "4096" && vp->time->getCurrentValueAsString() == "120 ms", "Voltage Brigade is registered, inserts by name and starts at 4x on its first preset (4096 stages, 120 ms)");
+            if (vp != nullptr)
+            {
+                const double sr = 44100.0, twoPi = juce::MathConstants<double>::twoPi; const int lat = SqVoltageBrigadePlugin::delaySamples;
+                struct Out { std::vector<float> l, r; };
+                struct Set { float time = 100, feedback = 0, tone = 4.5f, rate = 0.5f, depth = 0, width = 0, mix = 100, output = 0; int stages = 2, quality = 0, unit = 1234; };
+                auto render = [&] (const Set& st, int N, const std::function<float (int)>& left, const std::function<float (int)>& right)
+                {
+                    Out o; auto twin = session->edit->getPluginCache().createNewPlugin (SqVoltageBrigadePlugin::xmlTypeName, {});
+                    if (auto* tw = dynamic_cast<SqVoltageBrigadePlugin*> (twin.get()))
+                    {
+                        tw->unit = st.unit; auto setp = [] (te::AutomatableParameter::Ptr& p, float v) { p->setParameter (v, juce::dontSendNotification); };
+                        setp (tw->quality, (float) st.quality); setp (tw->time, st.time); setp (tw->stages, (float) st.stages); setp (tw->feedback, st.feedback); setp (tw->tone, st.tone); setp (tw->rate, st.rate); setp (tw->depth, st.depth); setp (tw->width, st.width); setp (tw->mix, st.mix); setp (tw->output, st.output);
+                        tw->baseClassInitialise ({ te::TimePosition(), sr, 512 });
+                        juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                        for (int q = 0; q + 512 <= N; q += 512)
+                        {
+                            for (int i = 0; i < 512; ++i) { buf.setSample (0, i, left (q + i)); buf.setSample (1, i, right (q + i)); }
+                            te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / sr), te::TimePosition::fromSeconds ((q + 512) / sr)), true, false, true, false);
+                            tw->applyToBuffer (fc);
+                            for (int i = 0; i < 512; ++i) { o.l.push_back (buf.getSample (0, i)); o.r.push_back (buf.getSample (1, i)); }
+                        }
+                        tw->baseClassDeinitialise();
+                    }
+                    return o;
+                };
+                auto tone = [&] (float amp, double hz) { return std::function<float (int)> ([=] (int i) { return amp * (float) std::sin (twoPi * hz * i / sr); }); };
+                auto burst = std::function<float (int)> ([=] (int i) { const double t = i / sr; return t < 0.03 ? (float) (0.25 * std::sin (twoPi * 500.0 * t) * (0.5 - 0.5 * std::cos (twoPi * t / 0.03))) : 0.0f; });
+                auto both = [&] (const Set& st, float amp, double hz, int N = 66150) { return render (st, N, tone (amp, hz), tone (amp, hz)); };
+                auto lvl = [&] (const std::vector<float>& y, double f) { std::complex<double> acc = 0; const int M = 22050, from = (int) y.size() - M; if (from < 0) return -300.0; for (int i = 0; i < M; ++i) acc += (double) y[(size_t) (from + i)] * std::polar (1.0, -twoPi * f * (from + i) / sr); return 20 * std::log10 (2 * std::abs (acc) / M + 1e-15); };
+                auto peakIn = [&] (const std::vector<float>& y, double fromS, double toS) { float p = 0; for (int i = (int) (fromS * sr); i < (int) (toS * sr) && i < (int) y.size(); ++i) p = std::max (p, std::abs (y[(size_t) i])); return 20 * std::log10 ((double) p + 1e-15); };
+                Set base;
+                // the delay is stages / (2 x clock): two settings of Time differ by exactly their difference; Time beyond the chip's clock range is held at the range's end
+                auto lagBetween = [&] (const std::vector<float>& a, const std::vector<float>& b, int expect) { double best = -1e300; int at = 0; auto corr = [&] (int lag) { double s = 0; for (int i = 0; i < 12000; ++i) s += (double) a[(size_t) i] * (double) b[(size_t) (i + lag)]; return s; }; for (int lag = expect - 60; lag <= expect + 60; ++lag) { const double c = corr (lag); if (c > best) { best = c; at = lag; } } const double c0 = corr (at - 1), c1 = corr (at), c2 = corr (at + 1); return (at + 0.5 * (c0 - c2) / (c0 - 2 * c1 + c2)) / sr * 1000.0; };
+                Set t150 = base; t150.time = 150.0f; const auto b100 = render (base, 22016, burst, burst), b150 = render (t150, 22016, burst, burst);
+                std::vector<float> dryB; for (int i = 0; i < 22016; ++i) dryB.push_back (burst (i));
+                const double more = lagBetween (b100.l, b150.l, (int) std::lround (0.05 * sr)), whole = lagBetween (dryB, b100.l, (int) std::lround (0.1 * sr) + lat);
+                Set tShort = base; tShort.time = 5.0f; Set tEdge = base; tEdge.time = 20.48f; const auto s1 = render (tShort, 8192, burst, burst), s2 = render (tEdge, 8192, burst, burst); double sameEdge = 0; for (size_t i = 0; i < s1.l.size(); ++i) sameEdge = std::max (sameEdge, (double) std::abs (s1.l[i] - s2.l[i]));
+                const auto shown = SqVoltageBrigadePlugin::measure (2, 5.0f, 4.5f, 35.0f), shown100 = SqVoltageBrigadePlugin::measure (2, 100.0f, 4.5f, 35.0f);
+                check (std::abs (more - 50.0) < 0.6 && whole > 100.0 + 1000.0 * lat / sr - 1.5 && whole < 100.0 + 1000.0 * lat / sr + 1.5 && sameEdge < 1.0e-6 && std::abs (shown.delayMs - 20.48) < 0.001 && std::abs (shown.clockKHz - 100.0) < 0.001 && std::abs (shown100.clockKHz - 20.48) < 0.001,
+                       "Time 150 ms comes " + juce::String (more, 2) + " ms after Time 100 ms, and 100 ms arrives " + juce::String (whole - 1000.0 * lat / sr, 2) + " ms after the dry sound (the chip plus its filters; one unit's clock is trimmed within 1 %); asked for 5 ms, 4096 stages give " + juce::String (shown.delayMs, 2) + " ms at their fastest clock, and the face says so");
+                // a slower clock is darker, and a tone above half the clock comes back folded
+                Set slow = base; slow.time = 400.0f; Set quick = base; quick.time = 50.0f; const double inDb = 20 * std::log10 (0.1);
+                const double dSlow = lvl (both (slow, 0.1f, 1000.0, 88200).l, 1000.0) - inDb, dQuick = lvl (both (quick, 0.1f, 1000.0, 88200).l, 1000.0) - inDb;
+                const auto folded = both (slow, 0.1f, 3000.0, 88200); const double clockSlow = 4096.0 / 0.8 * SqVoltageBrigadePlugin::tolerance (1234, 0, 0, 0.01), foldAt = clockSlow - 3000.0, foldDb = lvl (folded.l, foldAt) - inDb;
+                check (dSlow < dQuick - 0.3 && dSlow > -1.2 && dQuick > -0.2 && foldDb > -4.5 && foldDb < -1.5,
+                       "a 1 kHz tone comes back " + juce::String (dQuick, 2) + " dB at 50 ms and " + juce::String (dSlow, 2) + " dB at 400 ms (a slower clock holds each sample longer); a 3 kHz tone into the 400 ms setting's " + juce::String (clockSlow / 1000.0, 2) + " kHz clock comes back folded to " + juce::String (juce::roundToInt (foldAt)) + " Hz at " + juce::String (foldDb, 1) + " dB");
+                // feedback: each repeat is the last one times Feedback; past 100 % it howls and the buckets hold it
+                Set fbS = base; fbS.feedback = 35.0f; const auto rep = render (fbS, 22016, burst, burst); const double r1 = peakIn (rep.l, 0.09, 0.15), r2 = peakIn (rep.l, 0.19, 0.25), r3 = peakIn (rep.l, 0.29, 0.35);
+                Set howl = base; howl.feedback = 110.0f; howl.tone = 12.0f; const auto hw = render (howl, 176128, std::function<float (int)> ([=] (int i) { return i < 22050 ? (float) std::sin (twoPi * 300.0 * i / sr) : 0.0f; }), tone (0.0f, 1.0));
+                const double howlPeak = peakIn (hw.l, 0.0, 4.0), howlLate = peakIn (hw.l, 3.5, 3.99);
+                check (std::abs ((r2 - r1) + 9.12) < 0.6 && std::abs ((r3 - r2) + 9.12) < 0.8 && howlPeak < 2.5 && howlLate > -12.0,
+                       "Feedback 35 %: the repeats fall " + juce::String (r1 - r2, 2) + " and " + juce::String (r2 - r3, 2) + " dB each (35 % is 9.12 dB); at 110 % it is still sounding at " + juce::String (howlLate, 1) + " dBFS three seconds after the input stopped and never passes " + juce::String (howlPeak, 1) + " dBFS - the buckets hold it");
+                // the buckets bend a full-scale tone by the data sheet's 2.5 %
+                const auto loud = both (base, 1.0f, 500.0), soft = both (base, 0.25f, 500.0); const double h3 = lvl (loud.l, 1500.0) - lvl (loud.l, 500.0), h3s = lvl (soft.l, 1500.0) - lvl (soft.l, 500.0);
+                check (h3 > -35.0 && h3 < -29.5 && h3s < h3 - 20.0, "a full-scale tone comes back with its 3rd harmonic at " + juce::String (h3, 1) + " dB (the chip's data sheet: 2.5 % at that level, which is -32 dB); 12 dB quieter it is at " + juce::String (h3s, 1) + " dB");
+                // wobbling the clock wobbles the pitch; Width sets the right side's wobble against the left's
+                Set vib = base; vib.stages = 1; vib.time = 10.24f; vib.rate = 5.0f; vib.depth = 20.0f; const auto vb = both (vib, 0.2f, 1000.0, 88200);
+                std::vector<double> zc; for (size_t i = 44100; i + 1 < vb.l.size(); ++i) if (vb.l[i] <= 0 && vb.l[i + 1] > 0) zc.push_back ((double) i + (double) vb.l[i] / ((double) vb.l[i] - (double) vb.l[i + 1]));
+                double flo = 1e9, fhi = 0; for (size_t i = 8; i < zc.size(); ++i) { const double fr = 8.0 * sr / (zc[i] - zc[i - 8]); flo = std::min (flo, fr); fhi = std::max (fhi, fr); }
+                Set wide = vib; wide.width = 100.0f; const auto wd = both (wide, 0.2f, 1000.0, 88200); double dNarrow = 0, dWide = 0; for (size_t i = 44100; i < vb.l.size(); ++i) { dNarrow = std::max (dNarrow, (double) std::abs (vb.l[i] - vb.r[i])); dWide = std::max (dWide, (double) std::abs (wd.l[i] - wd.r[i])); }
+                check ((fhi - flo) / 2 > 13.0 && (fhi - flo) / 2 < 19.0 && dWide > 0.05 && dWide > 5.0 * dNarrow,
+                       "Depth 20 % at 5 Hz through 1024 stages swings a 1 kHz tone " + juce::String ((fhi - flo) / 2, 1) + " Hz either way (the arithmetic says about 16); Width 100 % sets the two sides against each other (they differ by " + juce::String (dWide, 3) + ", against " + juce::String (dNarrow, 4) + " at Width 0)");
+                Set dryS = base; dryS.mix = 0.0f; dryS.feedback = 60.0f; const auto dry = both (dryS, 0.5f, 1000.0, 33075); double worstDry = 0; for (int i = 2000; i < 30000; ++i) worstDry = std::max (worstDry, std::abs ((double) dry.l[(size_t) i] - 0.5 * std::sin (twoPi * 1000.0 * (i - lat) / sr)));
+                Set other = base; other.unit = 99999; Set hq = base; hq.quality = 2; Set up = base; up.output = 6.0f; const auto a1 = both (base, 0.5f, 1000.0, 22050), a2 = both (base, 0.5f, 1000.0, 22050);
+                double same = 0; for (size_t i = 0; i < a1.l.size(); ++i) same = std::max (same, (double) std::abs (a1.l[i] - a2.l[i]));
+                const double ref1k = lvl (both (base, 0.5f, 1000.0).l, 1000.0), d16 = std::abs (lvl (both (hq, 0.5f, 1000.0).l, 1000.0) - ref1k), up6 = lvl (both (up, 0.5f, 1000.0).l, 1000.0) - ref1k; const auto ou = both (other, 0.5f, 1000.0, 22050);
+                double differ = 0; for (size_t i = 8000; i < a1.l.size(); ++i) differ = std::max (differ, (double) std::abs (a1.l[i] - ou.l[i]));
+                check (worstDry < 1.0e-5 && differ > 0.001 && same < 1.0e-6 && d16 < 0.05 && std::abs (up6 - 6.0) < 0.02,
+                       "Mix at 0 % is the input delayed by 96 samples; two units differ (their clocks and capacitors: " + juce::String (differ, 3) + "), the same unit is the same every time, 16x gives the level 4x does (" + juce::String (d16, 3) + " dB apart), Output 6 dB up is " + juce::String (up6, 2) + " dB up");
+                int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmVoltageBrigade") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+                const auto pp = call ("plugin_presets", R"({"track":"Audio 1","slot":"Voltage Brigade","preset":"Wide Chorus"})");
+                const bool presetOk = pp.contains ("Wide Chorus") && vp->stages->getCurrentValueAsString() == "256" && std::abs (vp->width->getCurrentValue() - 100.0f) < 0.01f;
+                call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Brigade","params":[{"param":"Stages","text":"8192"},{"param":"Time","text":"400"},{"param":"Feedback","text":"50"},{"param":"Quality","text":"8x"}]})");
+                check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && vp->stages->getCurrentValueAsString() == "8192" && std::abs (vp->time->getCurrentValue() - 400.0f) < 0.5f && std::abs (vp->feedback->getCurrentValue() - 50.0f) < 0.01f && juce::roundToInt (vp->quality->getCurrentValue()) == 1
+                       && Edition::packOf ("sqmVoltageBrigade") == Edition::Pack::color && Skins::artFor ("voltagebrigade").isValid(),
+                       "Voltage Brigade has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets the 256-stage chip and full Width, and the assistant sets Stages, Time, Feedback and Quality by name");
             }
         }
         // ---- a missing audio file: renders say so instead of waiting for ever

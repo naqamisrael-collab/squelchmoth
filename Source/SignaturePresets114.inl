@@ -968,6 +968,18 @@ inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
         A ("Slow Limiter",        { N ("Input", 0), N ("Threshold", -10), N ("Attack", 25), N ("Recovery", 3), N ("Mode", 1), N ("Output", 3), N ("Mix", 100), N ("Quality", 0) }),
         A ("Driven Tubes",        { N ("Input", 12), N ("Threshold", -6), N ("Attack", 50), N ("Recovery", 2), N ("Mode", 0), N ("Output", -8), N ("Mix", 100), N ("Quality", 0) }),
         A ("Parallel Bus",        { N ("Input", 6), N ("Threshold", -24), N ("Attack", 25), N ("Recovery", 0), N ("Mode", 1), N ("Output", 8), N ("Mix", 40), N ("Quality", 0) }) };
+    m["Voltage Brigade"] = {
+        B ("Dark Slap",           { N ("Time", 120), N ("Stages", 2), N ("Feedback", 15), N ("Tone", 4), N ("Rate", 0.5), N ("Depth", 0), N ("Width", 0), N ("Mix", 25), N ("Output", 0), N ("Quality", 0) }),
+        B ("Vocal Echo",          { N ("Time", 330), N ("Stages", 3), N ("Feedback", 35), N ("Tone", 4.5), N ("Rate", 0.4), N ("Depth", 4), N ("Width", 30), N ("Mix", 22), N ("Output", 0), N ("Quality", 0) }),
+        B ("Dub Repeats",         { N ("Time", 410), N ("Stages", 3), N ("Feedback", 62), N ("Tone", 3), N ("Rate", 0.3), N ("Depth", 6), N ("Width", 40), N ("Mix", 30), N ("Output", 0), N ("Quality", 0) }),
+        B ("Wide Chorus",         { N ("Time", 12), N ("Stages", 0), N ("Feedback", 0), N ("Tone", 9), N ("Rate", 0.6), N ("Depth", 35), N ("Width", 100), N ("Mix", 50), N ("Output", 0), N ("Quality", 0) }),
+        B ("Slow Chorus",         { N ("Time", 18), N ("Stages", 1), N ("Feedback", 0), N ("Tone", 8), N ("Rate", 0.25), N ("Depth", 45), N ("Width", 100), N ("Mix", 45), N ("Output", 0), N ("Quality", 0) }),
+        B ("Vibrato",             { N ("Time", 6), N ("Stages", 0), N ("Feedback", 0), N ("Tone", 10), N ("Rate", 5.5), N ("Depth", 30), N ("Width", 0), N ("Mix", 100), N ("Output", 0), N ("Quality", 0) }),
+        B ("Thick Double",        { N ("Time", 38), N ("Stages", 1), N ("Feedback", 0), N ("Tone", 7), N ("Rate", 0.8), N ("Depth", 10), N ("Width", 100), N ("Mix", 40), N ("Output", 0), N ("Quality", 0) }),
+        B ("Melody Wash",         { N ("Time", 250), N ("Stages", 2), N ("Feedback", 45), N ("Tone", 3.5), N ("Rate", 0.5), N ("Depth", 12), N ("Width", 70), N ("Mix", 35), N ("Output", 0), N ("Quality", 0) }),
+        A ("Howl",                { N ("Time", 180), N ("Stages", 2), N ("Feedback", 108), N ("Tone", 5), N ("Rate", 0.3), N ("Depth", 5), N ("Width", 20), N ("Mix", 40), N ("Output", -9), N ("Quality", 0) }),
+        A ("Fold-Over Lo-Fi",     { N ("Time", 800), N ("Stages", 3), N ("Feedback", 40), N ("Tone", 10), N ("Rate", 0.2), N ("Depth", 0), N ("Width", 0), N ("Mix", 45), N ("Output", 0), N ("Quality", 0) }),
+        A ("Seasick",             { N ("Time", 90), N ("Stages", 1), N ("Feedback", 30), N ("Tone", 6), N ("Rate", 1.6), N ("Depth", 80), N ("Width", 100), N ("Mix", 50), N ("Output", 0), N ("Quality", 0) }) };
     m["Spindle Delay"] = presets114_spindle();
     m["Fissure Filter"] = presets114_fissure();
     m["Mote"] = presets114_mote();
