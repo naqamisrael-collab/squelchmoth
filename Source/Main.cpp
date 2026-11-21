@@ -267,6 +267,7 @@ public:
         engine->getPluginManager().createBuiltInType<SqVoltageConsolePlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageClipPlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageCompPlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltageOptoPlugin>();
         engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
         engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
         engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();

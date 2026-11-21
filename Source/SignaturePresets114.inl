@@ -944,6 +944,18 @@ inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
         A ("Parallel Drums",     { N ("Input", 26), N ("Ratio", 3), N ("Attack", 90), N ("Release", 100), N ("Output", -14), N ("Mix", 35), N ("Quality", 1) }),
         A ("Room Pump",          { N ("Input", 24), N ("Ratio", 2), N ("Attack", 100), N ("Release", 70), N ("Output", -14), N ("Mix", 100), N ("Quality", 1) }),
         A ("Slow Limiter",       { N ("Input", 14), N ("Ratio", 3), N ("Attack", 0),  N ("Release", 10), N ("Output", -6), N ("Mix", 100), N ("Quality", 1) }) };
+    m["Voltage Opto"] = {
+        B ("Smooth Vocal",       { N ("Reduction", 45), N ("Gain", 3),  N ("Mode", 0), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Sung Hook",          { N ("Reduction", 55), N ("Gain", 5),  N ("Mode", 0), N ("Mix", 100), N ("Quality", 0) }),
+        B ("R&B Lead",           { N ("Reduction", 50), N ("Gain", 4),  N ("Mode", 0), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Bass Level",         { N ("Reduction", 60), N ("Gain", 6),  N ("Mode", 0), N ("Mix", 100), N ("Quality", 0) }),
+        B ("808 Hold",           { N ("Reduction", 55), N ("Gain", 4),  N ("Mode", 1), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Keys Glue",          { N ("Reduction", 35), N ("Gain", 2),  N ("Mode", 0), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Gentle Touch",       { N ("Reduction", 25), N ("Gain", 1),  N ("Mode", 0), N ("Mix", 100), N ("Quality", 0) }),
+        B ("After The Fast One", { N ("Reduction", 30), N ("Gain", 1.5), N ("Mode", 0), N ("Mix", 100), N ("Quality", 0) }),
+        A ("Vocal Ceiling",      { N ("Reduction", 65), N ("Gain", 6),  N ("Mode", 1), N ("Mix", 100), N ("Quality", 0) }),
+        A ("Parallel Thick",     { N ("Reduction", 85), N ("Gain", 12), N ("Mode", 0), N ("Mix", 40),  N ("Quality", 0) }),
+        A ("Pinned",             { N ("Reduction", 90), N ("Gain", 14), N ("Mode", 1), N ("Mix", 100), N ("Quality", 1) }) };
     m["Spindle Delay"] = presets114_spindle();
     m["Fissure Filter"] = presets114_fissure();
     m["Mote"] = presets114_mote();

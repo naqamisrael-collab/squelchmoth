@@ -1160,6 +1160,58 @@ namespace Skins
         }
         SqVoltageCompPlugin::Reading reading; bool have = false; int lastRatio = -1; float lastIn = 0, lastAttack = 50, lastRelease = 50, shownNow = 0;
     };
+    /** Voltage Opto: the curve and the times are measured on the plug-in's own cell at its present settings; the bars are the
+        gain reduction happening now and how full the cell's slow memory is. */
+    struct VoltageOptoViz : public Viz, private juce::Timer
+    {
+        VoltageOptoViz (HandleMap& hm, te::Plugin& p, juce::Colour c) : Viz (hm, p, c) { startTimerHz (20); }
+        void timerCallback() override
+        {
+            auto* vp = dynamic_cast<SqVoltageOptoPlugin*> (&plugin); if (vp == nullptr) return;
+            const float rd = vp->reduce->getCurrentValue(); const bool lim = vp->mode->getCurrentValue() >= 0.5f; const float now = vp->currentReductionDb(), mem = vp->currentMemory();
+            if (! have || rd != lastReduce || lim != lastLimit) { reading = SqVoltageOptoPlugin::measure (vp->unit.get(), lim, rd); lastReduce = rd; lastLimit = lim; have = true; repaint(); }
+            if (std::abs (now - shownNow) > 0.05f || std::abs (mem - shownMem) > 0.01f * juce::jmax (0.1f, shownMem)) { shownNow = now; shownMem = mem; repaint(); }
+        }
+        void paint (juce::Graphics& g) override
+        {
+            auto r = getLocalBounds().toFloat().reduced (6.0f);
+            auto left = r.removeFromLeft (juce::jmin (210.0f, r.getWidth() * 0.38f)).reduced (4.0f); r.removeFromLeft (8.0f);
+            auto caption = r.removeFromTop (16.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.45f)); g.fillRoundedRectangle (left, 4.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.55f)); g.fillRoundedRectangle (r.getUnion (caption).expanded (4.0f, 2.0f), 4.0f);
+            if (! have) return;
+            g.setFont (Theme::font (9.0f));
+            auto row = [&] (int i, const juce::String& label, const juce::String& value, juce::Colour c)
+            {
+                auto line = left.reduced (8.0f, 6.0f).withHeight (15.0f).translated (0.0f, (float) i * 16.0f);
+                g.setColour (Theme::dim()); g.drawText (label, line.toNearestInt(), juce::Justification::centredLeft);
+                g.setColour (c); g.drawText (value, line.toNearestInt(), juce::Justification::centredRight);
+            };
+            const bool working = reading.reductionAtFull < -0.5;
+            row (0, "REDUCING NOW", juce::String (juce::jmin (0.0f, shownNow), 1) + " dB", shownNow < -0.5f ? Theme::amber() : Theme::text());
+            row (1, "FULL-SCALE TONE", juce::String (reading.reductionAtFull, 1) + " dB", Theme::text());
+            row (2, "RATIO, TOP 12 dB", juce::String (reading.ratio, 1) + " : 1", accent);
+            row (3, "ATTACK", working ? juce::String (juce::roundToInt (reading.attackMs)) + " ms" : juce::String ("-"), Theme::text());
+            row (4, "HALF RELEASED IN", working ? juce::String (juce::roundToInt (reading.halfReleaseMs)) + " ms" : juce::String ("-"), Theme::text());
+            row (5, "ALL BACK IN", working ? (reading.backSeconds >= 19.9 ? juce::String ("over 20 s") : juce::String (reading.backSeconds, 1) + " s") : juce::String ("-"), Theme::text());
+            row (6, "CELL MEMORY NOW", juce::String (juce::roundToInt (100.0f * shownMem / (1.0f + shownMem))) + " %", accent.withAlpha (0.85f));
+            // the curve: level in (across) against level out before Gain (up), -48 to 0 dBFS
+            auto plot = r.reduced (6.0f, 4.0f); const float lo = -48.0f, hi = 0.0f;
+            auto px = [&] (float db) { return plot.getX() + (db - lo) / (hi - lo) * plot.getWidth(); };
+            auto py = [&] (float db) { return plot.getBottom() - (juce::jlimit (lo, hi, db) - lo) / (hi - lo) * plot.getHeight(); };
+            g.setColour (Theme::dim().withAlpha (0.25f)); for (float db = -48.0f; db <= 0.0f; db += 12.0f) { g.drawVerticalLine (juce::roundToInt (px (db)), plot.getY(), plot.getBottom()); g.drawHorizontalLine (juce::roundToInt (py (db)), plot.getX(), plot.getRight()); }
+            g.setColour (Theme::dim().withAlpha (0.5f)); g.drawLine (px (lo), py (lo), px (hi), py (hi), 1.0f);
+            juce::Path curve; for (int i = 0; i < 9; ++i) { const float x = px (reading.in[i]), y = py (reading.out[i]); if (i == 0) curve.startNewSubPath (x, y); else curve.lineTo (x, y); }
+            g.setColour (accent); g.strokePath (curve, juce::PathStrokeType (2.0f));
+            g.setFont (Theme::font (8.0f)); g.setColour (Theme::dim());
+            for (float db = -48.0f; db <= 0.0f; db += 12.0f) { g.drawText (juce::String (juce::roundToInt (db)), juce::Rectangle<float> (px (db) - 14.0f, plot.getBottom() - 11.0f, 28.0f, 10.0f).toNearestInt(), juce::Justification::centred); g.drawText (juce::String (juce::roundToInt (db)), juce::Rectangle<float> (plot.getX() + 1.0f, py (db) - 5.0f, 22.0f, 10.0f).toNearestInt(), juce::Justification::centredLeft); }
+            auto bar = juce::Rectangle<float> (plot.getRight() - 7.0f, plot.getY(), 5.0f, plot.getHeight()); g.setColour (juce::Colours::black.withAlpha (0.5f)); g.fillRect (bar);
+            g.setColour (Theme::amber()); g.fillRect (bar.withHeight (bar.getHeight() * juce::jlimit (0.0f, 1.0f, -shownNow / 24.0f)));
+            g.setFont (Theme::font (9.0f)); g.setColour (Theme::text().withAlpha (0.8f));
+            g.drawText ("measured on the cell:  steady 1 kHz tones, dBFS in (across) against dBFS out before Gain (up);  bar: reduction now, 0 to -24 dB", caption.toNearestInt(), juce::Justification::centredLeft, true);
+        }
+        SqVoltageOptoPlugin::Reading reading; bool have = false, lastLimit = false; float lastReduce = -1, shownNow = 0, shownMem = 0;
+    };
     /** Voltage Tape: the numbers and the wave come from the machine's own parts at its present settings. */
     struct VoltageTapeViz : public Viz, private juce::Timer
     {
@@ -2063,7 +2115,7 @@ namespace Skins
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, voltage, voltagePower, voltageTape, voltageConsole, voltageClip, voltageComp, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, voltage, voltagePower, voltageTape, voltageConsole, voltageClip, voltageComp, voltageOpto, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -2112,6 +2164,7 @@ namespace Skins
         else if (name == "Voltage Console") { s.family = Family::voltageConsole; s.knob = KnobStyle::vintage; s.groups = { G ("TRANSFORMER", { "Drive", "Iron" }, true), G ("BUS", { "Crosstalk" }), G ("OUTPUT", { "Output", "Mix" }) }; }
         else if (name == "Voltage Clip")  { s.family = Family::voltageClip; s.knob = KnobStyle::vintage; s.groups = { G ("CLIP", { "Drive", "Tone" }, true), G ("DIODES", { "Diodes", "Symmetry" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Voltage Comp")  { s.family = Family::voltageComp; s.knob = KnobStyle::vintage; s.width = 820; s.groups = { G ("LEVEL", { "Input", "Output" }, true), G ("COMPRESSION", { "Ratio", "Attack", "Release" }), G ("OUTPUT", { "Mix", "Quality" }) }; }
+        else if (name == "Voltage Opto")  { s.family = Family::voltageOpto; s.knob = KnobStyle::vintage; s.width = 760; s.groups = { G ("LEVELLING", { "Reduction", "Gain" }, true), G ("CHARACTER", { "Mode" }), G ("OUTPUT", { "Mix", "Quality" }) }; }
         else if (name == "Voltage Tape")  { s.family = Family::voltageTape; s.knob = KnobStyle::vintage; s.width = 820; s.groups = { G ("TAPE", { "Drive", "Bias" }, true), G ("MACHINE", { "Speed", "EQ", "Head Bump" }), G ("TRANSPORT", { "Wow", "Flutter" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Voltage Power") { s.family = Family::voltagePower; s.knob = KnobStyle::vintage; s.groups = { G ("STAGE", { "Drive", "Bias", "Tube" }, true), G ("TRANSFORMER", { "Load", "Iron" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Scorch Drive")  { s.family = Family::sat; s.knob = KnobStyle::chicken; s.groups = { G ("DRIVE", { "Drive", "Highpass", "Out Level" }, true) }; }
@@ -3675,6 +3728,7 @@ namespace Skins
                 case Family::voltagePower: viz = std::make_unique<VoltagePowerViz> (handles, plugin, accent); break;
                 case Family::voltageTape: viz = std::make_unique<VoltageTapeViz> (handles, plugin, accent); break;
                 case Family::voltageComp: viz = std::make_unique<VoltageCompViz> (handles, plugin, accent); break;
+                case Family::voltageOpto: viz = std::make_unique<VoltageOptoViz> (handles, plugin, accent); break;
                 case Family::voltageClip: viz = std::make_unique<VoltageClipViz> (handles, plugin, accent); break;
                 case Family::voltageConsole: viz = std::make_unique<VoltageConsoleViz> (handles, plugin, accent); break;
                 case Family::generic:   break;

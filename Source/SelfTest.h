@@ -67,6 +67,7 @@ inline int runSelfTest()
         engine->getPluginManager().createBuiltInType<SqVoltageConsolePlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageClipPlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageCompPlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltageOptoPlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
@@ -5906,6 +5907,87 @@ inline int runSelfTest()
                 check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && juce::roundToInt (vp->ratio->getCurrentValue()) == 3 && vp->ratio->getCurrentValueAsString() == "20 : 1" && vp->attack->getCurrentValueAsString() == "20 us" && juce::roundToInt (vp->quality->getCurrentValue()) == 2
                        && Edition::packOf ("sqmVoltageComp") == Edition::Pack::color && Skins::artFor ("voltagecomp").isValid(),
                        "Voltage Comp has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets Input and Ratio, and the assistant sets Ratio and Quality by name and Attack to its fastest (shown as 20 us)");
+            }
+        }
+        // ---- 1.44 Voltage Opto: the optical compressor as a plug-in (the cell and its loop are checked against a circuit simulator in tests/opto_test.cpp)
+        {
+            call ("new_session", R"({"name":"Selftest Voltage Opto"})");
+            const auto ins = call ("insert_plugin", R"({"track":"Audio 1","plugin":"Voltage Opto"})");
+            SqVoltageOptoPlugin* vp = nullptr;
+            if (auto tt = session->findTrack ("Audio 1")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqVoltageOptoPlugin*> (pl)) vp = c;
+            check (vp != nullptr && ins.contains ("Voltage Opto") && juce::roundToInt (vp->quality->getCurrentValue()) == 0 && vp->mode->getCurrentValueAsString() == "Compress", "Voltage Opto is registered, inserts by name and starts at 4x in Compress");
+            if (vp != nullptr)
+            {
+                const double sr = 44100.0, twoPi = juce::MathConstants<double>::twoPi; const int lat = SqVoltageOptoPlugin::delaySamples;
+                struct Out { std::vector<float> l, r; };
+                struct Set { float reduce = 60, gain = 0, mix = 100; int mode = 0, quality = 0, unit = 1234; };
+                auto render = [&] (const Set& st, int N, const std::function<float (int)>& left, const std::function<float (int)>& right)
+                {
+                    Out o; auto twin = session->edit->getPluginCache().createNewPlugin (SqVoltageOptoPlugin::xmlTypeName, {});
+                    if (auto* tw = dynamic_cast<SqVoltageOptoPlugin*> (twin.get()))
+                    {
+                        tw->unit = st.unit; auto setp = [] (te::AutomatableParameter::Ptr& p, float v) { p->setParameter (v, juce::dontSendNotification); };
+                        setp (tw->quality, (float) st.quality); setp (tw->reduce, st.reduce); setp (tw->gain, st.gain); setp (tw->mode, (float) st.mode); setp (tw->mix, st.mix);
+                        tw->baseClassInitialise ({ te::TimePosition(), sr, 512 });
+                        juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                        for (int q = 0; q + 512 <= N; q += 512)
+                        {
+                            for (int i = 0; i < 512; ++i) { buf.setSample (0, i, left (q + i)); buf.setSample (1, i, right (q + i)); }
+                            te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / sr), te::TimePosition::fromSeconds ((q + 512) / sr)), true, false, true, false);
+                            tw->applyToBuffer (fc);
+                            for (int i = 0; i < 512; ++i) { o.l.push_back (buf.getSample (0, i)); o.r.push_back (buf.getSample (1, i)); }
+                        }
+                        tw->baseClassDeinitialise();
+                    }
+                    return o;
+                };
+                auto tone = [&] (float amp, double hz) { return std::function<float (int)> ([=] (int i) { return amp * (float) std::sin (twoPi * hz * i / sr); }); };
+                auto both = [&] (const Set& st, float amp, double hz, int N = 66150) { return render (st, N, tone (amp, hz), tone (amp, hz)); };
+                // level of a tone over the last 0.2 s of a render
+                auto lvl = [&] (const std::vector<float>& y, double f) { std::complex<double> acc = 0; const int M = 8820, from = (int) y.size() - M; if (from < 0) return -300.0; for (int i = 0; i < M; ++i) acc += (double) y[(size_t) (from + i)] * std::polar (1.0, -twoPi * f * (from + i) / sr); return 20 * std::log10 (2 * std::abs (acc) / M + 1e-15); };
+                auto peakIn = [&] (const std::vector<float>& y, double fromS, double toS) { float p = 0; for (int i = (int) (fromS * sr); i < (int) (toS * sr) && i < (int) y.size(); ++i) p = std::max (p, std::abs (y[(size_t) i])); return 20 * std::log10 ((double) p + 1e-15); };
+                Set base;
+                Set offS = base; offS.reduce = 0.0f; const auto idle = both (offS, 0.5f, 1000.0, 22050); const double inDb = 20 * std::log10 (0.5), idleDb = lvl (idle.l, 1000.0) - inDb;
+                double corr = 0; for (int i = 11025; i < 11025 + 4410; ++i) corr += (double) idle.l[(size_t) i] * 0.5 * std::sin (twoPi * 1000.0 * (i - lat) / sr);
+                check (std::abs (idleDb + 0.043) < 0.01 && corr > 0 && std::abs (vp->getLatencySeconds() - 96.0 / 44100.0) < 1.0e-9 + 96.0 / 44100.0 * 0.2,
+                       "with Reduction at 0 it is only the dark cell: a tone comes back " + juce::String (idleDb, 3) + " dB (the dark resistance's small loss), the right way up and 96 samples late, as it reports");
+                const double full = lvl (both (base, 1.0f, 1000.0).l, 1000.0), fullLimit = [&] { Set s2 = base; s2.mode = 1; return lvl (both (s2, 1.0f, 1000.0).l, 1000.0); }();
+                const double quietC = lvl (both (base, 0.25f, 1000.0).l, 1000.0), quietL = [&] { Set s2 = base; s2.mode = 1; return lvl (both (s2, 0.25f, 1000.0).l, 1000.0); }();
+                const double ratioC = 12.04 / (full - quietC), ratioL = 12.04 / (fullLimit - quietL);
+                check (full < -4.0 && full > -14.0 && ratioC > 1.8 && ratioC < 5.0 && ratioL > 6.0 && ratioL > 2.0 * ratioC,
+                       "Reduction 60: a full-scale tone comes out at " + juce::String (full, 1) + " dBFS in Compress and " + juce::String (fullLimit, 1) + " in Limit; over the top 12 dB Compress measures " + juce::String (ratioC, 1) + " : 1 and Limit " + juce::String (ratioL, 1) + " : 1");
+                {
+                    const auto shown = SqVoltageOptoPlugin::measure (1234, false, 60.0f), shownL = SqVoltageOptoPlugin::measure (1234, true, 60.0f);
+                    check (std::abs (shown.reductionAtFull - full) < 0.7 && std::abs (shown.ratio - ratioC) < 0.6 && shownL.ratio > 6.0 && shown.attackMs >= 4 && shown.attackMs <= 20 && shown.halfReleaseMs >= 40 && shown.halfReleaseMs <= 80 && shown.backSeconds > 1.0 && shown.backSeconds < 15.0
+                           && std::abs (shown.out[0] - shown.in[0]) < 0.2,
+                           "the face shows the cell's own numbers: a full-scale tone at " + juce::String (shown.reductionAtFull, 1) + " dBFS against " + juce::String (full, 1) + " measured in the audio, ratio " + juce::String (shown.ratio, 1) + " : 1 (Limit " + juce::String (shownL.ratio, 1)
+                           + "), attack " + juce::String (juce::roundToInt (shown.attackMs)) + " ms, half released in " + juce::String (juce::roundToInt (shown.halfReleaseMs)) + " ms, all back in " + juce::String (shown.backSeconds, 1) + " s");
+                }
+                // the cell's memory: after a loud passage stops, a quiet tone comes back quickly at first, then slowly - and more slowly after a long passage
+                auto after = [&] (double loudS) { return std::function<float (int)> ([=] (int i) { return (i < (int) (loudS * sr) ? 1.0f : 0.02f) * (float) std::sin (twoPi * 1000.0 * i / sr); }); };
+                const double quietDb = 20 * std::log10 (0.02);
+                const auto longP = render (base, (int) (3.2 * sr), after (2.0), after (2.0)), shortP = render (base, (int) (1.3 * sr), after (0.1), after (0.1));
+                const double atEnd = peakIn (longP.l, 1.9, 1.99) - (full > -100 ? 0.0 : 0.0), g80 = peakIn (longP.l, 2.08, 2.1) - quietDb, g900 = peakIn (longP.l, 2.9, 2.95) - quietDb, s900 = peakIn (shortP.l, 1.0, 1.05) - quietDb;
+                check (atEnd < -4.0 && g80 > 0.75 * atEnd && g80 < -1.0 && g900 < -0.8 && g900 > g80 && s900 > g900 + 0.5 && s900 > -1.0,
+                       "it lets go fast, then slowly: after 2 s at " + juce::String (atEnd, 1) + " dB a quiet tone is " + juce::String (g80, 1) + " dB down 0.1 s later and still " + juce::String (g900, 1) + " dB down after 0.9 s; after only 0.1 s of loud it is " + juce::String (s900, 1) + " dB down at 0.9 s - the cell remembers how long it was lit");
+                const auto slowHit = both (base, 1.0f, 1000.0, 8820); const double first = peakIn (slowHit.l, 0.0, 0.004), later = peakIn (slowHit.l, 0.1, 0.19);
+                check (first > later + 2.0, "it takes a few milliseconds to grab: the first peaks of a sudden full-scale tone reach " + juce::String (first, 1) + " dBFS before it settles at " + juce::String (later, 1));
+                const auto link = render (base, 66150, tone (1.0f, 1000.0), tone (0.02f, 700.0)); const double gl = lvl (link.l, 1000.0), gr = lvl (link.r, 700.0) - quietDb;
+                const auto solo = render (base, 66150, tone (0.0f, 1000.0), tone (1.0f, 700.0)); const double gs = lvl (solo.r, 700.0);
+                check (gl < -4.0 && std::abs (gl - gr) < 0.5 && gs < -4.0, "both channels sit under one panel: a full-scale left (" + juce::String (gl, 2) + " dB) takes a quiet right down with it (" + juce::String (gr, 2) + " dB), and a loud right on its own is compressed too (" + juce::String (gs, 2) + " dB)");
+                Set dryS = base; dryS.mix = 0.0f; const auto dry = both (dryS, 0.5f, 1000.0, 33075); double worstDry = 0; for (int i = 2000; i < 30000; ++i) worstDry = std::max (worstDry, std::abs ((double) dry.l[(size_t) i] - 0.5 * std::sin (twoPi * 1000.0 * (i - lat) / sr)));
+                Set other = base; other.unit = 99999; Set hq = base; hq.quality = 2; Set loud = base; loud.gain = 6.0f; const auto a1 = both (base, 1.0f, 1000.0, 22050), a2 = both (base, 1.0f, 1000.0, 22050);
+                double same = 0; for (size_t i = 0; i < a1.l.size(); ++i) same = std::max (same, (double) std::abs (a1.l[i] - a2.l[i]));
+                const double dUnit = std::abs (lvl (both (other, 1.0f, 1000.0).l, 1000.0) - full), d16 = std::abs (lvl (both (hq, 1.0f, 1000.0).l, 1000.0) - full), up6 = lvl (both (loud, 1.0f, 1000.0).l, 1000.0) - full;
+                check (worstDry < 1.0e-5 && dUnit > 0.01 && dUnit < 3.0 && same < 1.0e-6 && d16 < 0.1 && std::abs (up6 - 6.0) < 0.02,
+                       "Mix at 0 % is the input delayed by the same 96 samples; two units differ (" + juce::String (dUnit, 2) + " dB of reduction - cells vary), the same unit is the same every time, 16x compresses as 4x does (" + juce::String (d16, 3) + " dB apart), Gain 6 dB up is " + juce::String (up6, 2) + " dB up");
+                int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmVoltageOpto") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+                const auto pp = call ("plugin_presets", R"({"track":"Audio 1","slot":"Voltage Opto","preset":"808 Hold"})");
+                const bool presetOk = pp.contains ("808 Hold") && std::abs (vp->reduce->getCurrentValue() - 55.0f) < 0.01f && vp->mode->getCurrentValueAsString() == "Limit";
+                call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Opto","params":[{"param":"Mode","text":"Compress"},{"param":"Reduction","text":"70"},{"param":"Quality","text":"8x"}]})");
+                check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && vp->mode->getCurrentValueAsString() == "Compress" && std::abs (vp->reduce->getCurrentValue() - 70.0f) < 0.01f && juce::roundToInt (vp->quality->getCurrentValue()) == 1
+                       && Edition::packOf ("sqmVoltageOpto") == Edition::Pack::color && Skins::artFor ("voltageopto").isValid(),
+                       "Voltage Opto has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets Reduction and Limit, and the assistant sets Mode, Reduction and Quality by name");
             }
         }
         // ---- a missing audio file: renders say so instead of waiting for ever
