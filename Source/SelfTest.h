@@ -66,6 +66,7 @@ inline int runSelfTest()
         engine->getPluginManager().createBuiltInType<SqVoltageTapePlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageConsolePlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageClipPlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltageCompPlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
@@ -5823,6 +5824,88 @@ inline int runSelfTest()
                 check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && juce::roundToInt (vp->diodes->getCurrentValue()) == 2 && vp->diodes->getCurrentValueAsString() == "Sharp" && vp->symmetry->getCurrentValue() < 0.5f && juce::roundToInt (vp->quality->getCurrentValue()) == 2
                        && Edition::packOf ("sqmVoltageClip") == Edition::Pack::color && Skins::artFor ("voltageclip").isValid(),
                        "Voltage Clip has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets the soft lopsided pair, and the assistant sets Diodes, Symmetry and Quality by name");
+            }
+        }
+        // ---- 1.43 Voltage Comp: the FET compressor as a plug-in (the circuit is checked against a circuit simulator in tests/fet_test.cpp)
+        {
+            call ("new_session", R"({"name":"Selftest Voltage Comp"})");
+            const auto ins = call ("insert_plugin", R"({"track":"Audio 1","plugin":"Voltage Comp"})");
+            SqVoltageCompPlugin* vp = nullptr;
+            if (auto tt = session->findTrack ("Audio 1")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqVoltageCompPlugin*> (pl)) vp = c;
+            check (vp != nullptr && ins.contains ("Voltage Comp") && juce::roundToInt (vp->quality->getCurrentValue()) == 1, "Voltage Comp is registered, inserts by name and starts at 8x");
+            if (vp != nullptr)
+            {
+                const double sr = 44100.0, twoPi = juce::MathConstants<double>::twoPi; const int N = 44100, lat = SqVoltageCompPlugin::delaySamples;
+                struct Out { std::vector<float> l, r; };
+                struct Set { float input = 0, attack = 50, release = 50, output = 0, mix = 100; int ratio = 0, quality = 1, unit = 1234; };
+                auto render = [&] (const Set& st, const std::function<float (int)>& left, const std::function<float (int)>& right)
+                {
+                    Out o; auto twin = session->edit->getPluginCache().createNewPlugin (SqVoltageCompPlugin::xmlTypeName, {});
+                    if (auto* tw = dynamic_cast<SqVoltageCompPlugin*> (twin.get()))
+                    {
+                        tw->unit = st.unit; auto setp = [] (te::AutomatableParameter::Ptr& p, float v) { p->setParameter (v, juce::dontSendNotification); };
+                        setp (tw->quality, (float) st.quality); setp (tw->input, st.input); setp (tw->ratio, (float) st.ratio); setp (tw->attack, st.attack); setp (tw->release, st.release); setp (tw->output, st.output); setp (tw->mix, st.mix);
+                        tw->baseClassInitialise ({ te::TimePosition(), sr, 512 });
+                        juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                        for (int q = 0; q + 512 <= N; q += 512)
+                        {
+                            for (int i = 0; i < 512; ++i) { buf.setSample (0, i, left (q + i)); buf.setSample (1, i, right (q + i)); }
+                            te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / sr), te::TimePosition::fromSeconds ((q + 512) / sr)), true, false, true, false);
+                            tw->applyToBuffer (fc);
+                            for (int i = 0; i < 512; ++i) { o.l.push_back (buf.getSample (0, i)); o.r.push_back (buf.getSample (1, i)); }
+                        }
+                        tw->baseClassDeinitialise();
+                    }
+                    return o;
+                };
+                auto tone = [&] (float amp, double hz) { return std::function<float (int)> ([=] (int i) { return amp * (float) std::sin (twoPi * hz * i / sr); }); };
+                auto both = [&] (const Set& st, float amp, double hz) { return render (st, tone (amp, hz), tone (amp, hz)); };
+                auto bin = [&] (const std::vector<float>& y, double f) { std::complex<double> acc = 0; const int from = 22050, M = 17640; if ((int) y.size() < from + M) return -300.0; for (int i = 0; i < M; ++i) acc += (double) y[(size_t) (from + i)] * std::polar (1.0, -twoPi * f * i / sr); return 20 * std::log10 (2 * std::abs (acc) / M + 1e-15); };
+                auto peakIn = [&] (const std::vector<float>& y, double fromS, double toS) { float p = 0; for (int i = (int) (fromS * sr); i < (int) (toS * sr) && i < (int) y.size(); ++i) p = std::max (p, std::abs (y[(size_t) i])); return 20 * std::log10 ((double) p + 1e-15); };
+                Set base;
+                const auto quiet = both (base, 0.02f, 1000.0); const double inDb = 20 * std::log10 (0.02), lvl = bin (quiet.l, 1000.0);
+                double corr = 0; for (int i = 22050; i < 22050 + 4410; ++i) corr += (double) quiet.l[(size_t) i] * 0.02 * std::sin (twoPi * 1000.0 * (i - lat) / sr);
+                check (std::abs (lvl - inDb) < 0.5 && corr > 0 && std::abs (vp->getLatencySeconds() - 96.0 / 44100.0) < 1.0e-9 + 96.0 / 44100.0 * 0.2,
+                       "Voltage Comp leaves a tone under its threshold alone (" + juce::String (lvl - inDb, 3) + " dB), the right way up and 96 samples late, as it reports");
+                // above the threshold: a full-scale tone is turned down, more at each ratio step
+                double red[4] = {}; juce::String reds; bool deeper = true;
+                for (int ix = 0; ix < 4; ++ix) { Set s2 = base; s2.ratio = ix; red[ix] = bin (both (s2, 1.0f, 1000.0).l, 1000.0); reds += juce::String (red[ix], 1) + " "; if (ix > 0) deeper = deeper && red[ix] < red[ix - 1] - 0.2; }
+                check (red[0] < -5.0 && red[0] > -12.0 && deeper && red[3] > -14.0, "a full-scale tone, 12 dB over the threshold, comes out at " + reds.trim() + " dBFS at 4, 8, 12 and 20 : 1: turned down, and further at each step");
+                {
+                    juce::String shownRatios; bool ok = true; const double want[4] = { 4, 8, 12, 20 }; SqVoltageCompPlugin::Reading first;
+                    for (int ix = 0; ix < 4; ++ix) { const auto m = SqVoltageCompPlugin::measure (1234, ix, 0.0f); if (ix == 0) first = m; ok = ok && std::abs (m.ratio - want[ix]) < 0.15 * want[ix]; shownRatios += juce::String (m.ratio, 1) + " "; }
+                    check (ok && std::abs (first.reductionAtFull - red[0]) < 1.0 && first.out[0] < first.out[8] && std::abs (first.out[0] - first.in[0]) < 0.5 && first.second < -40.0,
+                           "the face shows the circuit's own numbers: ratios " + shownRatios.trim() + " : 1 for the steps named 4, 8, 12 and 20; a full-scale tone turned down " + juce::String (first.reductionAtFull, 1) + " dB against " + juce::String (red[0], 1) + " dB measured in the audio; its 2nd harmonic " + juce::String (first.second, 1) + " dB");
+                }
+                // Input pushes the signal into the fixed threshold; Output is plain gain afterwards
+                Set pushed = base; pushed.input = 12.0f; Set louder = base; louder.output = 6.0f;
+                const double q0 = bin (both (base, 0.25f, 1000.0).l, 1000.0), q12 = bin (both (pushed, 0.25f, 1000.0).l, 1000.0), o6 = bin (both (louder, 0.25f, 1000.0).l, 1000.0);
+                check (q12 > q0 + 1.0 && q12 < q0 + 8.0 && std::abs (o6 - q0 - 6.0) < 0.05, "Input 12 dB up brings a -12 dBFS tone up only " + juce::String (q12 - q0, 1) + " dB (it is now compressing); Output 6 dB up is 6 dB up (" + juce::String (o6 - q0, 2) + ")");
+                // attack: the first peaks of a sudden loud tone get through a slow attack and not a fast one
+                Set slowA = base; slowA.attack = 0.0f; slowA.ratio = 3; Set fastA = slowA; fastA.attack = 100.0f;
+                const double pSlow = peakIn (both (slowA, 1.0f, 1000.0).l, 0.0, 0.004), pFast = peakIn (both (fastA, 1.0f, 1000.0).l, 0.0, 0.004);
+                // release: after a loud passage stops, a fast release lets a quiet tone back up at once; a slow one keeps it down
+                auto drop = std::function<float (int)> ([=] (int i) { return (i < 17640 ? 1.0f : 0.05f) * (float) std::sin (twoPi * 1000.0 * i / sr); });
+                Set fastR = base; fastR.release = 100.0f; fastR.ratio = 3; Set slowR = fastR; slowR.release = 0.0f;
+                const double want = 20 * std::log10 (0.05), rFast = peakIn (render (fastR, drop, drop).l, 0.70, 0.75) - want, rSlow = peakIn (render (slowR, drop, drop).l, 0.70, 0.75) - want;
+                check (pSlow > pFast + 0.4 && rFast > -1.0 && rSlow < rFast - 2.0, "Attack: the first peaks of a sudden full-scale tone reach " + juce::String (pSlow, 1) + " dBFS at 800 microseconds and " + juce::String (pFast, 1) + " at 20; Release: 0.3 s after a loud passage a quiet tone is back to " + juce::String (rFast, 1) + " dB at 50 ms and still " + juce::String (rSlow, 1) + " dB down at 1.1 s");
+                // one sidechain: a loud left turns the quiet right down by the same amount
+                const auto link = render (base, tone (1.0f, 1000.0), tone (0.02f, 700.0)); const double gl = bin (link.l, 1000.0), gr = bin (link.r, 700.0) - inDb;
+                const auto solo = render (base, tone (0.0f, 1000.0), tone (1.0f, 700.0)); const double gs = bin (solo.r, 700.0);
+                check (gl < -5.0 && std::abs (gl - gr) < 0.7 && gs < -5.0, "both channels share one sidechain: a full-scale left (" + juce::String (gl, 2) + " dB) takes a quiet right down with it (" + juce::String (gr, 2) + " dB), and a loud right on its own is compressed too (" + juce::String (gs, 2) + " dB)");
+                Set dryS = base; dryS.mix = 0.0f; dryS.input = 12.0f; const auto dry = both (dryS, 0.25f, 1000.0); double worstDry = 0; for (int i = 2000; i < 30000; ++i) worstDry = std::max (worstDry, std::abs ((double) dry.l[(size_t) i] - 0.25 * std::sin (twoPi * 1000.0 * (i - lat) / sr)));
+                Set other = base; other.unit = 99999; Set hq = base; hq.quality = 2; const auto a1 = both (base, 1.0f, 1000.0), a2 = both (base, 1.0f, 1000.0);
+                double same = 0; for (size_t i = 0; i < a1.l.size(); ++i) same = std::max (same, (double) std::abs (a1.l[i] - a2.l[i]));
+                const double dUnit = std::abs (bin (both (other, 1.0f, 1000.0).l, 1000.0) - red[0]), d16 = std::abs (bin (both (hq, 1.0f, 1000.0).l, 1000.0) - red[0]);
+                check (worstDry < 1.0e-5 && dUnit > 0.001 && dUnit < 3.0 && same < 1.0e-6 && d16 < 0.3,
+                       "Mix at 0 % is the input delayed by the same 96 samples; two units differ slightly (" + juce::String (dUnit, 2) + " dB of reduction), the same unit is the same every time, 16x compresses as 8x does (" + juce::String (d16, 3) + " dB apart)");
+                int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmVoltageComp") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+                const auto pp = call ("plugin_presets", R"({"track":"Audio 1","slot":"Voltage Comp","preset":"Ad-Lib Squeeze"})");
+                const bool presetOk = pp.contains ("Ad-Lib Squeeze") && std::abs (vp->input->getCurrentValue() - 20.0f) < 0.01f && juce::roundToInt (vp->ratio->getCurrentValue()) == 2;
+                call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Comp","params":[{"param":"Ratio","text":"20 : 1"},{"param":"Attack","value":100},{"param":"Quality","text":"16x"}]})");
+                check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && juce::roundToInt (vp->ratio->getCurrentValue()) == 3 && vp->ratio->getCurrentValueAsString() == "20 : 1" && vp->attack->getCurrentValueAsString() == "20 us" && juce::roundToInt (vp->quality->getCurrentValue()) == 2
+                       && Edition::packOf ("sqmVoltageComp") == Edition::Pack::color && Skins::artFor ("voltagecomp").isValid(),
+                       "Voltage Comp has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets Input and Ratio, and the assistant sets Ratio and Quality by name and Attack to its fastest (shown as 20 us)");
             }
         }
         // ---- a missing audio file: renders say so instead of waiting for ever

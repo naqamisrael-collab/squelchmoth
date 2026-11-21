@@ -932,6 +932,18 @@ inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
         A ("Square It",          { N ("Drive", 30), N ("Diodes", 2), N ("Symmetry", 0), N ("Tone", 100), N ("Output", -6), N ("Mix", 100), N ("Quality", 2) }),
         A ("Dark Fuzz",          { N ("Drive", 24), N ("Diodes", 1), N ("Symmetry", 0), N ("Tone", 10), N ("Output", -4), N ("Mix", 100), N ("Quality", 2) }),
         A ("Parallel Smash",     { N ("Drive", 20), N ("Diodes", 0), N ("Symmetry", 0), N ("Tone", 90), N ("Output", -4), N ("Mix", 35), N ("Quality", 2) }) };
+    m["Voltage Comp"] = {
+        B ("Rap Vocal",          { N ("Input", 12), N ("Ratio", 0), N ("Attack", 60), N ("Release", 80), N ("Output", -6), N ("Mix", 100), N ("Quality", 1) }),
+        B ("Vocal Up Front",     { N ("Input", 16), N ("Ratio", 1), N ("Attack", 50), N ("Release", 90), N ("Output", -9), N ("Mix", 100), N ("Quality", 1) }),
+        B ("Ad-Lib Squeeze",     { N ("Input", 20), N ("Ratio", 2), N ("Attack", 80), N ("Release", 100), N ("Output", -12), N ("Mix", 100), N ("Quality", 1) }),
+        B ("Snare Snap",         { N ("Input", 12), N ("Ratio", 0), N ("Attack", 0),  N ("Release", 100), N ("Output", -5), N ("Mix", 100), N ("Quality", 1) }),
+        B ("Kick Punch",         { N ("Input", 10), N ("Ratio", 0), N ("Attack", 0),  N ("Release", 85), N ("Output", -4), N ("Mix", 100), N ("Quality", 1) }),
+        B ("Bass Leveller",      { N ("Input", 14), N ("Ratio", 1), N ("Attack", 30), N ("Release", 40), N ("Output", -8), N ("Mix", 100), N ("Quality", 1) }),
+        B ("Gentle Glue",        { N ("Input", 6),  N ("Ratio", 0), N ("Attack", 20), N ("Release", 50), N ("Output", -2), N ("Mix", 100), N ("Quality", 1) }),
+        A ("All The Way In",     { N ("Input", 30), N ("Ratio", 3), N ("Attack", 100), N ("Release", 100), N ("Output", -18), N ("Mix", 100), N ("Quality", 2) }),
+        A ("Parallel Drums",     { N ("Input", 26), N ("Ratio", 3), N ("Attack", 90), N ("Release", 100), N ("Output", -14), N ("Mix", 35), N ("Quality", 1) }),
+        A ("Room Pump",          { N ("Input", 24), N ("Ratio", 2), N ("Attack", 100), N ("Release", 70), N ("Output", -14), N ("Mix", 100), N ("Quality", 1) }),
+        A ("Slow Limiter",       { N ("Input", 14), N ("Ratio", 3), N ("Attack", 0),  N ("Release", 10), N ("Output", -6), N ("Mix", 100), N ("Quality", 1) }) };
     m["Spindle Delay"] = presets114_spindle();
     m["Fissure Filter"] = presets114_fissure();
     m["Mote"] = presets114_mote();
