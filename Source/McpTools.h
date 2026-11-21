@@ -26,6 +26,7 @@
 #include "AudioEditor.h"
 #include "BurnToMidi.h"
 #include "Console.h"
+#include "ConsoleMode.h"
 #include "MonitorChain.h"
 #include "PluginMenu.h"
 #include "ScoreExport.h"
@@ -452,6 +453,7 @@ private:
         registerFrameTools();
         registerAdvisorTools();
         registerHearingTools();
+        registerConsoleModeTools();
     }
 
     #include "McpToolsParity.h"
@@ -485,6 +487,7 @@ private:
     #include "McpToolsFrame.h"
     #include "McpToolsAdvisor.h"
     #include "McpToolsHearing.h"
+    #include "McpToolsConsoleMode.h"
 
     //==============================================================================
     void registerSessionTools()

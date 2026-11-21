@@ -64,6 +64,7 @@ inline int runSelfTest()
     engine->getPluginManager().createBuiltInType<SqVoltagePlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltagePowerPlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageTapePlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltageConsolePlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
@@ -5653,6 +5654,101 @@ inline int runSelfTest()
                        "Voltage Tape has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, a preset sets Wow 0.6 % at 7.5 in/s, and all three Voltage plug-ins have their plate artwork");
                 call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Tape","params":[{"param":"Speed","text":"30 in/s"},{"param":"EQ","text":"IEC"},{"param":"Quality","text":"8x"}]})");
                 check (juce::roundToInt (vp->speed->getCurrentValue()) == 2 && vp->speed->getCurrentValueAsString() == "30 in/s" && vp->eq->getCurrentValue() >= 0.5f && juce::roundToInt (vp->quality->getCurrentValue()) == 1, "the assistant sets Speed, EQ and Quality by name (30 in/s, IEC, 8x)");
+            }
+        }
+        // ---- 1.41 Voltage Console and Console Mode (the transformer is checked against a circuit simulator in tests/console_test.cpp)
+        {
+            call ("new_session", R"({"name":"Selftest Voltage Console"})");
+            const auto ins = call ("insert_plugin", R"({"track":"Audio 1","plugin":"Voltage Console"})");
+            SqVoltageConsolePlugin* vp = nullptr;
+            if (auto tt = session->findTrack ("Audio 1")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqVoltageConsolePlugin*> (pl)) vp = c;
+            check (vp != nullptr && ins.contains ("Voltage Console"), "Voltage Console is registered and inserts by name");
+            if (vp != nullptr)
+            {
+                const double sr = 44100.0; const int N = 44100 * 2;
+                struct Out { std::vector<float> l, r; };
+                struct Set { float drive = 0, iron = 50, leak = -120, mix = 100; int unit = 1234; };
+                auto render = [&] (const Set& st, float ampL, float ampR, double hz)
+                {
+                    Out o; auto twin = session->edit->getPluginCache().createNewPlugin (SqVoltageConsolePlugin::xmlTypeName, {});
+                    if (auto* tw = dynamic_cast<SqVoltageConsolePlugin*> (twin.get()))
+                    {
+                        tw->unit = st.unit; tw->drive->setParameter (st.drive, juce::dontSendNotification); tw->iron->setParameter (st.iron, juce::dontSendNotification);
+                        tw->crosstalk->setParameter (st.leak, juce::dontSendNotification); tw->mix->setParameter (st.mix, juce::dontSendNotification);
+                        tw->baseClassInitialise ({ te::TimePosition(), sr, 512 });
+                        juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                        for (int q = 0; q + 512 <= N; q += 512)
+                        {
+                            for (int i = 0; i < 512; ++i) { const float v = (float) std::sin (juce::MathConstants<double>::twoPi * hz * (q + i) / sr); buf.setSample (0, i, ampL * v); buf.setSample (1, i, ampR * v); }
+                            te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / sr), te::TimePosition::fromSeconds ((q + 512) / sr)), true, false, true, false);
+                            tw->applyToBuffer (fc);
+                            for (int i = 0; i < 512; ++i) { o.l.push_back (buf.getSample (0, i)); o.r.push_back (buf.getSample (1, i)); }
+                        }
+                        tw->baseClassDeinitialise();
+                    }
+                    return o;
+                };
+                auto bin = [&] (const std::vector<float>& y, double f) { std::complex<double> acc = 0; const int from = 44100, M = 35280; if ((int) y.size() < from + M) return -300.0; for (int i = 0; i < M; ++i) acc += (double) y[(size_t) (from + i)] * std::polar (1.0, -juce::MathConstants<double>::twoPi * f * i / sr); return 20 * std::log10 (2 * std::abs (acc) / M + 1e-15); };
+                Set base;
+                const auto quiet = render (base, 0.05f, 0.05f, 1000.0); const double inDb = 20 * std::log10 (0.05), lvl = bin (quiet.l, 1000.0);
+                double worstAlign = 0; for (int i = 44100; i < 44100 + 4410; ++i) worstAlign = std::max (worstAlign, std::abs ((double) quiet.l[(size_t) i] - 0.05 * std::sin (juce::MathConstants<double>::twoPi * 1000.0 * i / sr)));
+                check (std::abs (lvl - inDb) < 0.05 && worstAlign < 0.05 * 0.02 && vp->getLatencySeconds() == 0.0,
+                       "Voltage Console at a low level is level-matched (" + juce::String (lvl - inDb, 3) + " dB) and adds no delay: the output sits on the input sample for sample (largest difference " + juce::String (worstAlign / 0.05 * 100.0, 2) + " %)");
+                Set hot = base; hot.drive = 9.0f; const auto b50 = render (hot, 0.9f, 0.9f, 50.0), b1k = render (hot, 0.9f, 0.9f, 1000.0);
+                const double t50 = bin (b50.l, 150.0) - bin (b50.l, 50.0), t1k = bin (b1k.l, 3000.0) - bin (b1k.l, 1000.0);
+                Set smallS = hot; smallS.iron = 5.0f; Set bigS = hot; bigS.iron = 95.0f; const auto s50 = render (smallS, 0.9f, 0.9f, 50.0), g50 = render (bigS, 0.9f, 0.9f, 50.0);
+                const double ts = bin (s50.l, 150.0) - bin (s50.l, 50.0), tg = bin (g50.l, 150.0) - bin (g50.l, 50.0);
+                check (t50 > -60.0 && t50 < -20.0 && t1k < t50 - 25.0 && ts > tg + 10.0,
+                       "iron distorts the bass, not the middle: 3rd harmonic " + juce::String (t50, 1) + " dBc at 50 Hz against " + juce::String (t1k, 1) + " dBc at 1 kHz; a small transformer " + juce::String (ts, 1) + " dBc, a large one " + juce::String (tg, 1) + " dBc");
+                Set leaky = base; leaky.leak = -80.0f; const auto x1 = render (leaky, 0.5f, 0.0f, 1000.0), x10 = render (leaky, 0.5f, 0.0f, 10000.0), x0 = render (base, 0.5f, 0.0f, 1000.0);
+                const double c1 = bin (x1.r, 1000.0) - bin (x1.l, 1000.0), c10 = bin (x10.r, 10000.0) - bin (x10.l, 10000.0);
+                double silent = 0; for (float v : x0.r) silent = std::max (silent, (double) std::abs (v));
+                check (std::abs (c1 + 80.0) < 0.3 && c10 > c1 + 16.0 && c10 < c1 + 22.0 && silent == 0.0,
+                       "Crosstalk at -80 dB: with only the left playing the right carries " + juce::String (c1, 1) + " dB at 1 kHz and " + juce::String (c10, 1) + " dB at 10 kHz; off, the right is exactly silent");
+                Set dryS = hot; dryS.mix = 0.0f; const auto dry = render (dryS, 0.25f, 0.25f, 1000.0); double worstDry = 0; for (int i = 0; i < 60000; ++i) worstDry = std::max (worstDry, std::abs ((double) dry.l[(size_t) i] - 0.25 * std::sin (juce::MathConstants<double>::twoPi * 1000.0 * i / sr)));
+                Set other = hot; other.unit = 99999; const auto o50 = render (other, 0.9f, 0.9f, 50.0), again = render (hot, 0.9f, 0.9f, 50.0);
+                double same = 0; for (size_t i = 0; i < again.l.size(); ++i) same = std::max (same, (double) std::abs (again.l[i] - b50.l[i]));
+                const double dUnit = std::abs ((bin (o50.l, 150.0) - bin (o50.l, 50.0)) - t50), dLR = std::abs ((bin (b50.r, 150.0) - bin (b50.r, 50.0)) - t50);
+                check (worstDry < 1.0e-6 && dUnit > 0.005 && dUnit < 4.0 && dLR > 0.005 && dLR < 4.0 && same < 1.0e-6,
+                       "Mix at 0 % is the input itself; two units differ slightly (" + juce::String (dUnit, 2) + " dB in the 3rd harmonic), left and right are two transformers (" + juce::String (dLR, 2) + " dB), the same unit is the same every time");
+                {
+                    const auto shown = SqVoltageConsolePlugin::measure (1234, 50.0f, 9.0f);
+                    check (std::abs (shown.third50 - t50) < 1.5 && shown.third1k < shown.third50 - 25.0 && shown.fluxPercent > 1.0 && shown.fluxPercent < 60.0 && shown.cornerHz > 0.5 && shown.cornerHz < 10.0 && shown.wave.size() == 384,
+                           "the face shows the transformer's own numbers: 3rd harmonic at 50 Hz " + juce::String (shown.third50, 1) + " dB against " + juce::String (t50, 1) + " dB measured in the audio, iron driven to " + juce::String (shown.fluxPercent, 1) + " % of saturation, bass corner " + juce::String (shown.cornerHz, 1) + " Hz");
+                }
+                int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmVoltageConsole") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+                const auto pp = call ("plugin_presets", R"({"track":"Audio 1","slot":"Voltage Console","preset":"Leaky Rails"})");
+                call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Console","params":[{"param":"Crosstalk","text":"Off"}]})"); const bool offByName = vp->crosstalk->getCurrentValue() <= -119.0f && vp->crosstalk->getCurrentValueAsString() == "Off";
+                check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && pp.contains ("Leaky Rails") && offByName && Edition::packOf ("sqmVoltageConsole") == Edition::Pack::color && Skins::artFor ("voltageconsole").isValid(),
+                       "Voltage Console has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, and the assistant can switch Crosstalk off by name");
+            }
+            // Console Mode: the whole session in one step
+            {
+                call ("new_session", R"({"name":"Selftest Console Mode"})");
+                call ("add_track", R"({"kind":"audio","name":"Drums"})"); call ("add_track", R"({"kind":"audio","name":"Bass"})");
+                call ("insert_plugin", R"({"track":"Bass","plugin":"Voltage Console"})");      // one put there by hand: Console Mode must leave it alone
+                const int tracks = session->getTracks().size();
+                const auto before = call ("console_mode", R"({"action":"status"})");
+                const auto on = call ("console_mode", R"({"action":"on","drive":3,"iron":40})"); auto st = ConsoleMode::status (*session);
+                bool placedLast = true, settings = true;
+                for (auto t : session->getTracks())
+                {
+                    auto inserts = Session::getInserts (t->pluginList, t); auto* c = ConsoleMode::placedOn (t->pluginList, "channel");
+                    placedLast = placedLast && c != nullptr && ! inserts.isEmpty() && inserts.getLast() == c;
+                    settings = settings && c != nullptr && std::abs (c->drive->getCurrentValue() - 3.0f) < 0.01f && std::abs (c->iron->getCurrentValue() - 40.0f) < 0.01f && c->crosstalk->getCurrentValue() <= -119.0f;
+                }
+                auto* bus = ConsoleMode::placedOn (session->edit->getMasterPluginList(), "bus"); auto masterPlugins = session->edit->getMasterPluginList().getPlugins();
+                check (before.contains ("off") && st.complete() && st.tracks == tracks && tracks >= 3 && placedLast && settings && bus != nullptr && masterPlugins.getFirst() == bus && std::abs (bus->crosstalk->getCurrentValue() + 80.0f) < 0.01f && on.contains ("Placed " + juce::String (tracks + 1)),
+                       "Console Mode on: " + juce::String (st.channels) + " of " + juce::String (st.tracks) + " tracks get a transformer as their last insert with the asked settings, the master gets the summing stage first with crosstalk at -80 dB (" + on.substring (0, 40) + "...)");
+                const auto again = call ("console_mode", R"({"action":"on"})"); call ("add_track", R"({"kind":"audio","name":"Late Arrival"})");
+                const bool incomplete = ! ConsoleMode::status (*session).complete(); const auto fill = call ("console_mode", R"({"action":"on"})");
+                check (again.contains ("Nothing to add") && incomplete && fill.contains ("Placed 1") && ConsoleMode::status (*session).complete(), "turning it on twice adds nothing; a track added later gets its transformer when it is turned on again");
+                int byHand = 0; if (auto tt = session->findTrack ("Bass")) for (auto pl : tt->pluginList) if (dynamic_cast<SqVoltageConsolePlugin*> (pl) != nullptr && ! pl->state.hasProperty (ConsoleMode::mark())) ++byHand;
+                const auto off = call ("console_mode", R"({"action":"off"})"); int left = 0, byHandAfter = 0;
+                for (auto t : session->getTracks()) for (auto pl : t->pluginList) if (dynamic_cast<SqVoltageConsolePlugin*> (pl) != nullptr) { ++left; if (! pl->state.hasProperty (ConsoleMode::mark())) ++byHandAfter; }
+                check (byHand == 1 && ! ConsoleMode::status (*session).on() && left == 1 && byHandAfter == 1 && off.contains ("removed " + juce::String (tracks + 2)), "Console Mode off removes exactly the ones it placed (" + juce::String (tracks + 2) + ") and leaves the one inserted by hand");
+                session->edit->getUndoManager().undo(); const bool back = ConsoleMode::status (*session).complete(); session->edit->getUndoManager().redo();
+                check (back && ! ConsoleMode::status (*session).on(), "one undo brings the whole console back; redo takes it away again");
             }
         }
         // ---- a missing audio file: renders say so instead of waiting for ever

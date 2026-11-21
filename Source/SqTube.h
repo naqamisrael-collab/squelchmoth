@@ -438,6 +438,75 @@ namespace SqTube
         std::array<double, 6> x { 0, 0, 0, 0, 0, 0 }, xPrev { 0, 0, 0, 0, 0, 0 }; Cap caps[5];
     };
 
+    //============================================================================== line transformer
+    /** A console's input or output transformer on its own: a source of resistance r1 (source and winding together) feeding
+        a one-to-one transformer whose secondary is loaded with r2. The iron is the same Core as the output stage's, without
+        a gap (no steady current flows here), so it distorts evenly on both sides: odd harmonics, most in the bass, where the
+        flux is largest. volts in, volts across the secondary out. */
+    struct LineCircuit { double r1 = 150.0, r2 = 10000.0; };
+    inline Core lineCore (double scale = 1.0) { Core k; k.on = true; k.lair = 0.002 * scale; k.ms = 150.0; k.a = 0.002; k.alpha = 1.0e-5; k.k = 0.003; k.c = 0.2; k.lg = 1.0e12; k.v0 = 0.01; return k; }
+
+    class LineTransformer
+    {
+    public:
+        void prepare (double sampleRate, const Core& iron = lineCore(), const LineCircuit& circuit = {}) { core = iron; c = circuit; T = 1.0 / sampleRate; reset(); }
+        void reset() { hC = mC = rateC = uL = uL2 = 0.0; iterations = 0; }
+        void setParts (const Core& iron, const LineCircuit& circuit) { const double flux = core.lair * (hC + mC); core = iron; c = circuit; mC = flux / core.lair - hC; }
+        /** Level through the transformer in its pass band (the two resistances divide it). */
+        static double passGain (const LineCircuit& c) { return c.r2 / (c.r1 + c.r2); }
+        /** Inductance seen by small signals with the iron at rest, in henries. */
+        static double smallInductance (const Core& k) { const double beta = k.c * k.ms / k.a / 3.0; return k.lair * (1.0 + beta / (1.0 - k.alpha * beta)); }
+        /** Where the bass is 3 dB down for small signals, in Hz. */
+        static double bassCorner (const Core& k, const LineCircuit& c) { return (c.r1 * c.r2 / (c.r1 + c.r2)) / (2.0 * 3.14159265358979323846 * smallInductance (k)); }
+        double flux() const { return core.lair * (hC + mC); }
+        double fluxAtSaturation() const { return core.lair * core.ms; }
+        int lastIterations() const { return iterations; }
+
+        double process (double vin)
+        {
+            // one unknown, the voltage across the winding: (vin - u) / r1 = iron (u) + u / r2
+            if (vin == 0.0 && std::abs (uL) < 1.0e-7 && std::abs (hC) < 1.0e-9)                 // nothing coming in and the iron come to rest: an idle track costs nothing
+            {
+                mC += hC; hC = 0.0; rateC = 0.0; uL = uL2 = 0.0; iterations = 0; return 0.0;          // (the flux it holds is kept)
+            }
+            double u = std::abs (uL - uL2) < 3.0 ? 2.0 * uL - uL2 : uL, h = hC, rate = rateC, cur = 0.0, g = 0.0; iterations = 0;      // start from where the last two answers point
+            for (int it = 0; it < 40; ++it)
+            {
+                ++iterations; ironAt (u, h, rate, cur, g);
+                const double f = (u - vin) / c.r1 + cur + u / c.r2, d = 1.0 / c.r1 + g + 1.0 / c.r2, step = f / d;
+                u -= step; if (std::abs (step) < 1.0e-8) break;                      // the iron as found in this pass is kept: the voltage moved less than the tolerance since
+            }
+            const double sum = hC + mC + T / (2.0 * core.lair) * (u + uL); hC = h; mC = sum - h; rateC = rate; uL2 = uL; uL = u;
+            return u;
+        }
+
+    private:
+        void ironAt (double u, double& h, double& rate, double& current, double& slopeOut) const
+        {
+            const double sum = hC + mC + T / (2.0 * core.lair) * (u + uL), base = hC + 0.5 * T * rateC, gain = 0.5 * T * u / core.lair;
+            double f = 0.0; h = hC; bool done = false;
+            for (int it = 0; it < 8 && ! done; ++it) { f = core.slope (h, sum - h, u); const double hn = base + gain / (1.0 + f); done = std::abs (hn - h) < 1.0e-15 + 1.0e-10 * std::abs (hn); h = hn; }
+            if (! done)
+            {
+                double lo = std::min (base, base + gain), hi = std::max (base, base + gain);
+                auto miss = [&] (double hh) { f = core.slope (hh, sum - hh, u); return hh - base - gain / (1.0 + f); };
+                double flo = miss (lo), fhi = miss (hi);
+                if (flo > 0.0 || fhi < 0.0) h = flo > 0.0 ? lo : hi;
+                else for (int it = 0; it < 60; ++it)
+                {
+                    const double mid = (fhi - flo) != 0.0 ? lo - flo * (hi - lo) / (fhi - flo) : 0.5 * (lo + hi), fm = miss (mid); h = mid;
+                    if (std::abs (fm) < 1.0e-15 + 1.0e-10 * std::abs (mid) || (hi - lo) < 1.0e-15 + 1.0e-11 * std::abs (mid)) break;
+                    if (fm > 0.0) { hi = mid; fhi = fm; flo *= 0.5; } else { lo = mid; flo = fm; fhi *= 0.5; }
+                }
+                f = core.slope (h, sum - h, u);
+            }
+            rate = u / (core.lair * (1.0 + f));
+            current = h + core.lair * sum / core.lg;
+            slopeOut = 0.5 * T * (1.0 / (core.lair * (1.0 + f)) + 1.0 / core.lg);
+        }
+        Core core; LineCircuit c; double T = 1.0 / 192000.0, hC = 0, mC = 0, rateC = 0, uL = 0, uL2 = 0; int iterations = 0;
+    };
+
     //============================================================================== oversampling
     /** Runs a process at `factor` times the rate: a windowed-sinc (Kaiser) filter up and the same down. Constant delay of
         latency() samples at the outer rate. */

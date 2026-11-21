@@ -908,6 +908,18 @@ inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
         A ("No Bias Gate",       { N ("Drive", 10), N ("Bias", 0),  N ("Speed", 1), N ("EQ", 0), N ("Wow", 0.05), N ("Flutter", 0.04), N ("Head Bump", 50), N ("Output", 0), N ("Mix", 100), N ("Quality", 2) }),
         A ("Worn Transport",     { N ("Drive", 4),  N ("Bias", 50), N ("Speed", 0), N ("EQ", 0), N ("Wow", 0.6), N ("Flutter", 0.3), N ("Head Bump", 60), N ("Output", 0), N ("Mix", 100), N ("Quality", 0) }),
         A ("Tape Flange",        { N ("Drive", 0),  N ("Bias", 50), N ("Speed", 1), N ("EQ", 1), N ("Wow", 1.0), N ("Flutter", 0.0), N ("Head Bump", 0), N ("Output", -3), N ("Mix", 50), N ("Quality", 0) }) };
+    m["Voltage Console"] = {
+        B ("Channel",            { N ("Drive", 0),  N ("Iron", 50), N ("Crosstalk", -120), N ("Output", 0), N ("Mix", 100) }),
+        B ("Channel Small Iron", { N ("Drive", 0),  N ("Iron", 20), N ("Crosstalk", -120), N ("Output", 0), N ("Mix", 100) }),
+        B ("Channel Big Iron",   { N ("Drive", 0),  N ("Iron", 90), N ("Crosstalk", -120), N ("Output", 0), N ("Mix", 100) }),
+        B ("Mix Bus",            { N ("Drive", 0),  N ("Iron", 70), N ("Crosstalk", -80),  N ("Output", 0), N ("Mix", 100) }),
+        B ("Drum Bus",           { N ("Drive", 4),  N ("Iron", 45), N ("Crosstalk", -80),  N ("Output", 0), N ("Mix", 100) }),
+        B ("Bass Channel",       { N ("Drive", 6),  N ("Iron", 35), N ("Crosstalk", -120), N ("Output", 0), N ("Mix", 100) }),
+        B ("Vocal Channel",      { N ("Drive", 2),  N ("Iron", 60), N ("Crosstalk", -120), N ("Output", 0), N ("Mix", 100) }),
+        A ("Pushed Bus",         { N ("Drive", 10), N ("Iron", 50), N ("Crosstalk", -75),  N ("Output", 0), N ("Mix", 100) }),
+        A ("Tired Old Desk",     { N ("Drive", 8),  N ("Iron", 10), N ("Crosstalk", -60),  N ("Output", 0), N ("Mix", 100) }),
+        A ("Leaky Rails",        { N ("Drive", 0),  N ("Iron", 70), N ("Crosstalk", -50),  N ("Output", 0), N ("Mix", 100) }),
+        A ("Iron Overload",      { N ("Drive", 18), N ("Iron", 0),  N ("Crosstalk", -80),  N ("Output", -2), N ("Mix", 100) }) };
     m["Spindle Delay"] = presets114_spindle();
     m["Fissure Filter"] = presets114_fissure();
     m["Mote"] = presets114_mote();

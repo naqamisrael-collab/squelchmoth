@@ -3,6 +3,7 @@
 // structure (File, Edit, View, Track, Clip, Event, AudioSuite, Options, Setup, Window, Claude, Help),
 // floating windows, global keyboard shortcuts, session templates and the welcome window.
 
+#include "ConsoleMode.h"
 #include "ScoreWindow.h"
 #include "TransportBar.h"
 #include "TimelineView.h"
@@ -420,6 +421,7 @@ public:
         if (code == juce::KeyPress::F12Key || code == juce::KeyPress::numberPad3 || (cmd && shift && code == 'R')) { transportCtl.toggleRecord(); return true; }
         if (cmd && shift && code == 'M') { toggleWindow ("mastering", true); return true; }
         if (cmd && shift && code == 'H') { toggleWindow ("hearing", ! isWindowVisible ("hearing")); return true; }
+        if (cmd && shift && code == 'T') { toggleConsoleMode(); return true; }
         if (cmd && shift && code == 'V') { toggleWindow ("video", ! isWindowVisible ("video")); return true; }
         if (cmd && shift && code == 'C') { toggleChat(); return true; }
         if (k == juce::KeyPress::returnKey && plain)   { transportCtl.returnToZero(); return true; }
@@ -770,6 +772,8 @@ public:
             m.addItem (709, "MIDI Thru", true, Prefs::midiThru());
             m.addSeparator();
             m.addItem (710, "Link Timeline and Edit Selection  (" SQ_CMD "+Shift+J)", true, Prefs::linkTimelineAndEdit());
+            m.addSeparator();
+            m.addItem (8896, "Console Mode: a transformer on every track, a summing stage on the master  (" SQ_CMD "+Shift+T)", hasEdit, hasEdit && ConsoleMode::status (session).on());
             m.addItem (711, "Link Track and Edit Selection", true, st.linkTrackAndEditSelection);
             m.addItem (712, "Insertion Follows Playback", true, Prefs::insertionFollowsPlayback());
             m.addItem (713, "Scrolling: Page", true, Prefs::scrollMode() == 1);
@@ -880,6 +884,15 @@ public:
             m.addItem (80, "Uninstall Squelchmoth...");
         }
         return m;
+    }
+
+    /** Options > Console Mode: on if any of it is off, off if it is on. Says why if it cannot be turned on (for instance the pack is not owned). */
+    void toggleConsoleMode()
+    {
+        if (session.edit == nullptr) return;
+        if (ConsoleMode::status (session).on()) { ConsoleMode::disable (session); repaint(); return; }
+        juce::String err; if (ConsoleMode::enable (session, {}, err) < 0) juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Console Mode", err.isNotEmpty() ? err : juce::String ("Console Mode could not be turned on."));
+        repaint();
     }
 
     void menuItemSelected (int id, int topLevelIndex) override
@@ -1009,6 +1022,7 @@ public:
         else if (id == 8830) timeline.fitHeights (session.getRows (&st.collapsedFolders));
         else if (id >= 8840 && id <= 8842) { Prefs::set ("ed_waveView", id - 8840); timeline.repaint(); }
         else if (id == 8845) { Prefs::set ("ed_videoLane", VideoLane::enabled() ? 0 : 1); timeline.resized(); timeline.repaint(); }
+        else if (id == 8896) toggleConsoleMode();
         else if (id == 216) { Prefs::set ("ed_clipNames", ! Prefs::clipNamesVisible()); repaintViews(); }
         else if (id == 217) { Prefs::set ("ed_clipGainLine", ! Prefs::clipGainLineVisible()); repaintViews(); }
         else if (id == 218) Prefs::set ("mx_narrow", ! Prefs::narrowStrips());
