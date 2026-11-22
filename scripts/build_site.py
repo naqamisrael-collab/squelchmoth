@@ -18,7 +18,7 @@ E = html.escape
 
 # ----------------------------------------------------------------------------------------------- data from the app
 sig = open(os.path.join(SRC, 'Signature.h')).read()
-ROWS = re.findall(r'\{ *"([^"]+)", *"([A-Za-z0-9_]+)", *"([^"]+)", *"([^"]*)", *0x([0-9a-fA-F]{8}), *"([^"]*)" *\}', sig)
+ROWS = [(n, t, c, d.replace('\\"', '"'), col, art) for n, t, c, d, col, art in re.findall(r'\{ *"([^"]+)", *"([A-Za-z0-9_]+)", *"([^"]+)", *"((?:[^"\\]|\\.)*)", *0x([0-9a-fA-F]{8}), *"([^"]*)" *\}', sig)]
 ed = open(os.path.join(SRC, 'Edition.h')).read()
 PRODUCTS = re.findall(r'\{ *"(\w+)", *"([^"]+)", *"(\$[\d.]+)", *"(\$[\d.]+)", *"([^"]+)" *\}', ed)
 PACK_OF = dict(re.findall(r'\{ "(\w+)", Pack::(\w+) \}', ed))
