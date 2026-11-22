@@ -6548,6 +6548,22 @@ inline int runSelfTest()
             check (! CaptureStore::fileFor ("Window Unit").existsAsFile() && ! ph.existsAsFile(), "removing a capture removes its photo too");
         }
 
+        // ---- 1.53 vinyl pre-master check and line-up tones (the measurements are checked against known answers in tests/vinyl_test.cpp)
+        {
+            call ("new_session", R"({"name":"Selftest Vinyl"})");
+            const auto tones = call ("calibration_tones", R"({"seconds":55,"level_db":-18})");
+            check (tones.contains ("Line-up Tones") && tones.contains ("1 kHz, 10 kHz, 100 Hz, 15 kHz, 50 Hz") && session->findTrack ("Line-up Tones") != nullptr, "calibration_tones adds the line-up track: " + tones.upToFirstOccurrenceOf (". ", false, false));
+            const auto v = call ("vinyl_check", R"({"format":"12-33"})"), v7 = call ("vinyl_check", R"({"format":"7-45"})");
+            check (v.contains ("inside the ideal") && v.contains ("Bass is centred") && v.contains ("No out-of-phase") && v7.contains ("FIX: Side length 5.") && v7.contains ("7-inch at 45"),
+                   "vinyl_check on the session's mix: five and a half minutes of centred tones is inside the ideal for a 12-inch side and too long for a 7-inch at 45");
+            // a file with its bass opposite in the two channels
+            const double sr = 48000.0; const int n = (int) (12.0 * sr); juce::AudioBuffer<float> bad (2, n); for (int i = 0; i < n; ++i) { const double t = i / sr, b = 0.3 * std::sin (juce::MathConstants<double>::twoPi * 60.0 * t), m = 0.1 * std::sin (juce::MathConstants<double>::twoPi * 440.0 * t); bad.setSample (0, i, (float) (b + m)); bad.setSample (1, i, (float) (-b + m)); }
+            const auto wav = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sm_selftest").getChildFile ("vinyl-bad.wav"); wav.getParentDirectory().createDirectory(); wav.deleteFile();
+            { std::unique_ptr<juce::FileOutputStream> os (wav.createOutputStream()); if (os != nullptr) if (std::unique_ptr<juce::AudioFormatWriter> w { juce::WavAudioFormat().createWriterFor (os.get(), sr, 2, 24, {}, 0) }) { os.release(); w->writeFromAudioSampleBuffer (bad, 0, n); } }
+            const auto vb = call ("vinyl_check", juce::String (R"({"path":"PATH"})").replace ("PATH", wav.getFullPathName().replace ("\\", "\\\\")));
+            check (vb.contains ("FIX: Bass is not centred") && vb.contains ("FIX: Out-of-phase") && vb.contains ("things to fix"), "vinyl_check on a file whose bass is opposite in the two channels says to centre it and names the out-of-phase passages");
+        }
+
         // ---- a missing audio file: renders say so instead of waiting for ever
         {
             const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sq-missing-selftest"); dir.deleteRecursively(); dir.createDirectory();

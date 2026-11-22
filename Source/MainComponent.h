@@ -424,6 +424,8 @@ public:
         if (cmd && shift && code == 'H') { toggleWindow ("hearing", ! isWindowVisible ("hearing")); return true; }
         if (cmd && shift && code == 'P') { toggleWindow ("capture", ! isWindowVisible ("capture")); return true; }
         if (cmd && shift && code == 'T') { toggleConsoleMode(); return true; }
+        if (cmd && shift && code == 'Y') { runVinylCheck(); return true; }
+        if (cmd && shift && code == 'G') { addLineUpTones(); return true; }
         if (cmd && shift && code == 'V') { toggleWindow ("video", ! isWindowVisible ("video")); return true; }
         if (cmd && shift && code == 'C') { toggleChat(); return true; }
         if (k == juce::KeyPress::returnKey && plain)   { transportCtl.returnToZero(); return true; }
@@ -776,6 +778,8 @@ public:
             m.addItem (710, "Link Timeline and Edit Selection  (" SQ_CMD "+Shift+J)", true, Prefs::linkTimelineAndEdit());
             m.addSeparator();
             m.addItem (8896, "Console Mode: a transformer on every track, a summing stage on the master  (" SQ_CMD "+Shift+T)", hasEdit, hasEdit && ConsoleMode::status (session).on());
+            m.addItem (8897, "Vinyl check: this session as one side of a record  (" SQ_CMD "+Shift+Y)", hasEdit);
+            m.addItem (8898, "Line-up tones: add a track of calibration tones  (" SQ_CMD "+Shift+G)", hasEdit);
             m.addItem (711, "Link Track and Edit Selection", true, st.linkTrackAndEditSelection);
             m.addItem (712, "Insertion Follows Playback", true, Prefs::insertionFollowsPlayback());
             m.addItem (713, "Scrolling: Page", true, Prefs::scrollMode() == 1);
@@ -889,6 +893,10 @@ public:
         return m;
     }
 
+    /** Options > Vinyl check: the session's mix as one 12-inch side at 33 1/3, through the same tool the assistant uses; the answer in a box. */
+    void runVinylCheck() { if (session.edit == nullptr) return; const auto r = tools.call ("vinyl_check", juce::var (new juce::DynamicObject())); juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Vinyl check", r.text); }
+    /** Options > Line-up tones: the default set on a new track. */
+    void addLineUpTones() { if (session.edit == nullptr) return; const auto r = tools.call ("calibration_tones", juce::var (new juce::DynamicObject())); juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Line-up tones", r.text); }
     /** Options > Console Mode: on if any of it is off, off if it is on. Says why if it cannot be turned on (for instance the pack is not owned). */
     void toggleConsoleMode()
     {
@@ -1026,6 +1034,8 @@ public:
         else if (id >= 8840 && id <= 8842) { Prefs::set ("ed_waveView", id - 8840); timeline.repaint(); }
         else if (id == 8845) { Prefs::set ("ed_videoLane", VideoLane::enabled() ? 0 : 1); timeline.resized(); timeline.repaint(); }
         else if (id == 8896) toggleConsoleMode();
+        else if (id == 8897) runVinylCheck();
+        else if (id == 8898) addLineUpTones();
         else if (id == 216) { Prefs::set ("ed_clipNames", ! Prefs::clipNamesVisible()); repaintViews(); }
         else if (id == 217) { Prefs::set ("ed_clipGainLine", ! Prefs::clipGainLineVisible()); repaintViews(); }
         else if (id == 218) Prefs::set ("mx_narrow", ! Prefs::narrowStrips());

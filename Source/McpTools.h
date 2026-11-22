@@ -43,6 +43,8 @@
 #include "VideoLane.h"
 #include "SqAdvisor.h"
 #include "SqHearing.h"
+#include "SqVinyl.h"
+#include "CaptureStore.h"
 
 //==============================================================================
 struct ToolResult
@@ -455,6 +457,7 @@ private:
         registerHearingTools();
         registerConsoleModeTools();
         registerCaptureTools();
+        registerVinylTools();
     }
 
     #include "McpToolsParity.h"
@@ -490,6 +493,7 @@ private:
     #include "McpToolsHearing.h"
     #include "McpToolsConsoleMode.h"
     #include "McpToolsCapture.h"
+    #include "McpToolsVinyl.h"
 
     //==============================================================================
     void registerSessionTools()
