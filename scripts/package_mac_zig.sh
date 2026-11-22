@@ -70,10 +70,15 @@ tar -xzf "$CF/cloudflared-darwin-arm64.tgz" -C "$CFX" && mv "$CFX/cloudflared" "
 for a in amd64 arm64; do cp "$CFX/cf-$a" "$CFX/cf-$a-stripped"; done   # (llvm-strip 18 leaves a layout rcodesign rejects, so cloudflared ships unstripped)
 lipo -create "$CFX/cf-amd64" "$CFX/cf-arm64" -output "$CFX/cf-universal"
 
+bash scripts/build_ptread.sh >/dev/null 2>&1 || { echo "sqptread build failed"; exit 1; }
 finish_bundle () {   # $1 = app path, $2 = cloudflared binary to bundle
     local APP="$1"
     rm -rf "$APP/Contents/_CodeSignature"
     cp "$2" "$APP/Contents/Resources/cloudflared"; chmod +x "$APP/Contents/Resources/cloudflared"
+    # the Pro Tools session reader (LGPL, a separate program) with its licence and source beside it
+    local PT=dist/.helpers/sqptread-mac-universal; case "$2" in *amd64*) PT=dist/.helpers/sqptread-mac-x86_64;; *arm64*) PT=dist/.helpers/sqptread-mac-arm64;; esac
+    cp "$PT" "$APP/Contents/Resources/sqptread"; chmod +x "$APP/Contents/Resources/sqptread"; cp dist/.helpers/sqptread-source.zip "$APP/Contents/Resources/"; cp ThirdParty/ptformat/COPYING.LESSER "$APP/Contents/Resources/LGPL-2.1.txt"
+    rcodesign sign "$APP/Contents/Resources/sqptread" >/dev/null
     cp "${DOCS[@]}" "${LEGAL[@]}" scripts/uninstaller/uninstall.sh "$APP/Contents/Resources/"
     rcodesign sign "$APP/Contents/Resources/cloudflared" >/dev/null
     rcodesign sign "$APP" >/dev/null

@@ -6564,6 +6564,36 @@ inline int runSelfTest()
             check (vb.contains ("FIX: Bass is not centred") && vb.contains ("FIX: Out-of-phase") && vb.contains ("things to fix"), "vinyl_check on a file whose bass is opposite in the two channels says to centre it and names the out-of-phase passages");
         }
 
+        // ---- 1.54 import a Pro Tools session: the plan from the reader's listing, then the session built from it (the reader itself needs a real session file: see SQUELCH_TEST_PTX)
+        {
+            call ("new_session", R"({"name":"Selftest PT Import"})");
+            const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sm_selftest").getChildFile ("pt-session"); dir.deleteRecursively(); dir.getChildFile ("Audio Files").createDirectory();
+            const double sr = 48000.0; std::vector<float> tone ((size_t) (8.0 * sr)); for (size_t i = 0; i < tone.size(); ++i) tone[i] = 0.2f * (float) std::sin (juce::MathConstants<double>::twoPi * 220.0 * i / sr);
+            CaptureStore::writeMonoWav (dir.getChildFile ("Audio Files").getChildFile ("Loop A.wav"), tone, sr); CaptureStore::writeMonoWav (dir.getChildFile ("Audio Files").getChildFile ("Take 1.wav"), tone, sr);
+            const auto ptx = dir.getChildFile ("Song.ptx"); ptx.replaceWithText ("not a real session");
+            // two halves of a stereo loop track, two clips butting up at 120 BPM (96000 samples = 2 s = 4 beats), a third later; a vocal file on no track; a missing file; one MIDI clip
+            const juce::String listing = R"({"ok":true,"version":12,"rate":48000,"files":[{"index":0,"name":"Loop A.wav","length":384000},{"index":1,"name":"Take 1.wav","length":384000},{"index":2,"name":"Gone.wav","length":1000}],
+"audio":[{"track":"Loops","index":0,"file":"Loop A.wav","at":3567587328,"offset":0,"length":96000,"region":"Loop A-01"},{"track":"Loops","index":0,"file":"Loop A.wav","at":3571427328,"offset":96000,"length":96000,"region":"Loop A-02"},{"track":"Loops","index":0,"file":"Loop A.wav","at":3582947328,"offset":0,"length":48000,"region":"Loop A-03"},
+{"track":"Loops","index":1,"file":"Loop A.wav","at":3567587328,"offset":0,"length":96000,"region":"Loop A-01"},{"track":"Loops","index":1,"file":"Loop A.wav","at":3571427328,"offset":96000,"length":96000,"region":"Loop A-02"},{"track":"Loops","index":1,"file":"Loop A.wav","at":3582947328,"offset":0,"length":48000,"region":"Loop A-03"},
+{"track":"Hits","index":2,"file":"Gone.wav","at":3567587328,"offset":0,"length":1000,"region":"Gone"}],
+"midi":[{"track":"Keys","index":0,"at":3840000,"region":"Keys-01","notes":[[0,960000,60,100],[960000,480000,64,90]]}]})";
+            const auto p = PtImport::plan (listing, dir);
+            check (p.ok && p.inTicks && p.bpmPinned && std::abs (p.bpm - 120.0) < 1.0e-9 && p.audio.size() == 2 && p.halvesJoined == 1 && p.audio[0].clips.size() == 3 && std::abs (p.audio[0].clips[1].start - 2.0) < 1.0e-9 && std::abs (p.audio[0].clips[1].offset - 2.0) < 1.0e-9 && std::abs (p.audio[0].clips[2].start - 8.0) < 1.0e-9
+                   && p.unplaced.size() == 1 && p.unplaced[0].file == "Take 1.wav" && p.missing.size() == 1 && p.missing[0] == "Gone.wav" && p.midi.size() == 1 && p.notes == 2,
+                   "Pro Tools import plan: positions in ticks become seconds at the tempo two butting clips fix (" + juce::String (p.bpm, 1) + " BPM), a stereo track's two halves are joined, a recording on no track and a missing file are both named");
+            juce::var a (new juce::DynamicObject()); a.getDynamicObject()->setProperty ("path", ptx.getFullPathName()); a.getDynamicObject()->setProperty ("_listing", listing);
+            const auto res = call ("import_pro_tools", juce::JSON::toString (a, true)); te::AudioTrack* loops = nullptr; te::AudioTrack* loose = nullptr; for (auto* t2 : te::getAudioTracks (*session->edit)) { if (t2->getName() == "Loops") loops = t2; if (t2->getName().contains ("(place me)")) loose = t2; }
+            bool placedRight = false; if (loops != nullptr && loops->getClips().size() == 3) { auto* c1 = loops->getClips()[1]; placedRight = std::abs (c1->getPosition().getStart().inSeconds() - 2.0) < 1.0e-6 && std::abs (c1->getPosition().getOffset().inSeconds() - 2.0) < 1.0e-6 && std::abs (c1->getPosition().getLength().inSeconds() - 2.0) < 1.0e-6; }
+            check (placedRight && loose != nullptr && loose->getClips().size() == 1 && res.contains ("placed 3 of 4 audio clips") && res.contains ("2 MIDI notes") && res.contains ("Gone.wav") && res.contains ("(place me)") && std::abs (session->edit->tempoSequence.getTempo (0)->getBpm() - 120.0) < 1.0e-6,
+                   "import_pro_tools builds it: the loop track's second clip starts at 2 s, 2 s into its file, 2 s long; the unplaced recording gets a '(place me)' track; MIDI notes land; the tempo is set; the missing file is named");
+            const auto real = juce::SystemStats::getEnvironmentVariable ("SQUELCH_TEST_PTX", {});
+            if (real.isNotEmpty() && juce::File (real).existsAsFile())
+            {
+                call ("new_session", R"({"name":"Selftest PT Real"})"); juce::var r (new juce::DynamicObject()); r.getDynamicObject()->setProperty ("path", real);
+                const auto out = call ("import_pro_tools", juce::JSON::toString (r, true)); std::cout << "  real session: " << out << "\n"; check (out.contains ("Built ") && PtImport::helper().existsAsFile(), "a real Pro Tools session is read by the bundled reader and built");
+            }
+        }
+
         // ---- a missing audio file: renders say so instead of waiting for ever
         {
             const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sq-missing-selftest"); dir.deleteRecursively(); dir.createDirectory();

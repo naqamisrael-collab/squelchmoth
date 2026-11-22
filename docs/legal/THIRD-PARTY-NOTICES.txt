@@ -26,6 +26,11 @@ OTHER COMPONENTS
 - cpp-httplib (c) Yuji Hirose - MIT licence (the local server Claude connects to).
 - cloudflared (c) Cloudflare, Inc. - Apache License 2.0 (bundled link helper, unmodified, run as a separate program).
   Source: https://github.com/cloudflare/cloudflared
+- libptformat (c) 2015-2019 Damien Zammit, Robin Gareus - GNU Lesser General Public License 2.1 or later. Used only inside
+  sqptread, a separate program that Squelchmoth runs to list the contents of a Pro Tools session; Squelchmoth itself is not
+  linked with it. The licence text (LGPL-2.1.txt) and the complete source of sqptread and the library (sqptread-source.zip,
+  with the command to rebuild it) are installed beside the program; you may replace sqptread with your own build.
+  Source: https://github.com/zamaudio/ptformat
 
 MIT LICENCE TEXT (applies to the MIT components above, each with its own copyright line)
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated

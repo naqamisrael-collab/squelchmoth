@@ -44,6 +44,7 @@
 #include "SqAdvisor.h"
 #include "SqHearing.h"
 #include "SqVinyl.h"
+#include "PtImport.h"
 #include "CaptureStore.h"
 
 //==============================================================================
@@ -458,6 +459,7 @@ private:
         registerConsoleModeTools();
         registerCaptureTools();
         registerVinylTools();
+        registerPtImportTools();
     }
 
     #include "McpToolsParity.h"
@@ -494,6 +496,7 @@ private:
     #include "McpToolsConsoleMode.h"
     #include "McpToolsCapture.h"
     #include "McpToolsVinyl.h"
+    #include "McpToolsPtImport.h"
 
     //==============================================================================
     void registerSessionTools()

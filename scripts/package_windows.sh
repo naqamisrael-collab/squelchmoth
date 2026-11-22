@@ -16,6 +16,8 @@ CFCACHE=dist/.cache/cloudflared-windows-amd64-$CFV.exe
 mkdir -p dist/.cache
 [ -f "$CFCACHE" ] || curl -fsSL -o "$CFCACHE" "https://github.com/cloudflare/cloudflared/releases/download/$CFV/cloudflared-windows-amd64.exe"
 cp "$CFCACHE" "$STAGE/cloudflared.exe"
+bash scripts/build_ptread.sh >/dev/null 2>&1 || { echo "sqptread build failed"; exit 1; }
+cp dist/.helpers/sqptread.exe dist/.helpers/sqptread-source.zip "$STAGE/"; cp ThirdParty/ptformat/COPYING.LESSER "$STAGE/LGPL-2.1.txt"
 python3 -c "
 from PIL import Image; im=Image.open('Resources/icon_1024.png').convert('RGBA')
 im.save('$STAGE/squelchmoth.ico', sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])"
