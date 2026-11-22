@@ -74,6 +74,7 @@ inline int runSelfTest()
         engine->getPluginManager().createBuiltInType<SqVoltagePlatePlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageBridgePlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageOverdrivePlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltageCapturePlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
@@ -6474,6 +6475,53 @@ inline int runSelfTest()
                 check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && vp->diodes->getCurrentValueAsString() == "Sharp" && vp->symmetry->getCurrentValueAsString() == "Lopsided" && juce::roundToInt (vp->drive->getCurrentValue()) == 70 && juce::roundToInt (vp->quality->getCurrentValue()) == 2
                        && Edition::packOf ("sqmVoltageOverdrive") == Edition::Pack::color && Skins::artFor ("voltageoverdrive").isValid(),
                        "Voltage Overdrive has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets Drive and Mix, and the assistant sets Diodes, Symmetry, Drive and Quality by name");
+            }
+        }
+
+        // ---- 1.51 Capture: sweep a unit, fit a model, play it (the fit is checked against known answers in tests/capture_test.cpp)
+        {
+            call ("new_session", R"({"name":"Selftest Capture"})");
+            const auto sw = call ("capture", R"({"action":"sweep","level_db":-6})");
+            te::AudioTrack* st = nullptr; for (auto* t2 : te::getAudioTracks (*session->edit)) if (t2->getName() == "Capture Sweep") st = t2;
+            check (st != nullptr && sw.contains ("Capture Sweep") && st->getClips().size() == 1, "capture action sweep puts the test signal on its own track at 0 s");
+            if (st != nullptr)
+            {
+                call ("insert_plugin", R"({"track":"Capture Sweep","plugin":"Voltage"})");
+                const auto fit = call ("capture", R"({"action":"fit","track":"Capture Sweep","name":"Selftest Unit"})");
+                SqCapture::Model m; const bool saved = CaptureStore::load ("Selftest Unit", m);
+                check (saved && fit.contains ("Selftest Unit") && m.order == 5 && m.harmonicDb.size() == 4 && m.harmonicDb[0] < -10.0 && m.harmonicDb[0] > -90.0 && std::abs (m.gainDbAt1k) < 40.0,
+                       "the sweep through Voltage (a triode stage) is fitted and saved: " + fit.fromFirstOccurrenceOf ("Captured ", false, false).upToFirstOccurrenceOf (" Recording", false, false));
+                check (call ("capture", R"({"action":"list"})").contains ("Selftest Unit"), "capture action list shows it");
+                // programme material through the unit and through its capture, 30 s into the session on two tracks
+                const double sr = TimeFmt::sampleRate (*session->edit); std::vector<float> prog ((size_t) (4.0 * sr)); const double notes[8] = { 110, 146.83, 196, 220, 293.66, 392, 440, 659.25 };
+                for (size_t i = 0; i < prog.size(); ++i) { const double t = i / sr; const int step = (int) (t / 0.25); const double tn = t - step * 0.25, f = notes[(step * 5) % 8], tk = std::fmod (t, 0.5); double v = 0; for (int h = 1; h <= 6; ++h) v += std::sin (juce::MathConstants<double>::twoPi * f * h * tn) / h * std::exp (-tn * (3.0 + h)); v = 0.35 * v + 0.55 * std::sin (juce::MathConstants<double>::twoPi * (45.0 + 60.0 * std::exp (-tk * 40.0)) * tk) * std::exp (-tk * 9.0); prog[i] = (float) (0.45 * v); }
+                const auto wav = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sm_selftest").getChildFile ("capture-programme.wav"); wav.getParentDirectory().createDirectory(); CaptureStore::writeMonoWav (wav, prog, sr);
+                call ("import_audio", juce::String (R"({"track":"Capture Sweep","path":"PATH","start_seconds":30})").replace ("PATH", wav.getFullPathName().replace ("\\", "\\\\")));
+                call ("add_track", R"({"kind":"audio","name":"Capture Model"})");
+                call ("import_audio", juce::String (R"({"track":"Capture Model","path":"PATH","start_seconds":30})").replace ("PATH", wav.getFullPathName().replace ("\\", "\\\\")));
+                const auto use = call ("capture", R"({"action":"use","track":"Capture Model","name":"Selftest Unit"})");
+                SqVoltageCapturePlugin* cp = nullptr; te::AudioTrack* mt = nullptr; for (auto* t2 : te::getAudioTracks (*session->edit)) if (t2->getName() == "Capture Model") mt = t2;
+                if (mt != nullptr) for (auto pl : mt->pluginList) if (auto c = dynamic_cast<SqVoltageCapturePlugin*> (pl)) cp = c;
+                check (cp != nullptr && use.contains ("now plays") && cp->current() != nullptr && cp->currentName() == "Selftest Unit" && cp->model->getCurrentValueAsString() == "Selftest Unit" && Skins::artFor ("voltagecapture").isValid() && Edition::packOf ("sqmVoltageCapture") == Edition::Pack::color,
+                       "capture action use puts a Voltage Capture on the track playing it; the Model knob reads its name; it has its plate and belongs to Color & Space");
+                if (cp != nullptr && mt != nullptr)
+                {
+                    auto bounce = [&] (const juce::String& trackName)
+                    {
+                        std::vector<float> L, R; double fs = 0; juce::String err; const auto out = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sm_selftest").getChildFile ("capture-" + trackName.replaceCharacter (' ', '-') + ".wav"); out.deleteFile();
+                        for (auto* t2 : te::getAudioTracks (*session->edit)) t2->setMute (t2->getName() != trackName);
+                        call ("bounce", juce::String (R"({"path":"PATH","format":"wav","bit_depth":32,"start_seconds":30,"end_seconds":34.5,"master_inserts":false})").replace ("PATH", out.getFullPathName().replace ("\\", "\\\\")));
+                        RefListen::readStereo (out, 0.0, 0.0, L, R, fs, err); return L;
+                    };
+                    const auto a = bounce ("Capture Sweep"), b = bounce ("Capture Model"); for (auto* t2 : te::getAudioTracks (*session->edit)) t2->setMute (false);
+                    double ea = 0, eb = 0, bestErr = 1.0e30; int bestLag = 0; const int n = (int) std::min (a.size(), b.size());
+                    for (int i = 2000; i < n - 2000; ++i) { ea += (double) a[(size_t) i] * a[(size_t) i]; eb += (double) b[(size_t) i] * b[(size_t) i]; }
+                    for (int lag = -400; lag <= 400; ++lag) { double ee = 0; for (int i = 2000; i < n - 2000; i += 3) { const double d = (double) a[(size_t) i] - b[(size_t) (i + lag)]; ee += d * d; } if (ee < bestErr) { bestErr = ee; bestLag = lag; } }
+                    double ee = 0; for (int i = 2000; i < n - 2000; ++i) { const double d = (double) a[(size_t) i] - b[(size_t) (i + bestLag)]; ee += d * d; }
+                    const double levelDb = n > 5000 && ea > 0 && eb > 0 ? 10.0 * std::log10 (eb / ea) : 99.0, leftDb = n > 5000 && ea > 0 ? 10.0 * std::log10 (ee / ea + 1.0e-12) : 99.0;
+                    check (n > 5000 && std::abs (levelDb) < 0.5 && leftDb < -20.0, "notes and kicks through Voltage and through its capture: the capture is " + juce::String (levelDb, 2) + " dB off in level and what is left over when one is taken from the other is " + juce::String (leftDb, 1) + " dB under the unit's output (" + juce::String (bestLag) + " samples apart in the bounce)");
+                }
+                check (call ("capture", R"({"action":"remove","name":"Selftest Unit"})").contains ("Removed") && ! CaptureStore::fileFor ("Selftest Unit").existsAsFile(), "capture action remove deletes it");
             }
         }
 

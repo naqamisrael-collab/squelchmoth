@@ -454,6 +454,7 @@ private:
         registerAdvisorTools();
         registerHearingTools();
         registerConsoleModeTools();
+        registerCaptureTools();
     }
 
     #include "McpToolsParity.h"
@@ -488,6 +489,7 @@ private:
     #include "McpToolsAdvisor.h"
     #include "McpToolsHearing.h"
     #include "McpToolsConsoleMode.h"
+    #include "McpToolsCapture.h"
 
     //==============================================================================
     void registerSessionTools()

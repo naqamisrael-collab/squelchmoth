@@ -1512,6 +1512,64 @@ namespace Skins
         }
         SqVoltageOverdrivePlugin::Reading reading; bool have = false; int lastDiodes = -1, lastSym = -1; float lastDrive = 0, lastTone = 0;
     };
+    /** Voltage Capture: what the capture in use measured (from its own file), and the unit's response to quiet signals worked out from the model's first filter. */
+    struct VoltageCaptureViz : public Viz, private juce::Timer
+    {
+        VoltageCaptureViz (HandleMap& hm, te::Plugin& p, juce::Colour c) : Viz (hm, p, c) { startTimerHz (4); }
+        void timerCallback() override
+        {
+            auto* vp = dynamic_cast<SqVoltageCapturePlugin*> (&plugin); if (vp == nullptr) return; const auto m = vp->current();
+            if (m.get() == shown.get() && vp->currentName() == name) return; shown = m; name = vp->currentName(); curve.clear();
+            if (m != nullptr && m->valid())
+                for (int i = 0; i < 64; ++i)       // the first filter's size at 64 pitches, 20 Hz to 20 kHz, less what the cubed term gives back for quiet signals (nothing)
+                {
+                    const double hz = 20.0 * std::pow (1000.0, i / 63.0); std::complex<double> acc = 0; const auto& g = m->g[0]; for (int k = 0; k < m->taps; ++k) acc += (double) g[(size_t) k] * std::polar (1.0, -juce::MathConstants<double>::twoPi * hz * k / m->rate);
+                    double fr = 1.0; if (! m->front.empty()) { std::complex<double> a2 = 0; for (size_t k = 0; k < m->front.size(); ++k) a2 += (double) m->front[k] * std::polar (1.0, -juce::MathConstants<double>::twoPi * hz * (double) k / m->rate); fr = std::abs (a2); }
+                    curve.push_back ((float) (20.0 * std::log10 (std::abs (acc) * fr / m->level + 1.0e-9)));
+                }
+            repaint();
+        }
+        void paint (juce::Graphics& g) override
+        {
+            auto r = getLocalBounds().toFloat().reduced (6.0f);
+            auto left = r.removeFromLeft (juce::jmin (230.0f, r.getWidth() * 0.40f)).reduced (4.0f); r.removeFromLeft (8.0f);
+            auto caption = r.removeFromTop (16.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.45f)); g.fillRoundedRectangle (left, 4.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.55f)); g.fillRoundedRectangle (r.getUnion (caption).expanded (4.0f, 2.0f), 4.0f);
+            g.setFont (Theme::font (9.0f));
+            auto row = [&] (int i, const juce::String& label, const juce::String& value, juce::Colour c)
+            {
+                auto line = left.reduced (8.0f, 6.0f).withHeight (15.0f).translated (0.0f, (float) i * 16.0f);
+                g.setColour (Theme::dim()); g.drawText (label, line.toNearestInt(), juce::Justification::centredLeft);
+                g.setColour (c); g.drawText (value, line.toNearestInt(), juce::Justification::centredRight);
+            };
+            if (shown == nullptr || ! shown->valid())
+            {
+                row (0, "CAPTURE", "NONE", Theme::amber());
+                g.setColour (Theme::text().withAlpha (0.8f)); g.drawFittedText ("No capture yet. Ask the assistant: \"capture my preamp\" - it plays a sweep through the unit and keeps a model of it here.", r.reduced (10.0f).toNearestInt(), juce::Justification::centred, 3);
+                return;
+            }
+            const auto& m = *shown; auto h = [&] (size_t i) { return i < m.harmonicDb.size() && m.harmonicDb[i] > -150.0 ? juce::String (m.harmonicDb[i], 1) + " dB" : juce::String ("NONE"); };
+            row (0, "CAPTURE", name.substring (0, 22), accent);
+            row (1, "SWEPT AT", juce::String (20.0 * std::log10 (m.level), 1) + " dBFS", Theme::text());
+            row (2, "GAIN AT 1 kHz", juce::String (m.gainDbAt1k, 1) + " dB", Theme::text());
+            row (3, "2ND HARMONIC", h (0), accent.withAlpha (0.8f));
+            row (4, "3RD HARMONIC", h (1), accent.withAlpha (0.8f));
+            row (5, "FILTER IN FRONT", m.front.empty() ? "NO" : "YES", Theme::text());
+            row (6, "QUIET PASS WITHIN", juce::String (m.quietMissDb, 2) + " dB", m.quietMissDb > 1.0 ? Theme::amber() : Theme::text());
+            auto plot = r.reduced (6.0f, 4.0f); float mid = 0.0f; if (! curve.empty()) mid = 6.0f * std::round (curve[curve.size() / 2] / 6.0f); const float lo = mid - 18.0f, hi = mid + 18.0f;
+            auto px = [&] (double hz) { return plot.getX() + (float) (std::log10 (hz / 20.0) / 3.0) * plot.getWidth(); };
+            auto py = [&] (float db) { return plot.getBottom() - (juce::jlimit (lo, hi, db) - lo) / (hi - lo) * plot.getHeight(); };
+            g.setFont (Theme::font (8.0f));
+            for (float db = lo; db <= hi; db += 6.0f) { g.setColour (Theme::dim().withAlpha (0.25f)); g.drawHorizontalLine (juce::roundToInt (py (db)), plot.getX(), plot.getRight()); g.setColour (Theme::dim()); g.drawText (juce::String (juce::roundToInt (db)), juce::Rectangle<float> (plot.getX() + 1.0f, py (db) - 5.0f, 24.0f, 10.0f).toNearestInt(), juce::Justification::centredLeft); }
+            for (double hz : { 20.0, 100.0, 1000.0, 10000.0, 20000.0 }) { g.setColour (Theme::dim().withAlpha (0.25f)); g.drawVerticalLine (juce::roundToInt (px (hz)), plot.getY(), plot.getBottom()); g.setColour (Theme::dim()); g.drawText (hz >= 1000.0 ? juce::String (juce::roundToInt (hz / 1000.0)) + "k" : juce::String (juce::roundToInt (hz)), juce::Rectangle<float> (px (hz) - 14.0f, plot.getBottom() - 11.0f, 28.0f, 10.0f).toNearestInt(), juce::Justification::centred); }
+            juce::Path p; for (size_t i = 0; i < curve.size(); ++i) { const float x = px (20.0 * std::pow (1000.0, (double) i / 63.0)), y = py (curve[i]); if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y); }
+            g.setColour (accent); g.strokePath (p, juce::PathStrokeType (2.0f));
+            g.setFont (Theme::font (9.0f)); g.setColour (Theme::text().withAlpha (0.8f));
+            g.drawText ("from the capture:  the unit's response to quiet signals, dB against Hz", caption.toNearestInt(), juce::Justification::centredLeft, true);
+        }
+        std::shared_ptr<const SqCapture::Model> shown; juce::String name; std::vector<float> curve;
+    };
     /** Voltage Tape: the numbers and the wave come from the machine's own parts at its present settings. */
     struct VoltageTapeViz : public Viz, private juce::Timer
     {
@@ -2415,7 +2473,7 @@ namespace Skins
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, voltage, voltagePower, voltageTape, voltageConsole, voltageClip, voltageComp, voltageOpto, voltageMu, voltageBrigade, voltageSpring, voltagePlate, voltageBridge, voltageOverdrive, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, voltage, voltagePower, voltageTape, voltageConsole, voltageClip, voltageComp, voltageOpto, voltageMu, voltageBrigade, voltageSpring, voltagePlate, voltageBridge, voltageOverdrive, voltageCapture, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -2471,6 +2529,7 @@ namespace Skins
         else if (name == "Voltage Plate") { s.family = Family::voltagePlate; s.knob = KnobStyle::vintage; s.width = 900; s.groups = { G ("PLATE", { "Plate", "Decay" }, true), G ("RING", { "Damping", "Low Cut" }), G ("OUTPUT", { "Width", "Mix", "Output" }) }; }
         else if (name == "Voltage Bridge") { s.family = Family::voltageBridge; s.knob = KnobStyle::vintage; s.width = 900; s.groups = { G ("COMPRESS", { "Threshold", "Ratio", "Gain" }, true), G ("TIMING", { "Attack", "Recovery" }), G ("OUTPUT", { "Mix", "Quality" }) }; }
         else if (name == "Voltage Overdrive") { s.family = Family::voltageOverdrive; s.knob = KnobStyle::vintage; s.groups = { G ("DRIVE", { "Drive", "Tone" }, true), G ("DIODES", { "Diodes", "Symmetry" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
+        else if (name == "Voltage Capture") { s.family = Family::voltageCapture; s.knob = KnobStyle::vintage; s.groups = { G ("MODEL", { "Model" }, true), G ("LEVEL", { "Input", "Output", "Mix" }) }; }
         else if (name == "Voltage Tape")  { s.family = Family::voltageTape; s.knob = KnobStyle::vintage; s.width = 820; s.groups = { G ("TAPE", { "Drive", "Bias" }, true), G ("MACHINE", { "Speed", "EQ", "Head Bump" }), G ("TRANSPORT", { "Wow", "Flutter" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Voltage Power") { s.family = Family::voltagePower; s.knob = KnobStyle::vintage; s.groups = { G ("STAGE", { "Drive", "Bias", "Tube" }, true), G ("TRANSFORMER", { "Load", "Iron" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Scorch Drive")  { s.family = Family::sat; s.knob = KnobStyle::chicken; s.groups = { G ("DRIVE", { "Drive", "Highpass", "Out Level" }, true) }; }
@@ -4041,6 +4100,7 @@ namespace Skins
                 case Family::voltagePlate: viz = std::make_unique<VoltagePlateViz> (handles, plugin, accent); break;
                 case Family::voltageBridge: viz = std::make_unique<VoltageBridgeViz> (handles, plugin, accent); break;
                 case Family::voltageOverdrive: viz = std::make_unique<VoltageOverdriveViz> (handles, plugin, accent); break;
+                case Family::voltageCapture: viz = std::make_unique<VoltageCaptureViz> (handles, plugin, accent); break;
                 case Family::voltageClip: viz = std::make_unique<VoltageClipViz> (handles, plugin, accent); break;
                 case Family::voltageConsole: viz = std::make_unique<VoltageConsoleViz> (handles, plugin, accent); break;
                 case Family::generic:   break;

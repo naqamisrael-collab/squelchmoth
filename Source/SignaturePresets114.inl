@@ -1032,6 +1032,11 @@ inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
         A ("Full Tilt",           { N ("Drive", 100), N ("Tone", 55), N ("Diodes", 0), N ("Symmetry", 0), N ("Output", -15), N ("Mix", 100), N ("Quality", 1) }),
         A ("Fuzzy Soft Pair",     { N ("Drive", 90), N ("Tone", 45), N ("Diodes", 1), N ("Symmetry", 1), N ("Output", -9), N ("Mix", 100), N ("Quality", 1) }),
         A ("Parallel Dirt",       { N ("Drive", 100), N ("Tone", 80), N ("Diodes", 2), N ("Symmetry", 0), N ("Output", -12), N ("Mix", 30), N ("Quality", 1) }) };
+    m["Voltage Capture"] = {
+        B ("As Measured",         { N ("Input", 0), N ("Output", 0), N ("Mix", 100) }),
+        B ("Pushed 6 dB",         { N ("Input", 6), N ("Output", -6), N ("Mix", 100) }),
+        B ("Gentle",              { N ("Input", -6), N ("Output", 6), N ("Mix", 100) }),
+        A ("Parallel Half",       { N ("Input", 0), N ("Output", 0), N ("Mix", 50) }) };
     m["Spindle Delay"] = presets114_spindle();
     m["Fissure Filter"] = presets114_fissure();
     m["Mote"] = presets114_mote();
