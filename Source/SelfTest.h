@@ -72,6 +72,7 @@ inline int runSelfTest()
         engine->getPluginManager().createBuiltInType<SqVoltageBrigadePlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageSpringPlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltagePlatePlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltageBridgePlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
@@ -6325,6 +6326,88 @@ inline int runSelfTest()
                        "Voltage Plate has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate art, a preset picks the small plate, and the assistant sets Plate, Decay and Damping by name");
             }
         }
+        // ---- 1.49 Voltage Bridge: the diode-bridge compressor as a plug-in (the ring and the loop are checked against a circuit simulator in tests/bridge_test.cpp)
+        {
+            call ("new_session", R"({"name":"Selftest Voltage Bridge"})");
+            const auto ins = call ("insert_plugin", R"({"track":"Audio 1","plugin":"Voltage Bridge"})");
+            SqVoltageBridgePlugin* vp = nullptr;
+            if (auto tt = session->findTrack ("Audio 1")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqVoltageBridgePlugin*> (pl)) vp = c;
+            check (vp != nullptr && ins.contains ("Voltage Bridge") && juce::roundToInt (vp->quality->getCurrentValue()) == 0 && vp->ratio->getCurrentValueAsString() == "4:1" && vp->attack->getCurrentValueAsString() == "Slow" && vp->recovery->getCurrentValueAsString() == "100 ms",
+                   "Voltage Bridge is registered, inserts by name on its first preset (4:1, Slow attack, 100 ms recovery) at 4x");
+            if (vp != nullptr)
+            {
+                const double sr = 44100.0, twoPi = juce::MathConstants<double>::twoPi; const int lat = SqVoltageBridgePlugin::delaySamples;
+                struct Out { std::vector<float> l, r; };
+                struct Set { float threshold = -14, gain = 0, mix = 100; int ratio = 3, attack = 0, recovery = 1, quality = 0, unit = 1234; };
+                auto render = [&] (const Set& st, int N, const std::function<float (int)>& left, const std::function<float (int)>& right)
+                {
+                    Out o; auto twin = session->edit->getPluginCache().createNewPlugin (SqVoltageBridgePlugin::xmlTypeName, {});
+                    if (auto* tw = dynamic_cast<SqVoltageBridgePlugin*> (twin.get()))
+                    {
+                        tw->unit = st.unit; auto setp = [] (te::AutomatableParameter::Ptr& p, float v) { p->setParameter (v, juce::dontSendNotification); };
+                        setp (tw->quality, (float) st.quality); setp (tw->threshold, st.threshold); setp (tw->ratio, (float) st.ratio); setp (tw->attack, (float) st.attack); setp (tw->recovery, (float) st.recovery); setp (tw->gain, st.gain); setp (tw->mix, st.mix);
+                        tw->baseClassInitialise ({ te::TimePosition(), sr, 512 });
+                        juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                        for (int q = 0; q + 512 <= N; q += 512)
+                        {
+                            for (int i = 0; i < 512; ++i) { buf.setSample (0, i, left (q + i)); buf.setSample (1, i, right (q + i)); }
+                            te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / sr), te::TimePosition::fromSeconds ((q + 512) / sr)), true, false, true, false);
+                            tw->applyToBuffer (fc);
+                            for (int i = 0; i < 512; ++i) { o.l.push_back (buf.getSample (0, i)); o.r.push_back (buf.getSample (1, i)); }
+                        }
+                        tw->baseClassDeinitialise();
+                    }
+                    return o;
+                };
+                auto tone = [&] (float amp, double hz) { return std::function<float (int)> ([=] (int i) { return amp * (float) std::sin (twoPi * hz * i / sr); }); };
+                auto both = [&] (const Set& st, float amp, double hz, int N = 88200) { return render (st, N, tone (amp, hz), tone (amp, hz)); };
+                auto lvl = [&] (const std::vector<float>& y, double f) { std::complex<double> acc = 0; const int M = 8820, from = (int) y.size() - M; if (from < 0) return -300.0; for (int i = 0; i < M; ++i) acc += (double) y[(size_t) (from + i)] * std::polar (1.0, -twoPi * f * (from + i) / sr); return 20 * std::log10 (2 * std::abs (acc) / M + 1e-15); };
+                auto peakIn = [&] (const std::vector<float>& y, double fromS, double toS) { float p = 0; for (int i = (int) (fromS * sr); i < (int) (toS * sr) && i < (int) y.size(); ++i) p = std::max (p, std::abs (y[(size_t) i])); return 20 * std::log10 ((double) p + 1e-15); };
+                Set base;
+                const auto quiet = both (base, 0.05f, 1000.0, 22050); const double quietDb = 20 * std::log10 (0.05), q0 = lvl (quiet.l, 1000.0) - quietDb;
+                double corr = 0; for (int i = 11025; i < 11025 + 4410; ++i) corr += (double) quiet.l[(size_t) i] * 0.05 * std::sin (twoPi * 1000.0 * (i - lat) / sr);
+                check (std::abs (q0) < 0.05 && corr > 0 && std::abs (vp->getLatencySeconds() - 96.0 / 44100.0) < 1.0e-9 + 96.0 / 44100.0 * 0.2,
+                       "Voltage Bridge leaves a tone under its threshold alone (" + juce::String (q0, 3) + " dB), the right way up and 96 samples late, as it reports");
+                // the ratios, as the published test does it: 10 dB more input between 20 and 30 dB over the threshold
+                Set deep = base; deep.threshold = -30.0f; juce::String ratioLine; bool ratiosOk = true; const double want[5] = { 6.5, 5.0, 3.5, 2.5, 1.2 }, tol[5] = { 1.0, 1.0, 1.0, 0.6, 0.5 };
+                for (int ix = 0; ix < 5; ++ix) { Set s2 = deep; s2.ratio = ix; const double d = lvl (both (s2, 1.0f, 1000.0).l, 1000.0) - lvl (both (s2, 0.3162f, 1000.0).l, 1000.0); ratiosOk = ratiosOk && std::abs (d - want[ix]) <= tol[ix]; ratioLine << " " << juce::String (d, 2); }
+                check (ratiosOk, "10 dB more input, 20 to 30 dB over the threshold, comes out as" + ratioLine + " dB more at 1.5, 2, 3, 4 and 6 to 1 (published for such compressors: 6.5, 5.0, 3.5 and 2.5 dB at the first four)");
+                const double full = lvl (both (base, 1.0f, 1000.0).l, 1000.0);
+                {
+                    const auto shown = SqVoltageBridgePlugin::measure (1234, -14.0f, 3, false, 1); const auto shownDeep = SqVoltageBridgePlugin::measure (1234, -30.0f, 3, false, 1);
+                    check (std::abs (shown.reductionAtFull - full) < 0.5 && std::abs (10.0 / shownDeep.ratio - 2.1) < 0.5 && shown.third < -50.0 && shown.third > -95.0 && shown.microampsAtFull > 1.0 && shown.microampsAtFull < 5000.0 && std::abs (shown.out[0] - shown.in[0]) < 0.05 && full < -4.0,
+                           "the face works the same numbers out from the diodes without running the audio: a full-scale tone at " + juce::String (shown.reductionAtFull, 1) + " dB (audio " + juce::String (full, 1) + "), ratio " + juce::String (shownDeep.ratio, 1) + " : 1, ring current " + juce::String (shown.microampsAtFull, 0) + " microamps, 3rd harmonic " + juce::String (shown.third, 0) + " dB");
+                }
+                // recovery: after a loud passage stops, a quiet tone is back quickly at 100 ms and held down at 1.5 s; the automatic setting holds on after a long passage
+                auto drop = std::function<float (int)> ([=] (int i) { return (i < (int) (1.5 * sr) ? 1.0f : 0.02f) * (float) std::sin (twoPi * 1000.0 * i / sr); });
+                const double tinyDb = 20 * std::log10 (0.02);
+                Set fastR = base; fastR.threshold = -24.0f; fastR.recovery = 0; Set slowR = fastR; slowR.recovery = 3; Set autoR = fastR; autoR.recovery = 4;
+                const double rFast = peakIn (render (fastR, 88200, drop, drop).l, 1.9, 1.95) - tinyDb, rSlow = peakIn (render (slowR, 88200, drop, drop).l, 1.9, 1.95) - tinyDb, rAuto = peakIn (render (autoR, 88200, drop, drop).l, 1.9, 1.95) - tinyDb;
+                Set slowA = base; slowA.attack = 1; const double bassFast = lvl (both (base, 1.0f, 40.0).l, 40.0), bassSlow = lvl (both (slowA, 1.0f, 40.0).l, 40.0), midSlow = lvl (both (slowA, 1.0f, 1000.0).l, 1000.0);
+                const double pFirst = peakIn (both (base, 1.0f, 1000.0, 4410).l, 0.0022, 0.0032), pLater = peakIn (both (base, 1.0f, 1000.0, 4410).l, 0.03, 0.05);
+                check (rFast > -1.0 && rSlow < rFast - 4.0 && rAuto < rFast - 2.0 && bassSlow > bassFast + 1.0 && std::abs (midSlow - full) < 0.5 && pFirst > pLater + 3.0,
+                       "Recovery: 0.4 s after a loud passage a quiet tone is " + juce::String (rFast, 1) + " dB down at 100 ms, " + juce::String (rSlow, 1) + " at 1.5 s and " + juce::String (rAuto, 1) + " on Auto 1; a sudden full-scale tone starts at " + juce::String (pFirst, 1) + " dBFS and settles to " + juce::String (pLater, 1)
+                       + " within 30 ms; on Slow a 40 Hz tone comes out " + juce::String (bassSlow - bassFast, 1) + " dB louder than on Fast (the sidechain hears less bass) and a 1 kHz tone the same");
+                Set loud = base; loud.gain = 6.0f; const double up6 = lvl (both (loud, 1.0f, 1000.0).l, 1000.0) - full;
+                const auto link = render (base, 88200, tone (1.0f, 1000.0), tone (0.01f, 700.0)); const double gl = lvl (link.l, 1000.0), gr = lvl (link.r, 700.0) + 40.0;
+                const auto solo = render (base, 88200, tone (0.0f, 1000.0), tone (1.0f, 700.0)); const double gs = lvl (solo.r, 700.0);
+                check (std::abs (up6 - 6.0) < 0.02 && gl < -4.0 && std::abs (gl - gr) < 0.5 && gs < -4.0, "Gain 6 dB up is " + juce::String (up6, 2) + " dB up; both channels share one sidechain: a full-scale left (" + juce::String (gl, 2) + " dB) takes a quiet right down with it (" + juce::String (gr, 2) + " dB), and a loud right on its own is compressed too (" + juce::String (gs, 2) + " dB)");
+                Set dryS = base; dryS.mix = 0.0f; const auto dry = both (dryS, 0.5f, 1000.0, 33075); double worstDry = 0; for (int i = 2000; i < 30000; ++i) worstDry = std::max (worstDry, std::abs ((double) dry.l[(size_t) i] - 0.5 * std::sin (twoPi * 1000.0 * (i - lat) / sr)));
+                Set other = base; other.unit = 99999; Set hq = base; hq.quality = 2; const auto a1 = both (base, 1.0f, 1000.0, 22050), a2 = both (base, 1.0f, 1000.0, 22050), a3 = both (other, 1.0f, 1000.0, 22050);
+                double same = 0, differ = 0; for (size_t i = 0; i < a1.l.size(); ++i) { same = std::max (same, (double) std::abs (a1.l[i] - a2.l[i])); differ = std::max (differ, (double) std::abs (a1.l[i] - a3.l[i])); }
+                const double d16 = std::abs (lvl (both (hq, 1.0f, 1000.0).l, 1000.0) - full);
+                check (worstDry < 1.0e-5 && differ > 1.0e-6 && differ < 0.1 && same < 1.0e-6 && d16 < 0.05,
+                       "Mix at 0 % is the input delayed by the same 96 samples; two units differ slightly (by at most " + juce::String (differ, 5) + " of full scale), the same unit is the same every time, 16x compresses as 4x does (" + juce::String (d16, 3) + " dB apart)");
+                int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmVoltageBridge") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+                const auto pp = call ("plugin_presets", R"({"track":"Audio 1","slot":"Voltage Bridge","preset":"Mix Bus Glue"})");
+                const bool presetOk = pp.contains ("Mix Bus Glue") && std::abs (vp->threshold->getCurrentValue() + 10.0f) < 0.01f && vp->recovery->getCurrentValueAsString() == "Auto 1" && vp->ratio->getCurrentValueAsString() == "2:1";
+                call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Bridge","params":[{"param":"Ratio","text":"6:1"},{"param":"Recovery","text":"1.5 s"},{"param":"Attack","text":"Fast"},{"param":"Threshold","text":"-20"},{"param":"Quality","text":"8x"}]})");
+                check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && vp->ratio->getCurrentValueAsString() == "6:1" && vp->recovery->getCurrentValueAsString() == "1.5 s" && vp->attack->getCurrentValueAsString() == "Fast" && std::abs (vp->threshold->getCurrentValue() + 20.0f) < 0.01f && juce::roundToInt (vp->quality->getCurrentValue()) == 1
+                       && Edition::packOf ("sqmVoltageBridge") == Edition::Pack::color && Skins::artFor ("voltagebridge").isValid(),
+                       "Voltage Bridge has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets Threshold, Ratio and automatic recovery, and the assistant sets Ratio, Recovery, Attack, Threshold and Quality by name");
+            }
+        }
+
         // ---- a missing audio file: renders say so instead of waiting for ever
         {
             const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sq-missing-selftest"); dir.deleteRecursively(); dir.createDirectory();

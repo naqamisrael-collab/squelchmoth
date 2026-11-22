@@ -1006,6 +1006,19 @@ inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
         A ("Endless Steel",       { N ("Plate", 1), N ("Decay", 6.0), N ("Damping", 8), N ("Low Cut", 60), N ("Width", 100), N ("Mix", 40), N ("Output", -3) }),
         A ("Dark Cathedral",      { N ("Plate", 1), N ("Decay", 6.0), N ("Damping", 1.5), N ("Low Cut", 40), N ("Width", 100), N ("Mix", 35), N ("Output", 0) }),
         A ("Mono Slap Plate",     { N ("Plate", 0), N ("Decay", 0.6), N ("Damping", 10), N ("Low Cut", 400), N ("Width", 0), N ("Mix", 30), N ("Output", 0) }) };
+    m["Voltage Bridge"] = {
+        B ("Drum Bus Punch",      { N ("Threshold", -16), N ("Ratio", 3), N ("Attack", 1), N ("Recovery", 0), N ("Gain", 4), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Mix Bus Glue",        { N ("Threshold", -10), N ("Ratio", 1), N ("Attack", 1), N ("Recovery", 4), N ("Gain", 2), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Master Gentle",       { N ("Threshold", -8), N ("Ratio", 0), N ("Attack", 1), N ("Recovery", 5), N ("Gain", 1), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Snare Crack",         { N ("Threshold", -14), N ("Ratio", 3), N ("Attack", 1), N ("Recovery", 0), N ("Gain", 4), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Overheads",           { N ("Threshold", -16), N ("Ratio", 2), N ("Attack", 0), N ("Recovery", 1), N ("Gain", 4), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Piano Hold",          { N ("Threshold", -18), N ("Ratio", 2), N ("Attack", 0), N ("Recovery", 2), N ("Gain", 5), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Bass Lock",           { N ("Threshold", -18), N ("Ratio", 3), N ("Attack", 1), N ("Recovery", 1), N ("Gain", 5), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Vocal Level",         { N ("Threshold", -20), N ("Ratio", 2), N ("Attack", 0), N ("Recovery", 1), N ("Gain", 6), N ("Mix", 100), N ("Quality", 0) }),
+        B ("Beat Pump",           { N ("Threshold", -20), N ("Ratio", 3), N ("Attack", 0), N ("Recovery", 0), N ("Gain", 6), N ("Mix", 100), N ("Quality", 0) }),
+        A ("Room Crush",          { N ("Threshold", -30), N ("Ratio", 4), N ("Attack", 0), N ("Recovery", 0), N ("Gain", 14), N ("Mix", 100), N ("Quality", 0) }),
+        A ("Parallel Smash",      { N ("Threshold", -30), N ("Ratio", 4), N ("Attack", 0), N ("Recovery", 0), N ("Gain", 16), N ("Mix", 40), N ("Quality", 0) }),
+        A ("Long Hold",           { N ("Threshold", -20), N ("Ratio", 3), N ("Attack", 0), N ("Recovery", 3), N ("Gain", 6), N ("Mix", 100), N ("Quality", 0) }) };
     m["Spindle Delay"] = presets114_spindle();
     m["Fissure Filter"] = presets114_fissure();
     m["Mote"] = presets114_mote();
