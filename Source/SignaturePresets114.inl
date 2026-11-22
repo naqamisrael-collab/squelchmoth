@@ -994,6 +994,18 @@ inline void add114 (std::map<juce::String, std::vector<Preset>>& m)
         A ("Surf",                { N ("Tank", 1), N ("Length", 100), N ("Decay", 2.8), N ("Damping", 5), N ("Low Cut", 90), N ("Width", 50), N ("Mix", 45), N ("Output", 0) }),
         A ("Endless Coil",        { N ("Tank", 2), N ("Length", 120), N ("Decay", 6.0), N ("Damping", 8), N ("Low Cut", 60), N ("Width", 100), N ("Mix", 40), N ("Output", -3) }),
         A ("Tin Can",             { N ("Tank", 0), N ("Length", 60), N ("Decay", 0.8), N ("Damping", 9), N ("Low Cut", 300), N ("Width", 0), N ("Mix", 35), N ("Output", 0) }) };
+    m["Voltage Plate"] = {
+        B ("Vocal Plate",         { N ("Plate", 1), N ("Decay", 2.5), N ("Damping", 5), N ("Low Cut", 120), N ("Width", 100), N ("Mix", 22), N ("Output", 0) }),
+        B ("Snare Plate",         { N ("Plate", 1), N ("Decay", 1.6), N ("Damping", 6), N ("Low Cut", 200), N ("Width", 100), N ("Mix", 25), N ("Output", 0) }),
+        B ("Short Bright",        { N ("Plate", 0), N ("Decay", 1.0), N ("Damping", 9), N ("Low Cut", 250), N ("Width", 100), N ("Mix", 25), N ("Output", 0) }),
+        B ("Warm Ballad",         { N ("Plate", 1), N ("Decay", 3.5), N ("Damping", 3), N ("Low Cut", 100), N ("Width", 100), N ("Mix", 24), N ("Output", 0) }),
+        B ("Drum Room Plate",     { N ("Plate", 0), N ("Decay", 1.2), N ("Damping", 5), N ("Low Cut", 150), N ("Width", 80), N ("Mix", 20), N ("Output", 0) }),
+        B ("Strings Wash",        { N ("Plate", 1), N ("Decay", 4.5), N ("Damping", 4), N ("Low Cut", 90), N ("Width", 100), N ("Mix", 30), N ("Output", 0) }),
+        B ("Tight Rap Vocal",     { N ("Plate", 0), N ("Decay", 0.8), N ("Damping", 7), N ("Low Cut", 300), N ("Width", 70), N ("Mix", 15), N ("Output", 0) }),
+        B ("Keys Halo",           { N ("Plate", 1), N ("Decay", 3.0), N ("Damping", 6), N ("Low Cut", 150), N ("Width", 100), N ("Mix", 22), N ("Output", 0) }),
+        A ("Endless Steel",       { N ("Plate", 1), N ("Decay", 6.0), N ("Damping", 8), N ("Low Cut", 60), N ("Width", 100), N ("Mix", 40), N ("Output", -3) }),
+        A ("Dark Cathedral",      { N ("Plate", 1), N ("Decay", 6.0), N ("Damping", 1.5), N ("Low Cut", 40), N ("Width", 100), N ("Mix", 35), N ("Output", 0) }),
+        A ("Mono Slap Plate",     { N ("Plate", 0), N ("Decay", 0.6), N ("Damping", 10), N ("Low Cut", 400), N ("Width", 0), N ("Mix", 30), N ("Output", 0) }) };
     m["Spindle Delay"] = presets114_spindle();
     m["Fissure Filter"] = presets114_fissure();
     m["Mote"] = presets114_mote();

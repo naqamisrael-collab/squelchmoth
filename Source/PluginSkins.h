@@ -117,7 +117,7 @@ namespace Skins
             if (unitRange)
             {
                 const auto named = p.valueToString (v).trim();       // a two-position switch says its positions (Compress / Limit), not 0% / 100%
-                if (named.isNotEmpty() && ! named.containsOnly ("0123456789.,-+ %")) return named.substring (0, 8);
+                if (named.isNotEmpty() && ! named.containsOnly ("0123456789.,-+ %")) return named.substring (0, 10);
                 return juce::String (high ? "100%" : "0%");
             }
             return compactValue (p.valueToString (v).trim());
@@ -1370,6 +1370,54 @@ namespace Skins
         }
         SqVoltageSpringPlugin::Reading reading; bool have = false; float last[5] = {};
     };
+    /** Voltage Plate: the numbers and the curve (how long each pitch rings) come from the plate's own arithmetic at the present
+        settings; "casting" shows while a new plate is being worked out in the background. */
+    struct VoltagePlateViz : public Viz, private juce::Timer
+    {
+        VoltagePlateViz (HandleMap& hm, te::Plugin& p, juce::Colour c) : Viz (hm, p, c) { startTimerHz (8); }
+        void timerCallback() override
+        {
+            auto* vp = dynamic_cast<SqVoltagePlatePlugin*> (&plugin); if (vp == nullptr) return;
+            const auto k = vp->currentKey(); const bool busy = vp->isCasting();
+            if (! have || k != lastKey) { reading = SqVoltagePlatePlugin::measure (k); lastKey = k; have = true; repaint(); }
+            if (busy != casting) { casting = busy; repaint(); }
+        }
+        void paint (juce::Graphics& g) override
+        {
+            auto r = getLocalBounds().toFloat().reduced (6.0f);
+            auto left = r.removeFromLeft (juce::jmin (225.0f, r.getWidth() * 0.38f)).reduced (4.0f); r.removeFromLeft (8.0f);
+            auto caption = r.removeFromTop (16.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.5f)); g.fillRoundedRectangle (left, 4.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.6f)); g.fillRoundedRectangle (r.getUnion (caption).expanded (4.0f, 2.0f), 4.0f);
+            if (! have) return;
+            g.setFont (Theme::font (9.0f));
+            auto row = [&] (int i, const juce::String& label, const juce::String& value, juce::Colour c)
+            {
+                auto line = left.reduced (8.0f, 6.0f).withHeight (15.0f).translated (0.0f, (float) i * 16.0f);
+                g.setColour (Theme::dim()); g.drawText (label, line.toNearestInt(), juce::Justification::centredLeft);
+                g.setColour (c); g.drawText (value, line.toNearestInt(), juce::Justification::centredRight);
+            };
+            row (0, "PLATE", juce::String (reading.lengthM, 1) + " x " + juce::String (reading.widthM, 1) + " m steel", accent);
+            row (1, "MODES SOUNDING", juce::String (reading.modes), accent.withAlpha (0.85f));
+            row (2, "MODES IN EVERY Hz", juce::String (reading.modesPerHz, 2), Theme::text());
+            row (3, "60 dB DOWN, 500 Hz", juce::String (reading.decayLow, 2) + " s", Theme::text());
+            row (4, "60 dB DOWN, 5 kHz", juce::String (reading.decayHigh, 2) + " s", Theme::text());
+            row (5, "TAP LENGTH", juce::String (reading.tapSeconds, 1) + " s", Theme::text());
+            row (6, "STATE", casting ? juce::String ("casting a new plate...") : juce::String ("cast"), casting ? Theme::amber() : Theme::text());
+            auto plot = r.reduced (6.0f, 4.0f); const float maxS = juce::jmax (1.0f, reading.curveSeconds[0] * 1.15f);
+            auto px = [&] (float f) { return plot.getX() + std::log10 (f / 50.0f) / std::log10 (400.0f) * plot.getWidth(); };
+            auto py = [&] (float s) { return plot.getBottom() - juce::jlimit (0.0f, 1.0f, s / maxS) * plot.getHeight(); };
+            g.setFont (Theme::font (8.0f));
+            for (float f : { 100.0f, 1000.0f, 10000.0f }) { g.setColour (Theme::dim().withAlpha (0.25f)); g.drawVerticalLine (juce::roundToInt (px (f)), plot.getY(), plot.getBottom()); g.setColour (Theme::dim()); g.drawText (f >= 1000.0f ? juce::String (juce::roundToInt (f / 1000.0f)) + "k" : juce::String (juce::roundToInt (f)), juce::Rectangle<float> (px (f) - 14.0f, plot.getBottom() - 11.0f, 28.0f, 10.0f).toNearestInt(), juce::Justification::centred); }
+            for (float s = 1.0f; s < maxS; s += 1.0f) { g.setColour (Theme::dim().withAlpha (0.25f)); g.drawHorizontalLine (juce::roundToInt (py (s)), plot.getX(), plot.getRight()); g.setColour (Theme::dim()); g.drawText (juce::String (juce::roundToInt (s)) + "s", juce::Rectangle<float> (plot.getX() + 1.0f, py (s) - 5.0f, 22.0f, 10.0f).toNearestInt(), juce::Justification::centredLeft); }
+            if (lastKey.lowCut > 50.0f) { g.setColour (juce::Colours::black.withAlpha (0.35f)); g.fillRect (juce::Rectangle<float> (plot.getX(), plot.getY(), px (lastKey.lowCut) - plot.getX(), plot.getHeight())); }
+            juce::Path p; for (int i = 0; i < 24; ++i) { const float x = px (reading.curveHz[i]), y = py (reading.curveSeconds[i]); if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y); }
+            g.setColour (accent); g.strokePath (p, juce::PathStrokeType (2.0f));
+            g.setFont (Theme::font (9.0f)); g.setColour (Theme::text().withAlpha (0.8f));
+            g.drawText ("from the plate's arithmetic:  how long each pitch rings before it is 60 dB down (seconds up, Hz across);  darkened: below Low Cut", caption.toNearestInt(), juce::Justification::centredLeft, true);
+        }
+        SqVoltagePlatePlugin::Reading reading; SqVoltagePlatePlugin::Key lastKey; bool have = false, casting = false;
+    };
     /** Voltage Tape: the numbers and the wave come from the machine's own parts at its present settings. */
     struct VoltageTapeViz : public Viz, private juce::Timer
     {
@@ -2273,7 +2321,7 @@ namespace Skins
     #include "SkinsSamplers2.inl"
     #include "SkinsPads.inl"
 
-    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, voltage, voltagePower, voltageTape, voltageConsole, voltageClip, voltageComp, voltageOpto, voltageMu, voltageBrigade, voltageSpring, generic };
+    enum class Family { eq, filter, tilt, air, sub, dyn, gate, deess, transient, sat, tape, console, vinyl, bits, reverb, delay, ir, lfo, pitch, width, dither, trim, midi, synth, sampler, eight08, blossom, tune, tunefx, apexdyn, apexlim, apexmb, apexsub, aurora, opto, pulse, oilcan, ladder, ring, phase12, bbd, mothsynth2, venom, simmoth, minimoth, thump, dial10, hivepads, hexwing, toxin, lantern, lanternexo, larvabass, thornbass, carapace, livedrum, drumpad, thumplive, timeweaver, larvafilter, triad, chrysalis2, mandible, pollen, cinder, wingbeat, foilplate, radiant, maw, mothkey, sirencomp, sireneq, hushdeess2, vellum, tremor, orbitpan, mirrorshift, shutter, shard, murmuration, masquerade, larva2, phase2, hiverack, sirenverb, miccloset, larynx, exhale, hivechoir, doublewing2, mutant, voxmoth, talkwing, cleanroom, spectra, torque, summit, atrium, apexmb2, sibyl, portcullis, kiln, spindle, fissure, duet, mote, mirrorwing, voltage, voltagePower, voltageTape, voltageConsole, voltageClip, voltageComp, voltageOpto, voltageMu, voltageBrigade, voltageSpring, voltagePlate, generic };
 
     /** App hooks for buttons that need the rest of Squelchmoth (set by MainComponent). */
     static inline std::function<juce::Array<juce::File> (int kit)> loadKitHook;   // renders / finds a kit's files (needs the Session)
@@ -2326,6 +2374,7 @@ namespace Skins
         else if (name == "Voltage Mu")    { s.family = Family::voltageMu; s.knob = KnobStyle::vintage; s.width = 900; s.groups = { G ("LEVEL", { "Input", "Threshold", "Output" }, true), G ("TIMING", { "Attack", "Recovery", "Mode" }), G ("OUTPUT", { "Mix", "Quality" }) }; }
         else if (name == "Voltage Brigade") { s.family = Family::voltageBrigade; s.knob = KnobStyle::vintage; s.width = 1080; s.groups = { G ("ECHO", { "Time", "Sync", "Feedback", "Stages", "Tone" }, true), G ("CLOCK WOBBLE", { "Rate", "Depth", "Width" }), G ("OUTPUT", { "Mix", "Output", "Quality" }) }; }
         else if (name == "Voltage Spring") { s.family = Family::voltageSpring; s.knob = KnobStyle::vintage; s.width = 940; s.groups = { G ("TANK", { "Tank", "Length" }, true), G ("RING", { "Decay", "Damping", "Low Cut" }), G ("OUTPUT", { "Width", "Mix", "Output" }) }; }
+        else if (name == "Voltage Plate") { s.family = Family::voltagePlate; s.knob = KnobStyle::vintage; s.width = 900; s.groups = { G ("PLATE", { "Plate", "Decay" }, true), G ("RING", { "Damping", "Low Cut" }), G ("OUTPUT", { "Width", "Mix", "Output" }) }; }
         else if (name == "Voltage Tape")  { s.family = Family::voltageTape; s.knob = KnobStyle::vintage; s.width = 820; s.groups = { G ("TAPE", { "Drive", "Bias" }, true), G ("MACHINE", { "Speed", "EQ", "Head Bump" }), G ("TRANSPORT", { "Wow", "Flutter" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Voltage Power") { s.family = Family::voltagePower; s.knob = KnobStyle::vintage; s.groups = { G ("STAGE", { "Drive", "Bias", "Tube" }, true), G ("TRANSFORMER", { "Load", "Iron" }), G ("OUTPUT", { "Output", "Mix", "Quality" }) }; }
         else if (name == "Scorch Drive")  { s.family = Family::sat; s.knob = KnobStyle::chicken; s.groups = { G ("DRIVE", { "Drive", "Highpass", "Out Level" }, true) }; }
@@ -3893,6 +3942,7 @@ namespace Skins
                 case Family::voltageMu: viz = std::make_unique<VoltageMuViz> (handles, plugin, accent); break;
                 case Family::voltageBrigade: viz = std::make_unique<VoltageBrigadeViz> (handles, plugin, accent); break;
                 case Family::voltageSpring: viz = std::make_unique<VoltageSpringViz> (handles, plugin, accent); break;
+                case Family::voltagePlate: viz = std::make_unique<VoltagePlateViz> (handles, plugin, accent); break;
                 case Family::voltageClip: viz = std::make_unique<VoltageClipViz> (handles, plugin, accent); break;
                 case Family::voltageConsole: viz = std::make_unique<VoltageConsoleViz> (handles, plugin, accent); break;
                 case Family::generic:   break;

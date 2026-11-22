@@ -271,6 +271,7 @@ public:
         engine->getPluginManager().createBuiltInType<SqVoltageMuPlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageBrigadePlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageSpringPlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltagePlatePlugin>();
         engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
         engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
         engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();

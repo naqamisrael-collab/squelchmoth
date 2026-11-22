@@ -71,6 +71,7 @@ inline int runSelfTest()
         engine->getPluginManager().createBuiltInType<SqVoltageMuPlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageBrigadePlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageSpringPlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltagePlatePlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
@@ -6248,6 +6249,80 @@ inline int runSelfTest()
                 check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && vp->tank->getCurrentValueAsString() == "Single" && std::abs (vp->decay->getCurrentValue() - 3.0f) < 0.01f && std::abs (vp->lowCut->getCurrentValue() - 200.0f) < 0.5f
                        && Edition::packOf ("sqmVoltageSpring") == Edition::Pack::color && Skins::artFor ("voltagespring").isValid(),
                        "Voltage Spring has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset picks the short pair, and the assistant sets Tank, Decay and Low Cut by name");
+            }
+        }
+        // ---- 1.48 Voltage Plate: the plate reverb as a plug-in (the plate's modes are checked against the equation stepped directly in time in tests/plate_test.cpp)
+        {
+            call ("new_session", R"({"name":"Selftest Voltage Plate"})");
+            const auto ins = call ("insert_plugin", R"({"track":"Audio 1","plugin":"Voltage Plate"})");
+            SqVoltagePlatePlugin* vp = nullptr;
+            if (auto tt = session->findTrack ("Audio 1")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqVoltagePlatePlugin*> (pl)) vp = c;
+            check (vp != nullptr && ins.contains ("Voltage Plate") && vp->plate->getCurrentValueAsString() == "Classic" && vp->decay->getCurrentValueAsString() == "2.5 s" && vp->getLatencySeconds() == 0.0, "Voltage Plate is registered, inserts by name on its first preset (the classic plate, 2.5 s) and adds no delay");
+            if (vp != nullptr)
+            {
+                const double sr = 44100.0, twoPi = juce::MathConstants<double>::twoPi;
+                struct Out { std::vector<float> l, r; };
+                struct Set { float decay = 1.0f, damping = 12.0f, lowCut = 80, width = 100, mix = 100, output = 0; int plate = 0, unit = 1234; };
+                auto keyOf = [&] (const Set& st) { SqVoltagePlatePlugin::Key k; k.plateIx = st.plate; k.unitSeed = st.unit; k.decay = st.decay; k.damping = st.damping; k.lowCut = st.lowCut; k.rate = sr; return k; };
+                auto render = [&] (const Set& st, int N, const std::function<float (int)>& left, const std::function<float (int)>& right)
+                {
+                    Out o; auto twin = session->edit->getPluginCache().createNewPlugin (SqVoltagePlatePlugin::xmlTypeName, {});
+                    if (auto* tw = dynamic_cast<SqVoltagePlatePlugin*> (twin.get()))
+                    {
+                        tw->unit = st.unit; auto setp = [] (te::AutomatableParameter::Ptr& p, float v) { p->setParameter (v, juce::dontSendNotification); };
+                        setp (tw->plate, (float) st.plate); setp (tw->decay, st.decay); setp (tw->damping, st.damping); setp (tw->lowCut, st.lowCut); setp (tw->width, st.width); setp (tw->mix, st.mix); setp (tw->output, st.output);
+                        tw->baseClassInitialise ({ te::TimePosition(), sr, 512 });
+                        juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                        for (int q = 0; q + 512 <= N; q += 512)
+                        {
+                            for (int i = 0; i < 512; ++i) { buf.setSample (0, i, left (q + i)); buf.setSample (1, i, right (q + i)); }
+                            te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / sr), te::TimePosition::fromSeconds ((q + 512) / sr)), true, false, true, false);
+                            tw->applyToBuffer (fc);
+                            for (int i = 0; i < 512; ++i) { o.l.push_back (buf.getSample (0, i)); o.r.push_back (buf.getSample (1, i)); }
+                        }
+                        tw->baseClassDeinitialise();
+                    }
+                    return o;
+                };
+                auto same = [&] (const Set& st, int N, const std::function<float (int)>& f) { return render (st, N, f, f); };
+                auto tone = [&] (float amp, double hz) { return std::function<float (int)> ([=] (int i) { return amp * (float) std::sin (twoPi * hz * i / sr); }); };
+                std::vector<float> noise ((size_t) 300000); { juce::Random rng (777); for (auto& v : noise) v = 0.1f * 1.7320508f * (rng.nextFloat() * 2.0f - 1.0f); }
+                auto white = std::function<float (int)> ([&noise] (int i) { return i < (int) noise.size() ? noise[(size_t) i] : 0.0f; });
+                auto rms = [&] (const std::vector<float>& y, double fromS, double toS) { double s = 0; int n = 0; for (int i = (int) (fromS * sr); i < (int) (toS * sr) && i < (int) y.size(); ++i) { s += (double) y[(size_t) i] * y[(size_t) i]; ++n; } return 10 * std::log10 (s / juce::jmax (1, n) + 1e-30); };
+                auto lvl = [&] (const std::vector<float>& y, double f) { std::complex<double> acc = 0; const int M = 22050, from = (int) y.size() - M; if (from < 0) return -300.0; for (int i = 0; i < M; ++i) acc += (double) y[(size_t) (from + i)] * std::polar (1.0, -twoPi * f * (from + i) / sr); return 20 * std::log10 (2 * std::abs (acc) / M + 1e-15); };
+                Set base;
+                Set dryS = base; dryS.mix = 0.0f; const auto dry = same (dryS, 22016, white); double worstDry = 0; for (int i = 0; i < 22016; ++i) worstDry = std::max (worstDry, (double) std::abs (dry.l[(size_t) i] - noise[(size_t) i]));
+                // a single tap in comes out as the plate's cast answer, from the very first sample: the convolution adds no delay and changes nothing
+                int modes = 0; const auto tap = SqVoltagePlatePlugin::cast (keyOf (base), &modes); const auto hit = same (base, 44032, std::function<float (int)> ([] (int i) { return i == 0 ? 1.0f : 0.0f; }));
+                double worstTap = 0, tapPeak = 0; for (int i = 0; i < 44032 && i < tap.getNumSamples(); ++i) { worstTap = std::max (worstTap, (double) std::abs (hit.l[(size_t) i] - tap.getSample (0, i))); worstTap = std::max (worstTap, (double) std::abs (hit.r[(size_t) i] - tap.getSample (1, i))); tapPeak = std::max (tapPeak, (double) std::abs (tap.getSample (0, i))); }
+                check (worstDry < 1.0e-7 && tapPeak > 0.0 && worstTap < 1.0e-3 * tapPeak && std::abs (tap.getSample (0, 0)) > 1.0e-4 * tapPeak && modes > 6000 && modes < 6700,
+                       "Mix at 0 % is the input untouched; a single tap comes out as the small plate's cast answer from the very first sample - the sum of its " + juce::String (modes) + " modes - to " + juce::String (juce::roundToInt (20 * std::log10 (worstTap / tapPeak + 1e-12))) + " dB of its peak over a second");
+                std::vector<float> lowNoise ((size_t) 8820); { float a1 = 0, a2 = 0; for (int i = 0; i < 8820; ++i) { a1 += 0.15f * (noise[(size_t) i] * 6.0f - a1); a2 += 0.15f * (a1 - a2); lowNoise[(size_t) i] = a2; } }
+                auto burstIn = std::function<float (int)> ([&lowNoise] (int i) { return i < (int) lowNoise.size() ? lowNoise[(size_t) i] : 0.0f; });
+                Set d4 = base; d4.decay = 4.0f; const auto y1 = same (base, 88064, burstIn), y4 = same (d4, 88064, burstIn);
+                const double fall1 = rms (y1.l, 0.5, 0.7) - rms (y1.l, 1.5, 1.7), fall4 = rms (y4.l, 0.5, 0.7) - rms (y4.l, 1.5, 1.7);
+                check (fall1 > 54.0 && fall1 < 74.0 && fall4 > 13.5 && fall4 < 19.5, "Decay: the tail of a burst falls " + juce::String (fall1, 1) + " dB in a second at 1 s and " + juce::String (fall4, 1) + " dB at 4 s (60 and 15 for the lowest modes; higher ones die a little faster)");
+                Set big = base; big.plate = 1; big.decay = 2.0f; big.damping = 5.0f; const double lA = rms (same (base, 220160, white).l, 3.0, 4.9), lB = rms (same (d4, 264192, white).l, 4.0, 5.9), lC = rms (same (big, 264192, white).l, 4.0, 5.9);
+                check (std::abs (lA + 20.0) < 1.5 && std::abs (lB + 20.0) < 2.0 && std::abs (lC + 20.0) < 1.5, "steady noise at -20 dB comes out at " + juce::String (lA, 1) + " dB with a 1 s decay, " + juce::String (lB, 1) + " dB with 4 s, and " + juce::String (lC, 1) + " dB through the classic plate: the level is set from the modes' own sum");
+                Set cutHi = base; cutHi.lowCut = 400.0f; const double c80 = lvl (same (base, 132096, tone (0.5f, 150.0)).l, 150.0), c400 = lvl (same (cutHi, 132096, tone (0.5f, 150.0)).l, 150.0);
+                Set mono = base; mono.width = 0.0f; const auto nw = same (base, 44032, white), n0 = same (mono, 44032, white); double dWide = 0, dMono = 0; for (size_t i = 0; i < nw.l.size(); ++i) { dWide = std::max (dWide, (double) std::abs (nw.l[i] - nw.r[i])); dMono = std::max (dMono, (double) std::abs (n0.l[i] - n0.r[i])); }
+                check (c400 < c80 - 10.0 && dMono < 1.0e-6 && dWide > 0.02, "Low Cut at 400 Hz takes a 150 Hz tone down " + juce::String (c80 - c400, 1) + " dB (its modes are left out of the cast); Width 0 makes the two pickups one (the sides are the same), Width 100 keeps them apart (they differ by " + juce::String (dWide, 2) + ")");
+                const auto t1 = same (base, 132096, tone (0.25f, 1000.0)), t2 = same (base, 132096, tone (0.5f, 1000.0)); const double h2 = lvl (t1.l, 2000.0) - lvl (t1.l, 1000.0), h3 = lvl (t1.l, 3000.0) - lvl (t1.l, 1000.0), dbl = lvl (t2.l, 1000.0) - lvl (t1.l, 1000.0);
+                Set other = base; other.unit = 99999; const auto u1 = same (base, 22016, white), u2 = same (base, 22016, white), u3 = same (other, 22016, white); double sameU = 0, differ = 0; for (size_t i = 0; i < u1.l.size(); ++i) { sameU = std::max (sameU, (double) std::abs (u1.l[i] - u2.l[i])); differ = std::max (differ, (double) std::abs (u1.l[i] - u3.l[i])); }
+                check (h2 < -90.0 && h3 < -90.0 && std::abs (dbl - 6.0206) < 0.005 && sameU < 1.0e-6 && differ > 0.01,
+                       "a tone in is the same tone out and nothing else (2nd and 3rd harmonics " + juce::String (juce::roundToInt (h2)) + " and " + juce::String (juce::roundToInt (h3)) + " dB); twice the input is " + juce::String (dbl, 3) + " dB more out; the same unit is the same every time and two units' plates differ (" + juce::String (differ, 2) + ")");
+                {
+                    SqVoltagePlatePlugin::Key k; k.plateIx = 1; k.unitSeed = 1234; k.decay = 2.5f; k.damping = 5.0f; k.lowCut = 80.0f; k.rate = sr; const auto shown = SqVoltagePlatePlugin::measure (k); k.plateIx = 0; const auto shownSmall = SqVoltagePlatePlugin::measure (k);
+                    check (shown.modes > 25000 && shown.modes < 27000 && std::abs (shown.modesPerHz - 1.31) < 0.04 && shownSmall.modes > 6200 && shownSmall.modes < 6700 && std::abs (shown.decayLow - 2.5 / (1.0 + 0.01)) < 0.01 && std::abs (shown.decayHigh - 1.25) < 0.01 && shown.lengthM == 2.0 && shown.curveSeconds[23] < 0.2f * shown.curveSeconds[0],
+                           "the face shows the plate's own numbers: 2.0 x 1.0 m, " + juce::String (shown.modes) + " modes sounding (" + juce::String (shown.modesPerHz, 2) + " in every hertz; the small plate has " + juce::String (shownSmall.modes) + "), 60 dB down in " + juce::String (shown.decayLow, 2) + " s at 500 Hz and " + juce::String (shown.decayHigh, 2) + " s at 5 kHz");
+                }
+                int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmVoltagePlate") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+                const auto pp = call ("plugin_presets", R"({"track":"Audio 1","slot":"Voltage Plate","preset":"Short Bright"})");
+                const bool presetOk = pp.contains ("Short Bright") && vp->plate->getCurrentValueAsString() == "Small" && std::abs (vp->decay->getCurrentValue() - 1.0f) < 0.01f;
+                call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Plate","params":[{"param":"Plate","text":"Classic"},{"param":"Decay","text":"3"},{"param":"Damping","text":"4"}]})");
+                check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && vp->plate->getCurrentValueAsString() == "Classic" && std::abs (vp->decay->getCurrentValue() - 3.0f) < 0.01f && std::abs (vp->damping->getCurrentValue() - 4.0f) < 0.01f
+                       && Edition::packOf ("sqmVoltagePlate") == Edition::Pack::color && Skins::artFor ("voltageplate").isValid(),
+                       "Voltage Plate has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate art, a preset picks the small plate, and the assistant sets Plate, Decay and Damping by name");
             }
         }
         // ---- a missing audio file: renders say so instead of waiting for ever
