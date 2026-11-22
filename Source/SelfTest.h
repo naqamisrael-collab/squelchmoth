@@ -8,6 +8,7 @@
 #include "ChatPanel.h"
 #include "VocalRemover.h"
 #include "HearingWindow.h"
+#include "CaptureWindow.h"
 #include "MixerView.h"
 #include "SqEngine111.h"
 #include "ScoreWindow.h"
@@ -6523,6 +6524,28 @@ inline int runSelfTest()
                 }
                 check (call ("capture", R"({"action":"remove","name":"Selftest Unit"})").contains ("Removed") && ! CaptureStore::fileFor ("Selftest Unit").existsAsFile(), "capture action remove deletes it");
             }
+        }
+
+        // ---- 1.52 the Capture window and recall sheets, wired the way the app wires them
+        {
+            call ("new_session", R"({"name":"Selftest Capture Window"})");
+            CaptureContent cc; attachCapture (cc, tools, *session); cc.setSize (860, 560);
+            cc.addSweep(); const bool swept = cc.message().contains ("Capture Sweep") && session->findTrack ("Capture Sweep") != nullptr;
+            cc.fit ("Capture Sweep", "Window Unit"); SqCapture::Model m; const bool made = CaptureStore::load ("Window Unit", m);
+            check (swept && made && cc.message().contains ("Captured") && cc.chosen() == "Window Unit" && std::abs (m.gainDbAt1k) < 0.05 && m.harmonicDb[1] < -90.0,
+                   "Capture window: button 1 adds the sweep track, button 2 fits it (a plain wire here: gain " + juce::String (m.gainDbAt1k, 3) + " dB at 1 kHz, no distortion) and the new capture is chosen");
+            cc.setNotes ("Window Unit", "Gain at 3 o'clock, pad out, 600 ohm");
+            juce::Image pic (juce::Image::RGB, 64, 40, true); { juce::Graphics g (pic); g.fillAll (juce::Colours::darkorange); }
+            const auto png = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sm_selftest").getChildFile ("unit-photo.png"); png.getParentDirectory().createDirectory(); png.deleteFile(); { juce::FileOutputStream os (png); if (os.openedOk()) juce::PNGImageFormat().writeImageToStream (pic, os); }
+            cc.setPhoto ("Window Unit", png); cc.choose ("Window Unit");
+            const auto sheet = call ("capture", R"({"action":"recall","name":"Window Unit"})");
+            check (CaptureStore::notes ("Window Unit").contains ("3 o'clock") && CaptureStore::photo ("Window Unit").existsAsFile() && cc.notesShown().contains ("600 ohm") && cc.photoShown() && sheet.contains ("3 o'clock") && sheet.contains ("photo: ") && CaptureStore::load ("Window Unit", m),
+                   "recall sheet: notes and a photo are kept with the capture, shown in the window, read back by the assistant, and the capture still loads");
+            cc.use ("Capture Sweep", "Window Unit"); bool placed = false; if (auto* tt = dynamic_cast<te::AudioTrack*> (session->findTrack ("Capture Sweep"))) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqVoltageCapturePlugin*> (pl)) placed = c->currentName() == "Window Unit";
+            check (placed && cc.message().contains ("now plays"), "Capture window: button 3 puts Voltage Capture on the chosen track playing the chosen capture");
+            { auto shot = cc.createComponentSnapshot (cc.getLocalBounds()); const juce::File out ("/tmp/main_capture.png"); out.deleteFile(); juce::FileOutputStream os (out); if (os.openedOk()) juce::PNGImageFormat().writeImageToStream (shot, os); }
+            const auto ph = CaptureStore::photo ("Window Unit"); call ("capture", R"({"action":"remove","name":"Window Unit"})");
+            check (! CaptureStore::fileFor ("Window Unit").existsAsFile() && ! ph.existsAsFile(), "removing a capture removes its photo too");
         }
 
         // ---- a missing audio file: renders say so instead of waiting for ever

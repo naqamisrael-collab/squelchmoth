@@ -46,5 +46,14 @@ namespace CaptureStore
         std::unique_ptr<juce::AudioFormatWriter> w (juce::WavAudioFormat().createWriterFor (out.get(), rate, 1, 24, {}, 0)); if (w == nullptr) return false; out.release();
         const float* chans[1] = { x.data() }; return w->writeFromFloatArrays (chans, 1, (int) x.size());
     }
-    inline bool remove (const juce::String& name) { const auto f = fileFor (name); return f.existsAsFile() && f.deleteFile(); }
+    // the recall sheet: notes kept inside the capture's own file, and a photo beside it
+    inline juce::String notes (const juce::String& name) { const auto v = juce::JSON::parse (fileFor (name)); return v.isObject() ? v["notes"].toString() : juce::String(); }
+    inline bool setNotes (const juce::String& name, const juce::String& text) { const auto f = fileFor (name); auto v = juce::JSON::parse (f); if (! v.isObject()) return false; v.getDynamicObject()->setProperty ("notes", text); return f.replaceWithText (juce::JSON::toString (v, true)); }
+    inline juce::File photo (const juce::String& name) { for (auto* ext : { ".jpg", ".png" }) { const auto f = fileFor (name).withFileExtension (juce::String (".photo") + ext); if (f.existsAsFile()) return f; } return {}; }
+    inline bool setPhoto (const juce::String& name, const juce::File& from)
+    {
+        if (! fileFor (name).existsAsFile() || ! from.existsAsFile() || ! juce::ImageFileFormat::loadFrom (from).isValid()) return false;
+        const bool png = from.hasFileExtension ("png"); photo (name).deleteFile(); return from.copyFileTo (fileFor (name).withFileExtension (png ? ".photo.png" : ".photo.jpg"));
+    }
+    inline bool remove (const juce::String& name) { const auto f = fileFor (name); photo (name).deleteFile(); return f.existsAsFile() && f.deleteFile(); }
 }

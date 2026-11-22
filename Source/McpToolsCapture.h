@@ -16,13 +16,24 @@ void registerCaptureTools()
          "Play that through the unit and record it back onto another track starting at 0 s (use external_fx for a hardware insert), or put plug-ins on the sweep track itself. "
          "action fit: track (the recording, or the sweep track with plug-ins on it; not panned hard right) and name - works the model out and saves it on this computer. The answer says what was measured and how well the model predicts the quiet pass. "
          "action use: track, name - puts a Voltage Capture on the track (or re-uses one there) playing that capture. action list; action remove (name). "
+         "action recall: name, with notes (how the unit was set: knob positions, switches) and / or photo (path to a jpg or png of its front panel) - the recall sheet kept with the capture; with neither it reads the sheet back. window true opens the Capture window, which has all of this as buttons. "
          "What a capture holds: the unit's tone and the distortion it adds at and below the sweep's level (preamps, transformers, tape-style colour, gentle saturation). What it cannot hold: compressors and gates (gain that rides the signal), hard clipping, noise, delays and reverbs longer than 80 ms.",
-         R"json({"type":"object","properties":{"action":{"type":"string","enum":["sweep","fit","use","list","remove"]},"track":{},"name":{"type":"string"},"level_db":{"type":"number"},"order":{"type":"integer"}},"required":["action"]})json",
+         R"json({"type":"object","properties":{"action":{"type":"string","enum":["sweep","fit","use","list","remove","recall"]},"track":{},"name":{"type":"string"},"notes":{"type":"string"},"photo":{"type":"string"},"window":{"type":"boolean"},"level_db":{"type":"number"},"order":{"type":"integer"}},"required":["action"]})json",
          [this] (const juce::var& a) -> ToolResult
          {
              const auto action = str (a, "action").toLowerCase(); auto& e = *session.edit; const auto name = str (a, "name").trim();
-             if (action == "list") { const auto names = CaptureStore::list(); if (names.isEmpty()) return ToolResult::ok ("No captures on this computer yet. Start with capture action sweep."); juce::String s = juce::String (names.size()) + (names.size() == 1 ? " capture: " : " captures: "); for (auto& n : names) { SqCapture::Model m; s << "\n- " << (CaptureStore::load (n, m) ? captureDescribe (n, m) : "'" + n + "' (unreadable)"); } return ToolResult::ok (s); }
+             if (action == "list") { const auto names = CaptureStore::list(); if (names.isEmpty()) return ToolResult::ok ("No captures on this computer yet. Start with capture action sweep."); juce::String s = juce::String (names.size()) + (names.size() == 1 ? " capture: " : " captures: "); for (auto& n : names) { SqCapture::Model m; s << "\n- " << (CaptureStore::load (n, m) ? captureDescribe (n, m) : "'" + n + "' (unreadable)"); const auto nt = CaptureStore::notes (n); if (nt.isNotEmpty()) s << " Recall notes: " << nt.substring (0, 300); if (CaptureStore::photo (n).existsAsFile()) s << " (has a photo)"; } return ToolResult::ok (s); }
              if (action == "remove") { if (name.isEmpty()) return ToolResult::error ("Which capture? Give its name."); return CaptureStore::remove (name) ? ToolResult::ok ("Removed the capture '" + name + "'. Plug-ins already playing it keep it until the session is reopened.") : ToolResult::error ("There is no capture called '" + name + "'."); }
+             if (flag (a, "window") && ui.showWindow) ui.showWindow ("capture", true);
+             if (action == "recall")
+             {
+                 if (name.isEmpty()) return ToolResult::error ("Which capture? Give its name."); if (! CaptureStore::fileFor (name).existsAsFile()) return ToolResult::error ("There is no capture called '" + name + "'.");
+                 juce::String did;
+                 if (a.hasProperty ("notes")) { if (! CaptureStore::setNotes (name, str (a, "notes"))) return ToolResult::error ("Couldn't save the notes."); did << "Notes saved. "; }
+                 if (a.hasProperty ("photo")) { const juce::File f (str (a, "photo")); if (! f.existsAsFile()) return ToolResult::error ("No file at " + f.getFullPathName()); if (! CaptureStore::setPhoto (name, f)) return ToolResult::error ("That file is not a picture this can read (jpg or png)."); did << "Photo kept with the capture. "; }
+                 const auto notes = CaptureStore::notes (name); const auto ph = CaptureStore::photo (name);
+                 return ToolResult::ok (did + "Recall sheet for '" + name + "': " + (notes.isNotEmpty() ? "notes: " + notes : juce::String ("no notes yet")) + "; " + (ph.existsAsFile() ? "photo: " + ph.getFullPathName() : juce::String ("no photo yet")) + ".");
+             }
              if (action == "sweep")
              {
                  SqCapture::Sweep sw; sw.rate = TimeFmt::sampleRate (e); sw.highHz = juce::jmin (22000.0, 0.458 * sw.rate); sw.level = std::pow (10.0, juce::jlimit (-40.0, 0.0, num (a, "level_db", -6.0)) / 20.0);
@@ -65,6 +76,6 @@ void registerCaptureTools()
                  if (ui.refresh) ui.refresh();
                  return ToolResult::ok ("Voltage Capture on '" + tr->getName() + "' now plays " + captureDescribe (name, probe) + " Input pushes into it (anything over the sweep's level is held there).");
              }
-             return ToolResult::error ("action must be sweep, fit, use, list or remove.");
+             return ToolResult::error ("action must be sweep, fit, use, list, remove or recall.");
          });
 }

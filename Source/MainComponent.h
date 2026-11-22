@@ -32,6 +32,7 @@
 #include "MixSnapshots.h"
 #include "VocalRemover.h"
 #include "HearingWindow.h"
+#include "CaptureWindow.h"
 #include "BounceExport.h"
 
 class MainComponent : public juce::Component,
@@ -421,6 +422,7 @@ public:
         if (code == juce::KeyPress::F12Key || code == juce::KeyPress::numberPad3 || (cmd && shift && code == 'R')) { transportCtl.toggleRecord(); return true; }
         if (cmd && shift && code == 'M') { toggleWindow ("mastering", true); return true; }
         if (cmd && shift && code == 'H') { toggleWindow ("hearing", ! isWindowVisible ("hearing")); return true; }
+        if (cmd && shift && code == 'P') { toggleWindow ("capture", ! isWindowVisible ("capture")); return true; }
         if (cmd && shift && code == 'T') { toggleConsoleMode(); return true; }
         if (cmd && shift && code == 'V') { toggleWindow ("video", ! isWindowVisible ("video")); return true; }
         if (cmd && shift && code == 'C') { toggleChat(); return true; }
@@ -834,6 +836,7 @@ public:
             m.addItem (929, "Vocal Remover", true, isWindowVisible ("vocalremover"));
             m.addItem (930, "Hearing - notes as colour and number  (" SQ_CMD "+Shift+H)", true, isWindowVisible ("hearing"));
             m.addItem (931, "Video - the picture on the playhead  (" SQ_CMD "+Shift+V)", true, isWindowVisible ("video"));
+            m.addItem (932, "Capture - measure a unit, keep a model  (" SQ_CMD "+Shift+P)", true, isWindowVisible ("capture"));
             m.addItem (924, "Cut Lab - audio editor  (" SQ_CMD "+Shift+E)", true, cutLab != nullptr && cutLab->isVisible());
             m.addItem (926, "Score - notation  (" SQ_CMD "+" SQ_OPT "+N)", hasEdit, isWindowVisible ("score"));
             {
@@ -1172,6 +1175,7 @@ public:
         else if (id == 923) toggleWindow ("rack", true);
         else if (id == 929) toggleWindow ("vocalremover", true);
         else if (id == 930) toggleWindow ("hearing", ! isWindowVisible ("hearing"));
+        else if (id == 932) toggleWindow ("capture", ! isWindowVisible ("capture"));
         else if (id == 931) toggleWindow ("video", ! isWindowVisible ("video"));
         else if (id == 924) openCutLabGated ({});
 
@@ -1570,6 +1574,7 @@ private:
         }
         else if (name == "video") { auto c = new VideoContent(); attachVideo (*c, tools, session); w = std::make_unique<SqWindow> ("Video", name); w->setContentOwned (c, true); }
         else if (name == "hearing") { auto c = new HearingContent(); attachHearing (*c, tools, session); w = std::make_unique<SqWindow> ("Hearing", name); w->setContentOwned (c, true); }
+        else if (name == "capture") { auto c = new CaptureContent(); attachCapture (*c, tools, session); w = std::make_unique<SqWindow> ("Capture", name); w->setContentOwned (c, true); }
         else if (name == "snapshots") { w = std::make_unique<SqWindow> ("Mix Snapshots", name); w->setContentOwned (new MixSnapshotsContent (session), true); }
         else if (name == "vocalremover")
         {

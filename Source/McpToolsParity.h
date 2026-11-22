@@ -623,10 +623,10 @@ void registerParityTools()
                  { "mixsnapshots", "snapshots" }, { "snapshot", "snapshots" }, { "scenes", "snapshots" }, { "mixscenes", "snapshots" },
                  { "backup", "backups" }, { "restorefrombackup", "backups" }, { "vocal", "vocalremover" }, { "vocalremove", "vocalremover" }, { "karaoke", "vocalremover" }, { "stems", "vocalremover" },
                  { "hear", "hearing" }, { "notecolours", "hearing" }, { "notecolors", "hearing" }, { "colourwheel", "hearing" }, { "colorwheel", "hearing" }, { "tuner", "hearing" }, { "roommodes", "hearing" }, { "harmonics", "hearing" },
-                 { "videowindow", "video" }, { "picture", "video" }, { "viewer", "video" }, { "movie", "video" } };
+                 { "videowindow", "video" }, { "picture", "video" }, { "viewer", "video" }, { "movie", "video" }, { "capturewindow", "capture" }, { "captures", "capture" }, { "recall", "capture" } };
              if (auto it = alias.find (w); it != alias.end()) w = it->second;
              static const juce::StringArray known { "transport", "bigcounter", "memory", "cliplist", "groups", "undo", "colors", "session", "io", "engine",
-                                                    "plugins", "preferences", "welcome", "eqchart", "mastering", "usage", "snapshots", "backups", "vocalremover", "hearing", "video" };
+                                                    "plugins", "preferences", "welcome", "eqchart", "mastering", "usage", "snapshots", "backups", "vocalremover", "hearing", "video", "capture" };
              if (! known.contains (w))
                  return ToolResult::error ("Unknown window '" + str (a, "window") + "'. Use one of: " + known.joinIntoString (", ")
                                            + ". (Mix / Edit / Claude are views: use show_view. MIDI editor and Beat Maker open from their clips.)");
