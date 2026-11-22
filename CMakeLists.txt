@@ -6,7 +6,7 @@ set (TARGET_NAME Squelchmoth)
 # Runs on macOS Big Sur (11.0) and newer, Intel and Apple Silicon.
 set (CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 
-project (${TARGET_NAME} VERSION 1.49.0 LANGUAGES C CXX)
+project (${TARGET_NAME} VERSION 1.50.0 LANGUAGES C CXX)
 
 set (CMAKE_CXX_STANDARD 20)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,7 +21,7 @@ juce_add_gui_app (${TARGET_NAME}
     COMPANY_NAME "Rich Noise Audio"
     COMPANY_COPYRIGHT "Copyright (c) 2026 Rich Noise Audio. All rights reserved."
     BUNDLE_ID "com.jamarstewart.squelchmoth"
-    VERSION 1.49.0
+    VERSION 1.50.0
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Resources/icon_1024.png"
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "Squelchmoth needs the microphone/audio input to record."
@@ -108,6 +108,7 @@ juce_add_binary_data (${TARGET_NAME}BinaryData SOURCES
     Resources/plugart/pa_voltagespring.jpg
     Resources/plugart/pa_voltageplate.jpg
     Resources/plugart/pa_voltagebridge.jpg
+    Resources/plugart/pa_voltageoverdrive.jpg
     Resources/plugart/pa_spindle.jpg
     Resources/plugart/pa_fissure.jpg
     Resources/plugart/pa_mote.jpg

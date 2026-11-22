@@ -73,6 +73,7 @@ inline int runSelfTest()
         engine->getPluginManager().createBuiltInType<SqVoltageSpringPlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltagePlatePlugin>();
         engine->getPluginManager().createBuiltInType<SqVoltageBridgePlugin>();
+        engine->getPluginManager().createBuiltInType<SqVoltageOverdrivePlugin>();
     engine->getPluginManager().createBuiltInType<SqSpindleDelayPlugin>();
     engine->getPluginManager().createBuiltInType<SqFissureFilterPlugin>();
     engine->getPluginManager().createBuiltInType<SqDuetFilterPlugin>();
@@ -6405,6 +6406,74 @@ inline int runSelfTest()
                 check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && vp->ratio->getCurrentValueAsString() == "6:1" && vp->recovery->getCurrentValueAsString() == "1.5 s" && vp->attack->getCurrentValueAsString() == "Fast" && std::abs (vp->threshold->getCurrentValue() + 20.0f) < 0.01f && juce::roundToInt (vp->quality->getCurrentValue()) == 1
                        && Edition::packOf ("sqmVoltageBridge") == Edition::Pack::color && Skins::artFor ("voltagebridge").isValid(),
                        "Voltage Bridge has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets Threshold, Ratio and automatic recovery, and the assistant sets Ratio, Recovery, Attack, Threshold and Quality by name");
+            }
+        }
+
+        // ---- 1.50 Voltage Overdrive: the soft clipper as a plug-in (the circuit is checked against a circuit simulator in tests/drive_test.cpp)
+        {
+            call ("new_session", R"({"name":"Selftest Voltage Overdrive"})");
+            const auto ins = call ("insert_plugin", R"({"track":"Audio 1","plugin":"Voltage Overdrive"})");
+            SqVoltageOverdrivePlugin* vp = nullptr;
+            if (auto tt = session->findTrack ("Audio 1")) for (auto pl : tt->pluginList) if (auto c = dynamic_cast<SqVoltageOverdrivePlugin*> (pl)) vp = c;
+            check (vp != nullptr && ins.contains ("Voltage Overdrive") && juce::roundToInt (vp->quality->getCurrentValue()) == 1 && juce::roundToInt (vp->drive->getCurrentValue()) == 20, "Voltage Overdrive is registered, inserts by name on its first preset (Drive 20 %) at 8x");
+            if (vp != nullptr)
+            {
+                const double sr = 44100.0, twoPi = juce::MathConstants<double>::twoPi; const int N = 44100, lat = SqVoltageOverdrivePlugin::delaySamples;
+                struct Out { std::vector<float> l, r; };
+                struct Set { float drive = 50, tone = 100, mix = 100; int diodes = 0, sym = 0, quality = 1, unit = 1234; };
+                auto render = [&] (const Set& st, float amp, double hz)
+                {
+                    Out o; auto twin = session->edit->getPluginCache().createNewPlugin (SqVoltageOverdrivePlugin::xmlTypeName, {});
+                    if (auto* tw = dynamic_cast<SqVoltageOverdrivePlugin*> (twin.get()))
+                    {
+                        tw->unit = st.unit; auto setp = [] (te::AutomatableParameter::Ptr& p, float v) { p->setParameter (v, juce::dontSendNotification); };
+                        setp (tw->quality, (float) st.quality); setp (tw->drive, st.drive); setp (tw->tone, st.tone); setp (tw->mix, st.mix); setp (tw->diodes, (float) st.diodes); setp (tw->symmetry, (float) st.sym); setp (tw->output, 0.0f);
+                        tw->baseClassInitialise ({ te::TimePosition(), sr, 512 });
+                        juce::AudioBuffer<float> buf (2, 512); te::MidiMessageArray midi;
+                        for (int q = 0; q + 512 <= N; q += 512)
+                        {
+                            for (int i = 0; i < 512; ++i) { const float v = amp * (float) std::sin (twoPi * hz * (q + i) / sr); buf.setSample (0, i, v); buf.setSample (1, i, v); }
+                            te::PluginRenderContext fc (&buf, 0, 512, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / sr), te::TimePosition::fromSeconds ((q + 512) / sr)), true, false, true, false);
+                            tw->applyToBuffer (fc);
+                            for (int i = 0; i < 512; ++i) { o.l.push_back (buf.getSample (0, i)); o.r.push_back (buf.getSample (1, i)); }
+                        }
+                        tw->baseClassDeinitialise();
+                    }
+                    return o;
+                };
+                auto bin = [&] (const std::vector<float>& y, double f) { std::complex<double> acc = 0; const int from = 22050, M = 17640; if ((int) y.size() < from + M) return -300.0; for (int i = 0; i < M; ++i) acc += (double) y[(size_t) (from + i)] * std::polar (1.0, -twoPi * f * i / sr); return 20 * std::log10 (2 * std::abs (acc) / M + 1e-15); };
+                auto peak = [] (const std::vector<float>& y) { float p = 0; for (size_t i = 8000; i < y.size(); ++i) p = std::max (p, std::abs (y[i])); return (double) p; };
+                Set base; const float tiny = 0.0002f; const double tinyDb = 20 * std::log10 ((double) tiny);
+                const auto quiet = render (base, tiny, 1000.0); const double got = bin (quiet.l, 1000.0) - tinyDb; const auto shownQ = SqVoltageOverdrivePlugin::measure (1234, 0, false, 50.0f);
+                double corr = 0; for (int i = 22050; i < 22050 + 4410; ++i) corr += (double) quiet.l[(size_t) i] * std::sin (twoPi * 1000.0 * (i - lat) / sr);
+                const double bass = bin (render (base, tiny, 80.0).l, 80.0) - tinyDb;
+                check (std::abs (got - shownQ.gainDb) < 0.4 && got > 15.0 && corr > 0 && bass < got - 10.0 && std::abs (vp->getLatencySeconds() - 96.0 / 44100.0) < 1.0e-9 + 96.0 / 44100.0 * 0.2,
+                       "a quiet 1 kHz tone comes out " + juce::String (got, 2) + " dB louder at Drive 50 % (the circuit's own arithmetic says " + juce::String (shownQ.gainDb, 2) + "), the right way up and 96 samples late as reported; 80 Hz only " + juce::String (bass, 2) + " dB - bass passes with less gain");
+                double worstPeak = 0, leastPeak = 10; for (float dr : { 0.0f, 50.0f, 100.0f }) for (int dk = 0; dk < 3; ++dk) for (int sy = 0; sy < 2; ++sy) { Set s2 = base; s2.drive = dr; s2.diodes = dk; s2.sym = sy; const double p = peak (render (s2, 1.0f, 1000.0).l); worstPeak = std::max (worstPeak, p); leastPeak = std::min (leastPeak, p); }
+                check (worstPeak < 1.12 && leastPeak > 0.4, "a full-scale 1 kHz tone at Drive 0, 50 and 100 % through every pair, even and lopsided, peaks between " + juce::String (20 * std::log10 (leastPeak), 2) + " and " + juce::String (20 * std::log10 (worstPeak), 2) + " dBFS before Output (the input plus what the diodes allow - it is not a limiter)");
+                const auto h = render (base, 0.25f, 1000.0); const double h3 = bin (h.l, 3000.0) - bin (h.l, 1000.0), h2 = bin (h.l, 2000.0) - bin (h.l, 1000.0);
+                Set lop = base; lop.sym = 1; const auto hl = render (lop, 0.25f, 1000.0); const double l2 = bin (hl.l, 2000.0) - bin (hl.l, 1000.0);
+                Set lowD = base; lowD.drive = 0.0f; Set highD = base; highD.drive = 100.0f; const auto q0 = render (lowD, 0.01f, 1000.0), q1 = render (highD, 0.01f, 1000.0);
+                const double d3lo = bin (q0.l, 3000.0) - bin (q0.l, 1000.0), d3hi = bin (q1.l, 3000.0) - bin (q1.l, 1000.0);
+                check (h3 > -25.0 && h2 < -70.0 && l2 > -40.0 && d3hi > d3lo + 10.0, "a -12 dBFS tone at Drive 50 %: 3rd harmonic " + juce::String (h3, 1) + " dBc and no 2nd (" + juce::String (juce::roundToInt (h2)) + " dBc) with an even pair; Lopsided brings the 2nd up to " + juce::String (l2, 1) + " dBc; a -40 dBFS tone has its 3rd at " + juce::String (d3lo, 1) + " dBc with Drive at 0 and " + juce::String (d3hi, 1) + " at 100 %");
+                Set softS = base; softS.diodes = 1; Set sharpS = base; sharpS.diodes = 2; const auto hs = render (softS, 0.25f, 1000.0), hh = render (sharpS, 0.25f, 1000.0);
+                const double f5 = bin (h.l, 5000.0) - bin (h.l, 1000.0), s5 = bin (hs.l, 5000.0) - bin (hs.l, 1000.0), k5 = bin (hh.l, 5000.0) - bin (hh.l, 1000.0);
+                Set dark = base; dark.tone = 0.0f; const double t10 = bin (render (dark, tiny, 10000.0).l, 10000.0) - bin (render (base, tiny, 10000.0).l, 10000.0);
+                check (std::abs (s5 - f5) > 0.3 && std::abs (k5 - f5) > 0.3 && t10 < -12.0, "the three diode pairs clip differently: 5th harmonic " + juce::String (f5, 1) + " (silicon), " + juce::String (s5, 1) + " (soft), " + juce::String (k5, 1) + " dBc (sharp); Tone at its darkest takes 10 kHz down " + juce::String (-t10, 1) + " dB");
+                Set dryS = base; dryS.mix = 0.0f; const auto dry = render (dryS, 0.25f, 1000.0); double worstDry = 0; for (int i = 2000; i < 30000; ++i) worstDry = std::max (worstDry, std::abs ((double) dry.l[(size_t) i] - 0.25 * std::sin (twoPi * 1000.0 * (i - lat) / sr)));
+                Set other = base; other.unit = 99999; const auto ho = render (other, 0.25f, 1000.0), again = render (base, 0.25f, 1000.0);
+                double same = 0; for (size_t i = 0; i < again.l.size(); ++i) same = std::max (same, (double) std::abs (again.l[i] - h.l[i]));
+                const double dUnit = std::abs ((bin (ho.l, 5000.0) - bin (ho.l, 1000.0)) - f5), dLR = std::abs ((bin (h.r, 5000.0) - bin (h.r, 1000.0)) - f5);
+                Set hq = base; hq.quality = 2; const auto h16 = render (hq, 0.25f, 1000.0); const auto shown = SqVoltageOverdrivePlugin::measure (1234, 0, false, 50.0f, 0.25f);
+                check (worstDry < 1.0e-5 && dUnit > 0.0005 && dUnit < 3.0 && dLR > 0.0005 && dLR < 3.0 && same < 1.0e-6 && std::abs ((bin (h16.l, 3000.0) - bin (h16.l, 1000.0)) - h3) < 0.3 && std::abs (shown.harmonics[1] - h3) < 1.5 && shown.wave.size() == 384 && std::abs (shown.bassHz - 720.0) < 60.0,
+                       "Mix at 0 % is the input delayed by the same 96 samples; two units differ slightly (" + juce::String (dUnit, 2) + " dB in the 5th harmonic), left and right are two circuits (" + juce::String (dLR, 2) + " dB), the same unit is the same every time, 16x gives the same 3rd harmonic as 8x, and the face's own figure for it is " + juce::String (shown.harmonics[1], 1) + " dB against " + juce::String (h3, 1) + " in the audio");
+                int nPre = 0, nAdv = 0; for (auto& e2 : Signature::entries()) if (juce::String (e2.type) == "sqmVoltageOverdrive") { nPre = (int) e2.presets.size(); for (auto& pr : e2.presets) nAdv += pr.advanced ? 1 : 0; }
+                const auto pp = call ("plugin_presets", R"({"track":"Audio 1","slot":"Voltage Overdrive","preset":"Bass Grit"})");
+                const bool presetOk = pp.contains ("Bass Grit") && juce::roundToInt (vp->drive->getCurrentValue()) == 35 && juce::roundToInt (vp->mix->getCurrentValue()) == 60;
+                call ("set_plugin_parameters", R"({"track":"Audio 1","slot":"Voltage Overdrive","params":[{"param":"Diodes","text":"Sharp"},{"param":"Symmetry","text":"Lopsided"},{"param":"Drive","text":"70"},{"param":"Quality","text":"16x"}]})");
+                check (nPre >= 10 && nAdv >= 3 && nAdv < nPre && presetOk && vp->diodes->getCurrentValueAsString() == "Sharp" && vp->symmetry->getCurrentValueAsString() == "Lopsided" && juce::roundToInt (vp->drive->getCurrentValue()) == 70 && juce::roundToInt (vp->quality->getCurrentValue()) == 2
+                       && Edition::packOf ("sqmVoltageOverdrive") == Edition::Pack::color && Skins::artFor ("voltageoverdrive").isValid(),
+                       "Voltage Overdrive has " + juce::String (nPre) + " presets (" + juce::String (nAdv) + " advanced), belongs to Color & Space, has its plate, a preset sets Drive and Mix, and the assistant sets Diodes, Symmetry, Drive and Quality by name");
             }
         }
 
