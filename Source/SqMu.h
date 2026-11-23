@@ -33,12 +33,13 @@ namespace SqMu
         double solve (int i, double vg)
         {
             double v = vp[i];
+            if (std::abs (vg - vgLast[i]) < 2.0) v = std::min (c.bplus, std::max (0.0, vp[i] + slope[i] * (vg - vgLast[i])));   // 1.56: start where the last slope points
             for (int k = 0; k < 40; ++k)
             {
                 double ip, dp, dg; plate (t[i], v, vg, ip, dp, dg); const double f = v - c.bplus + c.ra * ip, step = f / (1.0 + c.ra * dp);
-                v = std::min (c.bplus, std::max (0.0, v - step)); if (std::abs (step) < 1.0e-10) break;
+                v = std::min (c.bplus, std::max (0.0, v - step)); slope[i] = -c.ra * dg / (1.0 + c.ra * dp); if (std::abs (step) < 1.0e-10) break;
             }
-            return vp[i] = v;
+            vgLast[i] = vg; return vp[i] = v;
         }
         /** control: volts added to the grids' bias (0 or negative). Returns the difference of the plates in volts. */
         double process (double vin, double control)
@@ -52,7 +53,7 @@ namespace SqMu
             for (int i = 0; i < 2; ++i) { const double v = solve (i, c.rest + control); double ip, dp, dg; plate (t[i], v, c.rest + control, ip, dp, dg); sum += 0.5 * c.ra * dg / (1.0 + c.ra * dp); }
             return sum;
         }
-        Remote t[2]; Circuit c; double vp[2] = { 125.0, 125.0 };
+        Remote t[2]; Circuit c; double vp[2] = { 125.0, 125.0 }, vgLast[2] = { 1.0e9, 1.0e9 }, slope[2] = { 0.0, 0.0 };
     };
 
     /** The sidechain: the output, rectified, charges a capacitor through the attack time whenever it is above the

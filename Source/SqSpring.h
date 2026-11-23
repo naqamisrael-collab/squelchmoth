@@ -83,7 +83,12 @@ namespace SqSpring
         {
             float y = 0.0f; float* a = re.data(); float* b = im.data(); const float* p = cr.data(); const float* q = ci.data(); const float* g = gain.data(); const float* l = lag.data();
             // each mode's velocity after a push: exp(-sigma t) (cos(w t) - (sigma / w) sin(w t))
-            for (int i = 0; i < used; ++i) { const float nr = p[i] * a[i] - q[i] * b[i] + x, ni = p[i] * b[i] + q[i] * a[i]; a[i] = nr; b[i] = ni; y += g[i] * nr - l[i] * ni; }
+            // eight running sums so the compiler can work on several modes at once (1.56); the order of adding differs, nothing else
+            float acc[8] = {}; int i = 0;
+            for (; i + 8 <= used; i += 8)
+                for (int j = 0; j < 8; ++j) { const int k = i + j; const float nr = p[k] * a[k] - q[k] * b[k] + x, ni = p[k] * b[k] + q[k] * a[k]; a[k] = nr; b[k] = ni; acc[j] += g[k] * nr - l[k] * ni; }
+            for (; i < used; ++i) { const float nr = p[i] * a[i] - q[i] * b[i] + x, ni = p[i] * b[i] + q[i] * a[i]; a[i] = nr; b[i] = ni; y += g[i] * nr - l[i] * ni; }
+            y += ((acc[0] + acc[4]) + (acc[1] + acc[5])) + ((acc[2] + acc[6]) + (acc[3] + acc[7]));
             return y;
         }
         /** The rms the output would have for white noise of rms 1 going in, with these modes (for setting the level). */

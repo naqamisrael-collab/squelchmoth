@@ -83,7 +83,7 @@ namespace SqTube
                 vk -= std::clamp (dk, -0.5, 0.5); vp -= std::clamp (dp, -20.0, 20.0);
                 if (std::abs (dk) < 1.0e-13 && std::abs (dp) < 1.0e-11 && std::abs (vg - vgWas) < 1.0e-13) break;
             }
-            x = { va, vg, vk, vp, 0.0 }; restK = vk; restP = vp;
+            x = { va, vg, vk, vp, 0.0 }; xPrev = x; restK = vk; restP = vp;
             // the junction's own capacitance at the resting grid voltage (10 pF at zero volts)
             cgkJunction = 10.0e-12 / std::sqrt (1.0 + std::max (0.0, vk)); cgk = t.ccg + cgkJunction;
             caps[0] = { c.cin, va, 0.0 };               // in - A   (voltage: vA - vin)
@@ -138,7 +138,11 @@ namespace SqTube
         {
             double g[6], ieq[6];
             for (int i = 0; i < 6; ++i) { g[i] = 2.0 * caps[i].c / T; ieq[i] = -(g[i] * caps[i].v + caps[i].i); }
-            auto v = x;                                                         // start from the last answer
+            auto v = x;                                                         // start from the last answer...
+            {   // ...or, since 1.56, from where the last two point when they are close (a smooth signal); the answer is the same, found sooner
+                double apart = 0.0; for (size_t i = 0; i < 5; ++i) apart = std::max (apart, std::abs (x[i] - xPrev[i]));
+                if (apart < 2.0) for (size_t i = 0; i < 5; ++i) v[i] = 2.0 * x[i] - xPrev[i];
+            }
             double capV[6] = {}, capI[6] = {};
             iterations = 0;
             for (int it = 0; it < 50; ++it)
@@ -160,7 +164,7 @@ namespace SqTube
                 J[3][1] = dIpG - g[2]; J[3][2] = -dIpP - dIpG - g[3]; J[3][3] = 1.0 / c.rp + dIpP + g[3] + g[2] + g[5]; J[3][4] = -g[5];
                 F[4] = vO / c.rl - capI[5];
                 J[4][3] = -g[5]; J[4][4] = 1.0 / c.rl + g[5];
-                double d[5]; if (! solve5 (J, F, d)) break;
+                double d[5]; if (! solveReduced (J, F, d) && ! solve5 (J, F, d)) break;
                 // keep a step from throwing the grid or plate far past where the curves mean anything
                 double scale = 1.0; const double big = std::max ({ std::abs (d[1] - d[2]) / 0.5, std::abs (d[3]) / 60.0, 1.0 }); scale = 1.0 / big;
                 double moved = 0.0; for (int i = 0; i < 5; ++i) { v[(size_t) i] -= scale * d[i]; moved = std::max (moved, std::abs (scale * d[i])); }
@@ -169,11 +173,36 @@ namespace SqTube
             // accept: update the capacitors' memories from the answer
             capV[0] = v[0] - vin; capV[1] = v[1] - v[2]; capV[2] = v[1] - v[3]; capV[3] = v[3] - v[2]; capV[4] = v[2]; capV[5] = v[3] - v[4];
             for (int i = 0; i < 6; ++i) { caps[i].i = g[i] * capV[i] + ieq[i]; caps[i].v = capV[i]; }
-            x = v;
+            xPrev = x; x = v;
             return v[4];
         }
 
     private:
+        /** Nodes 0 (row 0: 0-1) and 4 (row 4: 3-4) hang off the rest: eliminated exactly, a 3 x 3 left for nodes 1-3 (1.56). */
+        static bool solveReduced (double a[5][5], const double* b, double* out)
+        {
+            const double j00 = a[0][0], j44 = a[4][4];
+            if (std::abs (j00) < 1.0e-12 || std::abs (j44) < 1.0e-12) return false;
+            const double p0 = b[0] / j00, q0 = a[0][1] / j00, p4 = b[4] / j44, q43 = a[4][3] / j44;
+            double m[3][4];
+            for (int r = 0; r < 3; ++r)
+            {
+                const auto& row = a[r + 1];
+                m[r][0] = row[1] - row[0] * q0; m[r][1] = row[2]; m[r][2] = row[3] - row[4] * q43;
+                m[r][3] = b[r + 1] - row[0] * p0 - row[4] * p4;
+            }
+            for (int col = 0; col < 3; ++col)
+            {
+                int piv = col; for (int r = col + 1; r < 3; ++r) if (std::abs (m[r][col]) > std::abs (m[piv][col])) piv = r;
+                if (std::abs (m[piv][col]) < 1.0e-300) return false;
+                if (piv != col) for (int j = 0; j < 4; ++j) std::swap (m[piv][j], m[col][j]);
+                for (int r = col + 1; r < 3; ++r) { const double f = m[r][col] / m[col][col]; for (int j = col; j < 4; ++j) m[r][j] -= f * m[col][j]; }
+            }
+            double y[3]; for (int i = 2; i >= 0; --i) { double t = m[i][3]; for (int j = i + 1; j < 3; ++j) t -= m[i][j] * y[j]; y[i] = t / m[i][i]; }
+            out[1] = y[0]; out[2] = y[1]; out[3] = y[2]; out[0] = p0 - q0 * y[0]; out[4] = p4 - q43 * y[2];
+            return true;
+        }
+
         static bool solve5 (double a[5][5], const double* b, double* out)
         {
             double m[5][6];
@@ -191,7 +220,7 @@ namespace SqTube
 
         struct Cap { double c = 0, v = 0, i = 0; };
         Tube t; Circuit c; double T = 1.0 / 192000.0, cgk = 0, cgkJunction = 0, restK = 0, restP = 0; int iterations = 0;
-        std::array<double, 5> x { 0, 0, 0, 0, 0 }; Cap caps[6];
+        std::array<double, 5> x { 0, 0, 0, 0, 0 }, xPrev { 0, 0, 0, 0, 0 }; Cap caps[6];
     };
 
     //============================================================================== power stage
@@ -403,7 +432,7 @@ namespace SqTube
                 J[4][1] = b[1]; J[4][2] = -b[1] - b[2]; J[4][4] = 1.0 / c.rs + b[2];
                 F[5] = (vM - bp) / c.rw + iw + u / c.ra;
                 J[5][3] = -gw - 1.0 / c.ra; J[5][5] = 1.0 / c.rw + gw + 1.0 / c.ra;
-                double d[6]; if (! solveN (J, F, d)) break;
+                double d[6]; if (! solveSparse (J, F, d) && ! solveN (J, F, d)) break;
                 const double big = std::max ({ std::abs (d[1] - d[2]) / 2.0, std::abs (d[3]) / 60.0, std::abs (d[4]) / 60.0, std::abs (d[5]) / 60.0, 1.0 }), scale = 1.0 / big;
                 double moved = 0.0; for (int i = 0; i < 6; ++i) { v[(size_t) i] -= scale * d[i]; moved = std::max (moved, std::abs (scale * d[i])); }
                 if (moved < (dc ? 1.0e-10 : 1.0e-8)) break;
@@ -416,6 +445,36 @@ namespace SqTube
             else iL = gL * u + hL;
             uL = u;
             return u;
+        }
+
+        /** The power stage's matrix has nodes 0, 4 and 5 hanging off the rest (row 0: 0-1; row 4: 1, 2, 4; row 5: 3, 5), so
+            they are eliminated exactly and a 3 x 3 is solved for nodes 1-3 (1.56: a third of the work of the full solve). */
+        static bool solveSparse (double a[6][6], const double* b, double* out)
+        {
+            const double j00 = a[0][0], j44 = a[4][4], j55 = a[5][5];
+            if (std::abs (j00) < 1.0e-12 || std::abs (j44) < 1.0e-12 || std::abs (j55) < 1.0e-12) return false;
+            // d0 = (b0 - a01 d1) / j00; d4 = (b4 - a41 d1 - a42 d2) / j44; d5 = (b5 - a53 d3) / j55
+            const double p0 = b[0] / j00, q0 = a[0][1] / j00, p4 = b[4] / j44, q41 = a[4][1] / j44, q42 = a[4][2] / j44, p5 = b[5] / j55, q53 = a[5][3] / j55;
+            double m[3][4];
+            for (int r = 0; r < 3; ++r)
+            {
+                const auto& row = a[r + 1];
+                m[r][0] = row[1] - row[0] * q0 - row[4] * q41;
+                m[r][1] = row[2] - row[4] * q42;
+                m[r][2] = row[3] - row[5] * q53;
+                m[r][3] = b[r + 1] - row[0] * p0 - row[4] * p4 - row[5] * p5;
+            }
+            for (int col = 0; col < 3; ++col)
+            {
+                int piv = col; for (int r = col + 1; r < 3; ++r) if (std::abs (m[r][col]) > std::abs (m[piv][col])) piv = r;
+                if (std::abs (m[piv][col]) < 1.0e-300) return false;
+                if (piv != col) for (int j = 0; j < 4; ++j) std::swap (m[piv][j], m[col][j]);
+                for (int r = col + 1; r < 3; ++r) { const double f = m[r][col] / m[col][col]; for (int j = col; j < 4; ++j) m[r][j] -= f * m[col][j]; }
+            }
+            double x[3]; for (int i = 2; i >= 0; --i) { double t = m[i][3]; for (int j = i + 1; j < 3; ++j) t -= m[i][j] * x[j]; x[i] = t / m[i][i]; }
+            out[1] = x[0]; out[2] = x[1]; out[3] = x[2];
+            out[0] = p0 - q0 * x[0]; out[4] = p4 - q41 * x[0] - q42 * x[1]; out[5] = p5 - q53 * x[2];
+            return true;
         }
 
         static bool solveN (double a[6][6], const double* b, double* out)
