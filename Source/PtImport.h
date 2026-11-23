@@ -48,7 +48,7 @@ namespace PtImport
     /** Turns the reader's answer into a plan. folder: where to look for the audio (the session's own folder). bpm 0: work it out. */
     inline Plan plan (const juce::String& json, const juce::File& folder, double bpm = 0.0)
     {
-        Plan p; const auto v = juce::JSON::parse (json); if (! v.isObject() || ! (bool) v["ok"]) { p.error = "That file could not be read as a Pro Tools session (versions 5 to 12 are understood)."; return p; }
+        Plan p; const auto v = juce::JSON::parse (json); if (! v.isObject() || ! (bool) v["ok"]) { p.error = "That file could not be read as a Pro Tools session (versions 5 to 12 are understood). The reader said: " + (json.trim().isEmpty() ? juce::String ("nothing") : json.trim().substring (0, 160)); return p; }
         p.version = (int) v["version"]; p.rate = juce::jmax (8000.0, (double) v["rate"]);
         if (auto* fs = v["files"].getArray()) for (auto& f : *fs) p.files.add (f["name"].toString());
         struct Raw { juce::String track, file, region; int index; double at, offset, length; }; std::vector<Raw> raw; double least = 1.0e30;
@@ -78,7 +78,7 @@ namespace PtImport
             auto& rs = byTrack[ix]; std::vector<std::pair<double, juce::String>> set; for (auto& r : rs) set.push_back ({ r.at, r.file });
             if (! p.audio.empty() && rs.front().track == lastName && set == lastSet) { ++p.halvesJoined; continue; }       // the two halves of a stereo track list the same clips twice
             Track t; t.name = rs.front().track.trim(); lastName = rs.front().track; lastSet = set;
-            for (auto& r : rs) { Clip c; c.file = r.file; c.name = r.region; c.start = seconds (r.at); c.offset = r.offset / p.rate; c.length = r.length / p.rate; c.found = locate (r.file); if (! c.found.existsAsFile()) p.missing.addIfNotAlreadyThere (r.file); t.clips.push_back (c); ++p.clips; }
+            for (auto& r : rs) { Clip c; c.file = r.file; c.name = r.region; if (c.name.endsWith (".L") || c.name.endsWith (".R")) c.name = c.name.dropLastCharacters (2); c.start = seconds (r.at); c.offset = r.offset / p.rate; c.length = r.length / p.rate; c.found = locate (r.file); if (! c.found.existsAsFile()) p.missing.addIfNotAlreadyThere (r.file); t.clips.push_back (c); ++p.clips; }
             p.audio.push_back (t);
         }
         for (auto& name : p.files)       // a file the session lists but the reader put on no track: its place on the timeline is not known

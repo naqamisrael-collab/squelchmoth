@@ -6582,15 +6582,21 @@ inline int runSelfTest()
                    && p.unplaced.size() == 1 && p.unplaced[0].file == "Take 1.wav" && p.missing.size() == 1 && p.missing[0] == "Gone.wav" && p.midi.size() == 1 && p.notes == 2,
                    "Pro Tools import plan: positions in ticks become seconds at the tempo two butting clips fix (" + juce::String (p.bpm, 1) + " BPM), a stereo track's two halves are joined, a recording on no track and a missing file are both named");
             juce::var a (new juce::DynamicObject()); a.getDynamicObject()->setProperty ("path", ptx.getFullPathName()); a.getDynamicObject()->setProperty ("_listing", listing);
-            const auto res = call ("import_pro_tools", juce::JSON::toString (a, true)); te::AudioTrack* loops = nullptr; te::AudioTrack* loose = nullptr; for (auto* t2 : te::getAudioTracks (*session->edit)) { if (t2->getName() == "Loops") loops = t2; if (t2->getName().contains ("(place me)")) loose = t2; }
+            const auto rr = tools.call ("import_pro_tools", a); const auto res = rr.text; check (! rr.isError, "import_pro_tools on a canned listing: " + res.upToFirstOccurrenceOf ("\n", false, false).substring (0, 200)); te::AudioTrack* loops = nullptr; te::AudioTrack* loose = nullptr; for (auto* t2 : te::getAudioTracks (*session->edit)) { if (t2->getName() == "Loops") loops = t2; if (t2->getName().contains ("(place me)")) loose = t2; }
             bool placedRight = false; if (loops != nullptr && loops->getClips().size() == 3) { auto* c1 = loops->getClips()[1]; placedRight = std::abs (c1->getPosition().getStart().inSeconds() - 2.0) < 1.0e-6 && std::abs (c1->getPosition().getOffset().inSeconds() - 2.0) < 1.0e-6 && std::abs (c1->getPosition().getLength().inSeconds() - 2.0) < 1.0e-6; }
             check (placedRight && loose != nullptr && loose->getClips().size() == 1 && res.contains ("placed 3 of 4 audio clips") && res.contains ("2 MIDI notes") && res.contains ("Gone.wav") && res.contains ("(place me)") && std::abs (session->edit->tempoSequence.getTempo (0)->getBpm() - 120.0) < 1.0e-6,
                    "import_pro_tools builds it: the loop track's second clip starts at 2 s, 2 s into its file, 2 s long; the unplaced recording gets a '(place me)' track; MIDI notes land; the tempo is set; the missing file is named");
+            {   // the reader shipped with this build is present and runs here: a file that is not a session gets its plain "no"
+                juce::String err; const auto said = PtImport::list (ptx, err); const auto v = juce::JSON::parse (said);
+                check (PtImport::helper().existsAsFile() && v.isObject() && ! (bool) v["ok"], "the Pro Tools reader is installed beside the app and runs on this computer (" + PtImport::helper().getFileName() + ": " + (said.isNotEmpty() ? said.trim().substring (0, 60) : err) + ")");
+            }
             const auto real = juce::SystemStats::getEnvironmentVariable ("SQUELCH_TEST_PTX", {});
             if (real.isNotEmpty() && juce::File (real).existsAsFile())
             {
                 call ("new_session", R"({"name":"Selftest PT Real"})"); juce::var r (new juce::DynamicObject()); r.getDynamicObject()->setProperty ("path", real);
-                const auto out = call ("import_pro_tools", juce::JSON::toString (r, true)); std::cout << "  real session: " << out << "\n"; check (out.contains ("Built ") && PtImport::helper().existsAsFile(), "a real Pro Tools session is read by the bundled reader and built");
+                const auto out = tools.call ("import_pro_tools", r).text; std::cout << "  real session: " << out << "\n";
+                for (auto* t2 : te::getAudioTracks (*session->edit)) { for (auto* c : t2->getClips()) { if (auto* w = dynamic_cast<te::WaveAudioClip*> (c)) {
+                    std::cout << "  real clip: [" << t2->getName() << "] " << c->getName() << " at " << juce::String (c->getPosition().getStart().inSeconds(), 3) << " s, " << juce::String (c->getPosition().getLength().inSeconds(), 3) << " s long, " << w->getAudioFile().getNumChannels() << " ch, file " << w->getAudioFile().getFile().getFileName() << "\n"; } } } check (out.contains ("Built ") && PtImport::helper().existsAsFile(), "a real Pro Tools session is read by the bundled reader and built");
             }
         }
 

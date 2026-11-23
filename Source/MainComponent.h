@@ -530,6 +530,7 @@ public:
             m.addSeparator();
             m.addItem (5, "Import Audio / MIDI...  (" SQ_CMD "+Shift+I)");
             m.addItem (12, "Import Session Data (tracks from another session)...");
+            m.addItem (13, "Import Pro Tools Session (.ptx, .ptf)...", hasEdit);
             m.addItem (6, "Bounce Mix...  (" SQ_CMD "+" SQ_OPT "+B)", session.savingAllowed());
             m.addItem (13, "Export Stems...  (each track or folder as its own file)", session.savingAllowed());
             m.addItem (14, "Export MIDI...");
@@ -975,6 +976,7 @@ public:
             });
         }
         else if (id == 12) importSessionData();
+        else if (id == 13) importProToolsSession();
         else if (id == 6) showBounceDialog (false);
         else if (id == 13) showBounceDialog (true);
         else if (id == 14) exportMidi();
@@ -2025,6 +2027,19 @@ private:
             auto res = tools.call ("track_preset", args);
             Ui::message (res.isError ? juce::MessageBoxIconType::WarningIcon : juce::MessageBoxIconType::InfoIcon, "Track preset", res.text);
         }));
+    }
+
+    /** File > Import Pro Tools Session: the same tool the assistant uses; its answer in a box. Audio is looked for in the
+        "Audio Files" folder beside the session file. */
+    void importProToolsSession()
+    {
+        chooser = std::make_unique<juce::FileChooser> ("Import a Pro Tools session", juce::File::getSpecialLocation (juce::File::userDocumentsDirectory), "*.ptx;*.ptf;*.pts");
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc)
+        {
+            const auto f = fc.getResult(); if (! f.existsAsFile() || session.edit == nullptr) return;
+            juce::var a (new juce::DynamicObject()); a.getDynamicObject()->setProperty ("path", f.getFullPathName());
+            const auto r = tools.call ("import_pro_tools", a); juce::AlertWindow::showMessageBoxAsync (r.isError ? juce::MessageBoxIconType::WarningIcon : juce::MessageBoxIconType::InfoIcon, "Import Pro Tools Session", r.text);
+        });
     }
 
     void importSessionData()
