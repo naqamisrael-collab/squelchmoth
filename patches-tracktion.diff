@@ -428,6 +428,18 @@ index 6859f6d83ea..5804b811391 100644
  private:
      double currentLevel = 0.0;
      float lastSamp = 0.0f;
+diff --git a/modules/tracktion_engine/plugins/tracktion_Plugin.cpp b/modules/tracktion_engine/plugins/tracktion_Plugin.cpp
+index 78b5ce99270..9533faebb7f 100644
+--- a/modules/tracktion_engine/plugins/tracktion_Plugin.cpp
++++ b/modules/tracktion_engine/plugins/tracktion_Plugin.cpp
+@@ -722,6 +722,7 @@ void Plugin::setQuickControlParameter (AutomatableParameter* param)
+ void Plugin::applyToBufferWithAutomation (const PluginRenderContext& pc)
+ {
+     SCOPED_REALTIME_CHECK
++    juce::ScopedNoDenormals noDenormals;   // Squelchmoth 1.58: tiny decaying values are treated as zero for every plug-in (they cost the processor 10-100x otherwise)
+ 
+    #if TRACKTION_ENABLE_PLUGIN_CPU_MEASUREMENT
+     std::optional<ScopedCpuMeter> cpuMeter;
 diff --git a/modules/tracktion_engine/plugins/tracktion_PluginManager.cpp b/modules/tracktion_engine/plugins/tracktion_PluginManager.cpp
 index 8b10702a9e5..c3cb5fac122 100644
 --- a/modules/tracktion_engine/plugins/tracktion_PluginManager.cpp

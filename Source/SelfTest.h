@@ -198,7 +198,7 @@ inline int runSelfTest()
                 te::MidiMessageArray midi; if (synth && first) for (int note : { 48, 55, 60, 64, 67 }) midi.addMidiMessage (juce::MidiMessage::noteOn (1, note, (juce::uint8) 100), 0.0, {});
                 if (synth) buf.clear(); else { const size_t at = q % (vl.size() - 256); buf.copyFrom (0, 0, vl.data() + at, 256); buf.copyFrom (1, 0, vr.data() + at, 256); }
                 te::PluginRenderContext fc (&buf, 0, 256, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / 48000.0), te::TimePosition::fromSeconds ((q + 256) / 48000.0)), true, false, true, false);
-                p->applyToBuffer (fc);
+                { juce::ScopedNoDenormals nd; p->applyToBuffer (fc); }   // as the engine runs it (1.58)
             };
             for (size_t q = 0; q < 48000; q += 256) block (q, q == 0);                     // a second to settle (plates cast, buffers fill)
             juce::MessageManager::getInstance()->runDispatchLoopUntil (50);

@@ -81,7 +81,7 @@ namespace SqSpring
         /** One sample: the force at the near end in, the far end's velocity out (unscaled: see level()). */
         float process (float x)
         {
-            float y = 0.0f; float* a = re.data(); float* b = im.data(); const float* p = cr.data(); const float* q = ci.data(); const float* g = gain.data(); const float* l = lag.data();
+            float y = 0.0f; float* __restrict a = re.data(); float* __restrict b = im.data(); const float* __restrict p = cr.data(); const float* __restrict q = ci.data(); const float* __restrict g = gain.data(); const float* __restrict l = lag.data();   // separate arrays: lets the compiler work on several at once (1.58)
             // each mode's velocity after a push: exp(-sigma t) (cos(w t) - (sigma / w) sin(w t))
             // eight running sums so the compiler can work on several modes at once (1.56); the order of adding differs, nothing else
             float acc[8] = {}; int i = 0;
