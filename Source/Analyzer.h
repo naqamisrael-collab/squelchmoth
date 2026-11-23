@@ -2,14 +2,15 @@
 // Squelchmoth - audio analysis for the Mastering window and the plugin visualisers.
 //
 //  * SqAnalyzerPlugin : a hidden tap at the end of a plugin chain that copies the stereo signal into a FIFO
-//  * LoudnessMeter    : EBU R128 / ITU-R BS.1770-4 (K-weighting, 400 ms blocks, absolute + relative gating,
-//                       momentary, short-term, integrated, loudness range) and 4x oversampled true peak
+//  * LoudnessMeter    : ITU-R BS.1770-5 / EBU Tech 3341 and 3342 (see SqLoudness.h): momentary, short-term,
+//                       integrated, loudness range and true peak (the Annex 2 interpolator)
 //  * SpectrumAnalyser : 4096-point FFT, octave / third-octave / FFT views with peak hold and averaging
 //  * PhaseMeter       : correlation (-1..1) and goniometer points
 //  * measureFile()    : offline loudness of a WAV/AIFF/FLAC (used for 'Detect Loudness' and loudness matching)
 
 #include <JuceHeader.h>
 #include <deque>
+#include "SqLoudness.h"
 
 namespace te = tracktion;
 
@@ -56,145 +57,35 @@ struct KWeighting
 };
 
 //==============================================================================
+/** The loudness meter: momentary, short-term, integrated, loudness range and true peak, worked out by SqLoudness
+    (ITU-R BS.1770-5, EBU Tech 3341 and 3342; tests/loudness_test.cpp checks it against their published cases).
+    Readings are in LUFS / dBTP, -100 when there is nothing to read yet. */
 class LoudnessMeter
 {
 public:
-    void prepare (double sampleRate)
-    {
-        sr = sampleRate;
-        kw.prepare (sr);
-        blockLen = (int) (sr * 0.1);     // 100 ms sub-blocks; a 400 ms block = 4 of them, 3 s = 30
-        reset();
-        tpUp.reset();
-    }
-
-    void reset()
-    {
-        subBlocks.clear(); shortTermHistory.clear();
-        accum[0] = accum[1] = 0.0; accumSamples = 0;
-        momentary = shortTerm = integrated = -100.0f; range = 0.0f; truePeak = -100.0f; maxMomentary = maxShortTerm = -100.0f;
-        gatedSum = 0.0; gatedCount = 0;
-        relGate.clear();
-    }
-
+    /** channels: 2 for a stereo signal, 1 for a mono file (BS.1770 counts the channels that are there), up to 5. */
+    void prepare (double sampleRate, int channels = 2) { sr = sampleRate; nch = juce::jlimit (1, 5, channels); m.prepare (sr, nch); }
+    void reset() { m.reset(); }
     void process (const float* l, const float* r, int n)
     {
-        for (int i = 0; i < n; ++i)
-        {
-            auto kl = kw.process (0, l[i]), kr = kw.process (1, r != nullptr ? r[i] : l[i]);
-            accum[0] += (double) kl * kl; accum[1] += (double) kr * kr;
-            if (++accumSamples >= blockLen) finishSubBlock();
-        }
-        truePeak = juce::jmax (truePeak, measureTruePeak (l, n), r != nullptr ? measureTruePeak (r, n) : -100.0f);
+        float f[2];
+        if (nch == 1 || r == nullptr) { if (nch != 1) { nch = 1; m.prepare (sr, 1); } for (int i = 0; i < n; ++i) { f[0] = l[i]; m.push (f); } return; }
+        for (int i = 0; i < n; ++i) { f[0] = l[i]; f[1] = r[i]; m.push (f); }
     }
-
-    /** Call after the last block for the exact integrated value. */
-    void finalise()              { recomputeIntegrated(); }
-    float getMomentary() const   { return momentary; }
-    float getShortTerm() const   { return shortTerm; }
-    float getIntegrated() const  { return integrated; }
-    float getRange() const       { return range; }
-    float getTruePeak() const    { return truePeak; }
-    float getMaxMomentary() const { return maxMomentary; }
-    float getMaxShortTerm() const { return maxShortTerm; }
-
-    /** 4x oversampled sample-peak (dBTP) using a 4-phase polyphase interpolator (BS.1770 Annex 2 style). */
-    float measureTruePeak (const float* x, int n)
-    {
-        static const float phases[4][4] = { { 0.0017089843750f, 0.0109863281250f, -0.0196533203125f, 0.0332031250000f },
-                                            { -0.0291748046875f, 0.0292968750000f, -0.0517578125000f, 0.0749511718750f },
-                                            { -0.0517578125000f, 0.0292968750000f, -0.0291748046875f, 0.0332031250000f },
-                                            { -0.0196533203125f, 0.0109863281250f, 0.0017089843750f, 0.0f } };
-        // simplified: linear-phase 4x interpolation (12-tap windowed sinc) - accurate to ~0.1 dB for peak purposes
-        float peak = 0.0f;
-        for (int i = 0; i < n; ++i)
-        {
-            hist[3] = hist[2]; hist[2] = hist[1]; hist[1] = hist[0]; hist[0] = x[i];
-            peak = juce::jmax (peak, std::abs (x[i]));
-            for (int ph = 1; ph < 4; ++ph)
-            {
-                // cubic Hermite interpolation between hist[1] and hist[2]
-                float t = (float) ph / 4.0f;
-                float y0 = hist[3], y1 = hist[2], y2 = hist[1], y3 = hist[0];
-                float a = -0.5f * y0 + 1.5f * y1 - 1.5f * y2 + 0.5f * y3, b = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3, c = -0.5f * y0 + 0.5f * y2;
-                float v = ((a * t + b) * t + c) * t + y1;
-                peak = juce::jmax (peak, std::abs (v));
-            }
-        }
-        juce::ignoreUnused (phases);
-        return peak > 0.0f ? juce::Decibels::gainToDecibels (peak) : -100.0f;
-    }
+    /** For files with more than two channels (L, R, C, Ls, Rs; anything after the fifth is left out, as BS.1770 leaves out the LFE). */
+    void processPlanar (const float* const* ch, int channels, int n) { if (channels != nch) { nch = juce::jlimit (1, 5, channels); m.prepare (sr, nch); } m.pushPlanar (ch, n); }
+    void finalise() {}
+    float getMomentary() const    { return clip (m.momentary()); }
+    float getShortTerm() const    { return clip (m.shortTerm()); }
+    float getIntegrated() const   { return clip (m.integrated()); }
+    float getRange() const        { return (float) m.range(); }
+    float getTruePeak() const     { return clip (m.truePeakDb()); }
+    float getMaxMomentary() const { return clip (m.maxMomentary()); }
+    float getMaxShortTerm() const { return clip (m.maxShortTerm()); }
 
 private:
-    double sr = 44100.0;
-    KWeighting kw;
-    int blockLen = 4410;
-    double accum[2] = { 0, 0 };
-    int accumSamples = 0;
-    std::deque<double> subBlocks;           // mean-square (sum of channels) per 100 ms sub-block
-    std::deque<float> shortTermHistory;     // short-term loudness values for LRA
-    std::vector<double> relGate;            // 400 ms block loudness values above the absolute gate (for relative gating)
-    double gatedSum = 0.0; int gatedCount = 0;
-    float momentary = -100.0f, shortTerm = -100.0f, integrated = -100.0f, range = 0.0f, truePeak = -100.0f, maxMomentary = -100.0f, maxShortTerm = -100.0f;
-    float hist[4] = { 0, 0, 0, 0 };
-    struct { void reset() {} } tpUp;
-
-    static float toLufs (double meanSquare)   { return meanSquare > 1.0e-12 ? (float) (-0.691 + 10.0 * std::log10 (meanSquare)) : -100.0f; }
-
-    void recomputeIntegrated()
-    {
-        if (gatedCount == 0) { integrated = -100.0f; return; }
-        // relative gate: blocks more than 10 LU below the absolute-gated mean are dropped
-        auto threshold = toLufs (gatedSum / (double) gatedCount) - 10.0f;
-        double sum = 0.0; int count = 0;
-        for (auto b : relGate) if (toLufs (b) > threshold) { sum += b; ++count; }
-        integrated = count > 0 ? toLufs (sum / (double) count) : -100.0f;
-    }
-
-    void finishSubBlock()
-    {
-        auto ms = (accum[0] + accum[1]) / (double) juce::jmax (1, accumSamples);
-        accum[0] = accum[1] = 0.0; accumSamples = 0;
-        subBlocks.push_back (ms);
-        if (subBlocks.size() > 30) subBlocks.pop_front();
-
-        if (subBlocks.size() >= 4)
-        {
-            double m = 0.0; for (size_t i = subBlocks.size() - 4; i < subBlocks.size(); ++i) m += subBlocks[i];
-            m /= 4.0;
-            momentary = toLufs (m);
-            maxMomentary = juce::jmax (maxMomentary, momentary);
-            // integrated: every 400 ms block (overlapping at 100 ms steps) above -70 LUFS joins the gated set
-            if (momentary > -70.0f)
-            {
-                relGate.push_back (m);
-                gatedSum += m; ++gatedCount;
-                if (relGate.size() % 10 == 0) recomputeIntegrated();   // once a second; finalise() does the last one
-            }
-        }
-        if (subBlocks.size() >= 30)
-        {
-            double s = 0.0; for (auto b : subBlocks) s += b;
-            s /= 30.0;
-            shortTerm = toLufs (s);
-            maxShortTerm = juce::jmax (maxShortTerm, shortTerm);
-            if (shortTerm > -70.0f)
-            {
-                shortTermHistory.push_back (shortTerm);
-                if (shortTermHistory.size() > 36000) shortTermHistory.pop_front();
-                // LRA: 10th..95th percentile of short-term values above (mean - 20)
-                std::vector<float> v (shortTermHistory.begin(), shortTermHistory.end());
-                float mean = 0.0f; for (auto x : v) mean += x; mean /= (float) v.size();
-                v.erase (std::remove_if (v.begin(), v.end(), [mean] (float x) { return x < mean - 20.0f; }), v.end());
-                if (v.size() >= 2)
-                {
-                    std::sort (v.begin(), v.end());
-                    auto lo = v[(size_t) ((float) (v.size() - 1) * 0.10f)], hi = v[(size_t) ((float) (v.size() - 1) * 0.95f)];
-                    range = juce::jmax (0.0f, hi - lo);
-                }
-            }
-        }
-    }
+    static float clip (double v) { return v < -100.0 ? -100.0f : (float) v; }
+    SqLoudness::Meter m; double sr = 44100.0; int nch = 2;
 };
 
 //==============================================================================
@@ -579,7 +470,7 @@ inline FileLoudness measureFile (const juce::File& f)
     juce::AudioFormatManager fm; fm.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (f));
     if (reader == nullptr) return out;
-    LoudnessMeter lm; lm.prepare (reader->sampleRate);
+    LoudnessMeter lm; lm.prepare (reader->sampleRate, juce::jlimit (1, 5, (int) reader->numChannels));
     const int block = 8192;
     juce::AudioBuffer<float> buf ((int) juce::jmax (1u, reader->numChannels), block);
     double sumSq = 0.0; juce::int64 count = 0; float sp = 0.0f;
@@ -588,7 +479,7 @@ inline FileLoudness measureFile (const juce::File& f)
         auto n = (int) juce::jmin ((juce::int64) block, reader->lengthInSamples - pos);
         reader->read (&buf, 0, n, pos, true, true);
         auto l = buf.getReadPointer (0), r = buf.getNumChannels() > 1 ? buf.getReadPointer (1) : nullptr;
-        lm.process (l, r, n);
+        if (buf.getNumChannels() > 2) lm.processPlanar (buf.getArrayOfReadPointers(), juce::jmin (5, buf.getNumChannels()), n); else lm.process (l, r, n);
         for (int ch = 0; ch < buf.getNumChannels(); ++ch) { auto p = buf.getReadPointer (ch); for (int i = 0; i < n; ++i) { sumSq += (double) p[i] * p[i]; sp = juce::jmax (sp, std::abs (p[i])); } count += n; }
     }
     lm.finalise();

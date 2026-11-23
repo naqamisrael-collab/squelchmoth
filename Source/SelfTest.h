@@ -6600,6 +6600,25 @@ inline int runSelfTest()
             }
         }
 
+        // ---- 1.55 the loudness meter to the published standard (tests/loudness_test.cpp runs the EBU Tech 3341 / 3342 cases themselves)
+        {
+            const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sm_selftest").getChildFile ("loudness"); dir.deleteRecursively(); dir.createDirectory();
+            auto write = [&] (const juce::String& name, int channels, double seconds, const std::function<float (int, int)>& v)
+            {
+                const double sr = 48000.0; const int n = (int) (seconds * sr); juce::AudioBuffer<float> b (channels, n); for (int c = 0; c < channels; ++c) for (int i = 0; i < n; ++i) b.setSample (c, i, v (c, i));
+                const auto f = dir.getChildFile (name); std::unique_ptr<juce::FileOutputStream> os (f.createOutputStream());
+                if (os != nullptr) if (std::unique_ptr<juce::AudioFormatWriter> w { juce::WavAudioFormat().createWriterFor (os.get(), sr, (unsigned) channels, 32, {}, 0) }) { os.release(); w->writeFromAudioSampleBuffer (b, 0, n); }
+                return f;
+            };
+            const double twoPi = juce::MathConstants<double>::twoPi, a23 = std::pow (10.0, -23.0 / 20.0);
+            const auto c1 = measureFile (write ("case1.wav", 2, 20.0, [&] (int, int i) { return (float) (a23 * std::sin (twoPi * 1000.0 * i / 48000.0)); }));
+            const auto mono = measureFile (write ("mono.wav", 1, 20.0, [&] (int, int i) { return (float) (a23 * std::sin (twoPi * 1000.0 * i / 48000.0)); }));
+            const auto c19 = measureFile (write ("case19.wav", 2, 2.0, [&] (int, int i) { const double g = juce::jmin (1.0, juce::jmin ((double) i / 480.0, (double) (96000 - i) / 480.0)); return (float) (1.41 * g * std::sin (twoPi * 12000.0 * i / 48000.0 + juce::MathConstants<double>::pi / 4.0)); }));
+            const auto c3 = measureFile (write ("case3.wav", 2, 80.0, [&] (int, int i) { const double t = i / 48000.0, a = (t >= 10.0 && t < 70.0) ? a23 : std::pow (10.0, -36.0 / 20.0); return (float) (a * std::sin (twoPi * 1000.0 * i / 48000.0)); }));
+            check (std::abs (c1.integrated + 23.0f) <= 0.1f && std::abs (c3.integrated + 23.0f) <= 0.1f && c19.truePeak - 3.0f <= 0.2f && c19.truePeak - 3.0f >= -0.4f && std::abs (mono.integrated + 26.0f) <= 0.1f && c1.range < 0.5f,
+                   "file loudness to EBU Tech 3341: case 1 reads " + juce::String (c1.integrated, 2) + " LUFS, case 3 " + juce::String (c3.integrated, 2) + " LUFS (both -23.0 +-0.1), case 19 true peak " + juce::String (c19.truePeak, 2) + " dBTP (+3.0, +0.2 / -0.4); a mono file of case 1 reads " + juce::String (mono.integrated, 2) + " LUFS (one channel)");
+        }
+
         // ---- a missing audio file: renders say so instead of waiting for ever
         {
             const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sq-missing-selftest"); dir.deleteRecursively(); dir.createDirectory();
