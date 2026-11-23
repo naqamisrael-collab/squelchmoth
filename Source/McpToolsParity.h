@@ -120,8 +120,8 @@ void registerParityTools()
          });
 
     //==========================================================================
-    add ("edit_command", "Run a Pro Tools edit command on the current selection (make one with set_selection first): separate, clear, delete_close_gap, cut, copy, paste, duplicate, repeat (times), fade (length_seconds), remove_fades, trim_to_selection, trim_start_to_playhead, trim_end_to_playhead, strip_silence (threshold_db, min_length_seconds, pad_seconds), consolidate, heal, nudge (direction -1/1, by_grid), select_all, insert_silence, separate_at_transients (sensitivity 0-1), mute_clips, normalize_clip_gain, reverse.",
-         R"json({"type":"object","properties":{"command":{"type":"string"},"times":{"type":"integer"},"length_seconds":{"type":"number"},"threshold_db":{"type":"number"},"min_length_seconds":{"type":"number"},"pad_seconds":{"type":"number"},"direction":{"type":"integer"},"by_grid":{"type":"boolean"},"sensitivity":{"type":"number"}},"required":["command"]})json",
+    add ("edit_command", "Run a Pro Tools edit command on the current selection (make one with set_selection first): separate, clear, delete_close_gap, cut, copy, paste, duplicate, repeat (times), fade (length_seconds), remove_fades, trim_to_selection, trim_start_to_playhead, trim_end_to_playhead, strip_silence (threshold_db, min_length_seconds, pad_seconds), consolidate, heal, nudge (direction -1/1, by_grid), select_all, insert_silence, separate_at_transients (sensitivity 0-1), mute_clips, normalize_clip_gain, reverse, quantize_to_grid (selected clip starts to the nearest grid line), repeat_to_fill (selected clips tiled to the time selection's end), batch_rename (name + number from first, digits; or find / replace).",
+         R"json({"type":"object","properties":{"command":{"type":"string"},"times":{"type":"integer"},"length_seconds":{"type":"number"},"threshold_db":{"type":"number"},"min_length_seconds":{"type":"number"},"pad_seconds":{"type":"number"},"direction":{"type":"integer"},"by_grid":{"type":"boolean"},"sensitivity":{"type":"number"},"name":{"type":"string"},"first":{"type":"integer"},"digits":{"type":"integer"},"find":{"type":"string"},"replace":{"type":"string"}},"required":["command"]})json",
          [this, st, needUi, refresh] (const juce::var& a)
          {
              auto s = st(); if (s == nullptr) return needUi();
@@ -143,6 +143,9 @@ void registerParityTools()
              else if (cmd == "strip_silence") n = EditOps::stripSilence (session, *s, has (a, "threshold_db") ? num (a, "threshold_db") : -1000, num (a, "min_length_seconds", -1), num (a, "pad_seconds", -1));
              else if (cmd == "consolidate") n = EditOps::consolidate (session, *s, err);
              else if (cmd == "heal") n = EditOps::heal (session, *s);
+             else if (cmd == "quantize_to_grid" || cmd == "quantise_to_grid") n = EditOps::quantizeClipsToGrid (session, *s);
+             else if (cmd == "repeat_to_fill") n = EditOps::repeatToFill (session, *s, err);
+             else if (cmd == "batch_rename") n = EditOps::batchRenameClips (*s, str (a, "name"), (int) num (a, "first", 1), (int) num (a, "digits", 2), str (a, "find"), str (a, "replace"));
              else if (cmd == "nudge") n = EditOps::nudge (session, *s, (int) num (a, "direction", 1) >= 0 ? 1 : -1, flag (a, "by_grid"));
              else if (cmd == "select_all") { EditOps::selectAll (session, *s); n = (int) s->selectedClips.size(); }
              else if (cmd == "insert_silence") { if (s->timeSelection && s->timeSelection->getLength() > 0.001s) { te::insertSpaceIntoEdit (edit(), *s->timeSelection); n = 1; } else err = "Needs a time selection"; }

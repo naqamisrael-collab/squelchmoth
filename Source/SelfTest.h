@@ -695,6 +695,27 @@ inline int runSelfTest()
         auto sel2 = call ("get_selection", "{}");
         check (sel2.contains ("Shuffle") && sel2.contains ("Grabber"), "get_selection reports mode and tool");
 
+        {   // 1.59: Repeat to Fill Selection, Batch Rename, Quantize Clips to Grid
+            call ("add_track", R"({"kind":"instrument","name":"Loop","instrument":"Mothsynth"})");
+            call ("create_midi_clip", R"({"track":"Loop","start_bar":1,"length_bars":1,"name":"Riff","notes":[{"pitch":"C3","start_beat":0,"length_beats":1,"velocity":90}]})");
+            call ("set_edit_mode", R"({"mode":"slip"})");
+            call ("set_selection", R"({"start_bar":1,"end_bar":2,"tracks":["Loop"],"all_clips_in_range":true})");
+            call ("set_selection", R"({"start_bar":1,"end_bar":4.5,"tracks":["Loop"]})");
+            auto fill = call ("edit_command", R"({"command":"repeat_to_fill"})");
+            auto loopClips = juce::JSON::parse (call ("list_clips", R"({"track":"Loop"})"))[0]["clips"];
+            check (fill.contains ("3 item") || loopClips.size() == 4, "Repeat to Fill: three copies after the first bar (" + fill + ")");
+            call ("set_selection", R"({"start_bar":1,"end_bar":5,"tracks":["Loop"],"all_clips_in_range":true})");
+            call ("edit_command", R"({"command":"batch_rename","name":"Loop ","first":1,"digits":2})");
+            auto named = call ("list_clips", R"({"track":"Loop"})");
+            check (named.contains ("Loop 01") && named.contains ("Loop 04"), "Batch Rename numbers the clips in order");
+            call ("set_edit_mode", R"({"mode":"slip","grid":"1/4 note","nudge":"1/16 note"})");
+            call ("set_selection", R"({"start_bar":1,"end_bar":2,"tracks":["Loop"],"all_clips_in_range":true})");
+            call ("edit_command", R"({"command":"nudge","direction":1})");
+            auto q = call ("edit_command", R"({"command":"quantize_to_grid"})");
+            auto first = juce::JSON::parse (call ("list_clips", R"({"track":"Loop"})"))[0]["clips"][0]["start"].toString();
+            check (first.upToFirstOccurrenceOf (" ", false, false).endsWith ("|000"), "Quantize to Grid puts the nudged clip back on a grid line (" + first + ", " + q + ")");
+        }
+
         auto mk = call ("add_marker", R"({"name":"Verse","bar":3})");
         check (mk.contains ("Verse") && mk.contains ("3|1|000"), "marker added at bar 3");
         call ("add_marker", R"({"name":"Chorus","bar":5,"length_bars":2})");

@@ -43,7 +43,8 @@ namespace SqTube
     inline void grid (const Tube& t, double vgk, double& ig, double& dIg)
     {
         constexpr double is = 1.0e-9, vt = 0.025852; const double r = t.rgi + 1.0;
-        if (vgk <= 0.0) { const double e = std::exp (std::max (vgk, -2.0) / vt); ig = is * (e - 1.0); dIg = is * e / vt + 1.0e-12; return; }
+        if (vgk <= -2.0) { static const double e = std::exp (-2.0 / vt); ig = is * (e - 1.0); dIg = is * e / vt + 1.0e-12; return; }   // the clamp makes this a constant (1.58: worked out once)
+        if (vgk <= 0.0) { const double e = std::exp (vgk / vt); ig = is * (e - 1.0); dIg = is * e / vt + 1.0e-12; return; }
         // solve i r + vt ln(1 + i / is) = vgk for i; start from above the answer, where Newton cannot run away
         double i = std::min (vgk / r, vgk < 1.0 ? is * std::expm1 (vgk / vt) : vgk / r);
         for (int k = 0; k < 12; ++k)

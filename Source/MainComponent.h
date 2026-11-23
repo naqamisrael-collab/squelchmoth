@@ -554,6 +554,9 @@ public:
             m.addItem (112, "Separate Clip at Selection / Playhead  (" SQ_CMD "+E)", clipSel || timeSel);
             m.addItem (124, "Separate Clip at Transients", audioSel);
             m.addItem (113, "Heal Separation  (" SQ_CMD "+H)", clipSel);
+            m.addItem (121, "Repeat to Fill Selection  (" SQ_CMD "+" SQ_OPT "+V)", clipSel && timeSel);
+            m.addItem (122, "Quantize Clips to Grid  (" SQ_CMD "+0)", clipSel);
+            m.addItem (123, "Batch Rename Clips...  (Ctrl+Shift+R)", clipSel);
             m.addItem (114, "Trim Clip to Selection  (" SQ_CMD "+T)", clipSel && timeSel);
             m.addItem (115, "Trim Clip Start to Insertion  (A)", clipSel); m.addItem (116, "Trim Clip End to Insertion  (S)", clipSel);
             m.addItem (117, "Strip Silence...  (" SQ_CMD "+U)", audioSel);
@@ -999,6 +1002,9 @@ public:
         else if (id == 112) { EditOps::separate (session, st); repaintViews(); }
         else if (id == 124 || id == 607) separateAtTransients();
         else if (id == 113) { EditOps::heal (session, st); repaintViews(); }
+        else if (id == 121) { juce::String err; EditOps::repeatToFill (session, st, err); if (err.isNotEmpty()) Ui::message (juce::MessageBoxIconType::InfoIcon, "Repeat to Fill Selection", err); repaintViews(); }
+        else if (id == 122) { EditOps::quantizeClipsToGrid (session, st); repaintViews(); }
+        else if (id == 123) timeline.keyPressed (juce::KeyPress ('R', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier, 0));
         else if (id == 114) { EditOps::trimToSelection (session, st); repaintViews(); }
         else if (id == 115) { EditOps::trimToPlayhead (session, st, true); repaintViews(); }
         else if (id == 116) { EditOps::trimToPlayhead (session, st, false); repaintViews(); }

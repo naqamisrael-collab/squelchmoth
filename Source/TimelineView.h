@@ -784,6 +784,9 @@ public:
         if (cmd && code == 'F') { EditOps::fade (session, state); repaintAll(); return true; }
         if (cmd && code == 'U') { canvas.stripSilenceDialog(); return true; }
         if (cmd && code == 'H') { EditOps::heal (session, state); repaintAll(); return true; }
+        if (cmd && ! alt && ! shift && code == '0') { EditOps::quantizeClipsToGrid (session, state); repaintAll(); return true; }                      // 1.59: Quantize to Grid
+        if (cmd && alt && ! shift && code == 'V') { juce::String err; EditOps::repeatToFill (session, state, err); repaintAll(); return true; }         // 1.59: Repeat to Fill Selection
+        if (mods.isCtrlDown() && shift && code == 'R') { canvas.batchRenameDialog(); return true; }                                                    // 1.59: Batch Rename
         if (cmd && code == 'T') { EditOps::trimToSelection (session, state); repaintAll(); return true; }
         if (cmd && code == 'M' && ! shift) { for (auto& c : state.selectedClips) c->setMuted (! c->isMuted()); repaintAll(); return true; }
         if (cmd && code == 'A') { EditOps::selectAll (session, state); repaintAll(); return true; }

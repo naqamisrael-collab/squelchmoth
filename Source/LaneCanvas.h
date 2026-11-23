@@ -1606,6 +1606,28 @@ public:
         aw->enterModalState (true, juce::ModalCallbackFunction::create ([this, aw] (int r) { aw->setVisible (false); if (r == 1) { EditOps::duplicate (session, state, juce::jlimit (1, 200, aw->getTextEditorContents ("n").getIntValue())); notify(); } }));
     }
 
+    /** Clip > Batch Rename (1.59): a new name with numbers, or find and replace in the selected clips' names. */
+    void batchRenameDialog()
+    {
+        if (state.selectedClips.empty()) return;
+        auto aw = std::make_shared<juce::AlertWindow> ("Batch Rename", juce::String ((int) state.selectedClips.size()) + " clips, renamed in timeline order. Leave Name empty to only find and replace.", juce::MessageBoxIconType::NoIcon);
+        aw->addTextEditor ("name", "Take ", "Name");
+        aw->addTextEditor ("first", "1", "First number");
+        aw->addTextEditor ("digits", "2", "Digits");
+        aw->addTextEditor ("find", "", "Find");
+        aw->addTextEditor ("replace", "", "Replace with");
+        aw->addButton ("Rename", 1, juce::KeyPress (juce::KeyPress::returnKey));
+        aw->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        aw->enterModalState (true, juce::ModalCallbackFunction::create ([this, aw] (int r)
+        {
+            aw->setVisible (false);
+            if (r != 1) return;
+            EditOps::batchRenameClips (state, aw->getTextEditorContents ("name"), aw->getTextEditorContents ("first").getIntValue(),
+                                       aw->getTextEditorContents ("digits").getIntValue(), aw->getTextEditorContents ("find"), aw->getTextEditorContents ("replace"));
+            notify();
+        }));
+    }
+
     void gainDialog()
     {
         auto ac = dynamic_cast<te::AudioClipBase*> (state.selectedClip.get());

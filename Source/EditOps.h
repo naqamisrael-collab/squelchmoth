@@ -632,6 +632,73 @@ namespace EditOps
 
     //==========================================================================
     /** Heal Separation (Cmd+H): rejoins adjacent pieces of the same source file. */
+    /** Clip > Quantize to Grid (1.59): each selected clip's start moves to the nearest grid line (sync point not used yet). One undo step. */
+    inline int quantizeClipsToGrid (Session& session, TimelineState& st)
+    {
+        if (session.edit == nullptr) return 0;
+        int n = 0;
+        for (auto& c : st.selectedClips)
+        {
+            const double from = c->getPosition().getStart().inSeconds(), to = st.snapToGrid (*session.edit, from);
+            if (std::abs (to - from) > 1.0e-9) { c->setStart (te::TimePosition::fromSeconds (to), false, true); ++n; }
+        }
+        return n;
+    }
+
+    /** Edit > Paste Special > Repeat to Fill Selection (1.59), done on the selected clips: per track, the selected clips are
+        laid end to end from where they finish until the time selection's end; the last copy is cut at that end. */
+    inline int repeatToFill (Session& session, TimelineState& st, juce::String& err)
+    {
+        if (session.edit == nullptr) return 0;
+        if (! st.timeSelection || st.timeSelection->getLength() < 0.001s) { err = "Needs a time selection to fill"; return 0; }
+        if (st.selectedClips.empty()) { err = "Select the clips to repeat"; return 0; }
+        const auto fillEnd = st.timeSelection->getEnd();
+        std::map<te::ClipTrack*, std::vector<te::Clip::Ptr>> byTrack;
+        for (auto& c : st.selectedClips) if (auto t = dynamic_cast<te::ClipTrack*> (c->getClipTrack())) byTrack[t].push_back (c);
+        int n = 0;
+        for (auto& [t, clips] : byTrack)
+        {
+            auto first = clips.front()->getPosition().getStart(), last = clips.front()->getPosition().getEnd();
+            for (auto& c : clips) { first = std::min (first, c->getPosition().getStart()); last = std::max (last, c->getPosition().getEnd()); }
+            const auto span = last - first;
+            if (span < 0.001s) continue;
+            for (int k = 1; k < 10000; ++k)
+            {
+                const auto shift = span * (double) k;
+                if (first + shift >= fillEnd) break;
+                for (auto& c : clips)
+                {
+                    const auto start = c->getPosition().getStart() + shift;
+                    if (start >= fillEnd) continue;
+                    auto stt = c->state.createCopy(); te::EditItemID::remapIDs (stt, nullptr, c->edit);
+                    if (auto nc = t->insertClipWithState (stt))
+                    {
+                        nc->setStart (start, false, true);
+                        if (nc->getPosition().getEnd() > fillEnd) nc->setEnd (fillEnd, true);
+                        ++n;
+                    }
+                }
+            }
+        }
+        return n;
+    }
+
+    /** Clip > Batch Rename (1.59): every selected clip renamed to base plus a number (from 'first', zero-padded to 'digits'), in timeline order. */
+    inline int batchRenameClips (TimelineState& st, const juce::String& base, int first = 1, int digits = 2, const juce::String& find = {}, const juce::String& replaceWith = {})
+    {
+        auto clips = st.selectedClips;
+        std::sort (clips.begin(), clips.end(), [] (auto& a, auto& b) { return a->getPosition().getStart() < b->getPosition().getStart(); });
+        int n = 0;
+        for (auto& c : clips)
+        {
+            juce::String name = c->getName();
+            if (find.isNotEmpty()) name = name.replace (find, replaceWith);
+            if (base.isNotEmpty()) name = base + juce::String (first + n).paddedLeft ('0', juce::jmax (1, digits));
+            c->setName (name); ++n;
+        }
+        return n;
+    }
+
     inline int heal (Session& session, TimelineState& st)
     {
         juce::ignoreUnused (session);
