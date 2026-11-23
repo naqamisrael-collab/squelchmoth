@@ -15,14 +15,14 @@ namespace SqBridge
 
     struct Bridge
     {
-        void prepare (const SqClip::Diode& d1, const SqClip::Diode& d2, const SqClip::Diode& d3, const SqClip::Diode& d4, const Circuit& circuit) { d[0] = d1; d[1] = d2; d[2] = d3; d[3] = d4; c = circuit; reset(); }
+        void prepare (const SqClip::Diode& d1, const SqClip::Diode& d2, const SqClip::Diode& d3, const SqClip::Diode& d4, const Circuit& circuit) { d[0] = d1; d[1] = d2; d[2] = d3; d[3] = d4; c = circuit; for (int k = 0; k < 4; ++k) tab[k].prepare (d[k]); reset(); }
         void reset() { v[0] = v[1] = 0.0; v[2] = 0.3; v[3] = -0.3; }
         /** Volts in (between the two inputs), control current in amps. Returns the volts between corners A and B. */
         double process (double vin, double control)
         {
             for (int it = 0; it < 60; ++it)
             {
-                double i[4], g[4]; SqClip::diode (d[0], v[2] - v[0], i[0], g[0]); SqClip::diode (d[1], v[0] - v[3], i[1], g[1]); SqClip::diode (d[2], v[2] - v[1], i[2], g[2]); SqClip::diode (d[3], v[1] - v[3], i[3], g[3]);
+                double i[4], g[4]; SqClip::diode (d[0], v[2] - v[0], i[0], g[0], nullptr, &tab[0]); SqClip::diode (d[1], v[0] - v[3], i[1], g[1], nullptr, &tab[1]); SqClip::diode (d[2], v[2] - v[1], i[2], g[2], nullptr, &tab[2]); SqClip::diode (d[3], v[1] - v[3], i[3], g[3], nullptr, &tab[3]);
                 const double gr = 1.0 / c.r, gl = 1.0 / c.leak;
                 double f[4] = { (0.5 * vin - v[0]) * gr + i[0] - i[1], (-0.5 * vin - v[1]) * gr + i[2] - i[3], control - i[0] - i[2] - v[2] * gl, i[1] + i[3] - control - v[3] * gl };
                 double J[4][5] = { { -gr - g[0] - g[1], 0.0, g[0], g[1], -f[0] }, { 0.0, -gr - g[2] - g[3], g[2], g[3], -f[1] }, { g[0], g[2], -g[0] - g[2] - gl, 0.0, -f[2] }, { g[1], g[3], 0.0, -g[1] - g[3] - gl, -f[3] } };
@@ -37,7 +37,7 @@ namespace SqBridge
         /** Gain for small signals at a control current (matched diodes: 1 / (1 + R I / (n Vt)) to a good approximation). */
         double gainAt (double control) { const double a = process (1.0e-6, control), b = process (-1.0e-6, control); return (a - b) / 2.0e-6; }
 
-        SqClip::Diode d[4]; Circuit c; double v[4] = { 0.0, 0.0, 0.3, -0.3 };
+        SqClip::Diode d[4]; SqClip::Table tab[4]; Circuit c; double v[4] = { 0.0, 0.0, 0.3, -0.3 };
     };
 
     /** The sidechain: the output over the threshold charges a capacitor through the attack time and lets go through the

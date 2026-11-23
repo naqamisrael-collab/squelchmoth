@@ -14,7 +14,7 @@
 #include "ScoreWindow.h"
 
 /** Set by Main for "--preset-audit [report.md]": the self-test sets up the engine, runs the audit and returns. */
-struct SelfTestMode { static inline bool presetAuditOnly = false, renderFaces = false, siteShots = false; static inline juce::String reportPath, facesDir, facePreset; static inline juce::StringArray only; };
+struct SelfTestMode { static inline bool presetAuditOnly = false, renderFaces = false, siteShots = false, cpuBench = false; static inline juce::String reportPath, facesDir, facePreset; static inline juce::StringArray only; };
 
 inline int runSelfTest()
 {
@@ -174,6 +174,45 @@ inline int runSelfTest()
                   << juce::String (sum.seconds, 1) << " s) ==\nReport: " << report.getFullPathName() << "\n";
         scannerOwner.reset(); session.reset(); engine.reset();
         return sum.failed == 0 ? 0 : 1;
+    }
+
+    if (SelfTestMode::cpuBench)
+    {
+        // Squelchmoth --cpu-bench [report.csv] [--only "A,B"]: every built-in plug-in on its own, 10 s of a sung vocal (or a held
+        // chord for instruments) at 48 kHz in blocks of 256, timed. "% of a core" = time taken / 10 s; 100 % means one core can
+        // run exactly one instance in real time.
+        Edition::owned() = Edition::Owned { true, true, true, true, true, true, true };
+        if (session->edit == nullptr) session->newSession ("Bench");
+        session->edit->ensureNumberOfAudioTracks (1); auto* track = te::getAudioTracks (*session->edit)[0];
+        std::vector<float> vl, vr; Eng::TestSignals::vocal (vl, vr, 48000.0, 4.0);
+        struct Row { juce::String name, category; double pct; }; std::vector<Row> rows;
+        for (auto& e : Signature::entries())
+        {
+            if (! SelfTestMode::only.isEmpty() && ! SelfTestMode::only.contains (e.name)) continue;
+            auto p = Signature::create (*session->edit, e); if (p == nullptr) continue;
+            track->pluginList.insertPlugin (p, 0, nullptr); if (! e.presets.empty()) Signature::applyPreset (*p, e.presets.front());
+            p->baseClassInitialise ({ te::TimePosition(), 48000.0, 256 });
+            const bool synth = juce::String (e.category) == "Instruments"; juce::AudioBuffer<float> buf (2, 256);
+            auto block = [&] (size_t q, bool first)
+            {
+                te::MidiMessageArray midi; if (synth && first) for (int note : { 48, 55, 60, 64, 67 }) midi.addMidiMessage (juce::MidiMessage::noteOn (1, note, (juce::uint8) 100), 0.0, {});
+                if (synth) buf.clear(); else { const size_t at = q % (vl.size() - 256); buf.copyFrom (0, 0, vl.data() + at, 256); buf.copyFrom (1, 0, vr.data() + at, 256); }
+                te::PluginRenderContext fc (&buf, 0, 256, &midi, 0.0, te::TimeRange (te::TimePosition::fromSeconds (q / 48000.0), te::TimePosition::fromSeconds ((q + 256) / 48000.0)), true, false, true, false);
+                p->applyToBuffer (fc);
+            };
+            for (size_t q = 0; q < 48000; q += 256) block (q, q == 0);                     // a second to settle (plates cast, buffers fill)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+            const auto t0 = juce::Time::getHighResolutionTicks(); size_t q = 48000;
+            for (; q < 48000 + 480000; q += 256) block (q, false);
+            const double secs = juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - t0), pct = 100.0 * secs / (480000.0 / 48000.0);
+            rows.push_back ({ e.name, e.category, pct }); std::cout << "  " << juce::String (pct, 2).paddedLeft (' ', 7) << " %  " << e.name << "\n" << std::flush;
+            p->baseClassDeinitialise(); for (auto pl : track->pluginList.getPlugins()) pl->deleteFromParent();
+        }
+        std::sort (rows.begin(), rows.end(), [] (const Row& a, const Row& b) { return a.pct > b.pct; });
+        const auto out = juce::File::getCurrentWorkingDirectory().getChildFile (SelfTestMode::facesDir.isNotEmpty() ? SelfTestMode::facesDir : juce::String ("cpu-bench.csv"));
+        juce::String csv = "plugin,category,percent_of_one_core\n"; for (auto& r : rows) csv << "\"" << r.name << "\"," << r.category << "," << juce::String (r.pct, 3) << "\n"; out.replaceWithText (csv);
+        std::cout << "CPU bench: " << rows.size() << " plug-ins -> " << out.getFullPathName() << "\n";
+        scannerOwner.reset(); session.reset(); engine.reset(); return rows.empty() ? 1 : 0;
     }
 
     if (SelfTestMode::renderFaces)

@@ -22,8 +22,8 @@ namespace SqDrive
     class Stage
     {
     public:
-        void prepare (double sampleRate, const SqClip::Diode& diodeIn = {}, const Circuit& circuit = {}) { d = diodeIn; c = circuit; T = 1.0 / sampleRate; reset(); }
-        void setParts (const SqClip::Diode& diodeIn, const Circuit& circuit) { d = diodeIn; c = circuit; }
+        void prepare (double sampleRate, const SqClip::Diode& diodeIn = {}, const Circuit& circuit = {}) { d = diodeIn; c = circuit; T = 1.0 / sampleRate; table.prepare (d); reset(); }
+        void setParts (const SqClip::Diode& diodeIn, const Circuit& circuit) { const bool same = diodeIn.is == d.is && diodeIn.n == d.n && diodeIn.rs == d.rs; d = diodeIn; c = circuit; if (! same) table.prepare (d); }
         void reset() { vc = iLeg = vf = vfBefore = ic = 0.0; up = down = 0.0; iterations = 0; }
         int lastIterations() const { return iterations; }
         /** The voltage across the feedback parts after the last sample (what the diodes allowed). */
@@ -39,7 +39,7 @@ namespace SqDrive
             double x = std::abs (vf - vfBefore) < 0.05 ? 2.0 * vf - vfBefore : vf;
             for (int it = 0; it < 60; ++it)
             {
-                ++iterations; double id, did; SqClip::pair (d, c.lopsided, x, id, did, &up, &down);
+                ++iterations; double id, did; SqClip::pair (d, c.lopsided, x, id, did, &up, &down, &table);
                 const double f = g * (x - vf) - ic - (i - x * gf - id), df = g + gf + did;
                 double step = f / df; const double limit = 0.25; if (step > limit) step = limit; else if (step < -limit) step = -limit;
                 x -= step; if (std::abs (step) < 1.0e-10) break;
@@ -53,6 +53,6 @@ namespace SqDrive
             const double gr = c.rg, gi = -1.0 / (w * c.cg), den = gr * gr + gi * gi, re = 1.0 + (fr * gr + fi * gi) / den, im = (fi * gr - fr * gi) / den; return std::sqrt (re * re + im * im);
         }
     private:
-        SqClip::Diode d; Circuit c; double T = 1.0 / 192000.0, vc = 0, iLeg = 0, vf = 0, vfBefore = 0, ic = 0, up = 0, down = 0; int iterations = 0;
+        SqClip::Diode d; Circuit c; SqClip::Table table; double T = 1.0 / 192000.0, vc = 0, iLeg = 0, vf = 0, vfBefore = 0, ic = 0, up = 0, down = 0; int iterations = 0;
     };
 }

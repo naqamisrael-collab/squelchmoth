@@ -7,6 +7,7 @@
 // (tests/reference/clip/make_reference.py); tests/clip_test.cpp compares harmonics.
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace SqClip
 {
@@ -40,14 +41,44 @@ namespace SqClip
         i = x; di = 1.0 / (d.rs + nvt / (x + d.is)); if (hint != nullptr) *hint = x;
     }
 
+    /** The diode law above, worked out once on a fine grid of forward voltages (every 0.5 mV up to 2.5 V) and read back by
+        cubic interpolation through the values and slopes: the inner solve for the series resistance is then not done per
+        sample. Read back to about one part in a billion (tests/clip_test.cpp compares). Reverse voltages and anything past
+        the grid use the law itself. */
+    struct Table
+    {
+        static constexpr double top = 2.5, step = 0.0005;
+        void prepare (const Diode& d)
+        {
+            const int n = (int) (top / step) + 2; cur.assign ((size_t) n, 0.0); slope.assign ((size_t) n, 0.0); double hint = 0.0;
+            for (int k = 0; k < n; ++k) { double i, di; diode (d, k * step, i, di, &hint); cur[(size_t) k] = i; slope[(size_t) k] = di; }
+            dd = d; ready = true;
+        }
+        bool covers (double v) const { return ready && v > 0.0 && v < top; }
+        void read (double v, double& i, double& di) const
+        {
+            const double u = v / step; const int k = (int) u; const double t = u - k, h = step;
+            const double y0 = cur[(size_t) k], y1 = cur[(size_t) k + 1], m0 = slope[(size_t) k] * h, m1 = slope[(size_t) k + 1] * h, t2 = t * t, t3 = t2 * t;
+            i = (2 * t3 - 3 * t2 + 1) * y0 + (t3 - 2 * t2 + t) * m0 + (-2 * t3 + 3 * t2) * y1 + (t3 - t2) * m1;
+            di = ((6 * t2 - 6 * t) * y0 + (3 * t2 - 4 * t + 1) * m0 + (-6 * t2 + 6 * t) * y1 + (3 * t2 - 2 * t) * m1) / h;
+        }
+        Diode dd; std::vector<double> cur, slope; bool ready = false;
+    };
+    /** The law, through the table when one is given and covers the voltage. */
+    inline void diode (const Diode& d, double v, double& i, double& di, double* hint, const Table* t)
+    {
+        if (t != nullptr && t->covers (v)) { t->read (v, i, di); if (hint != nullptr) *hint = i; return; }
+        diode (d, v, i, di, hint);
+    }
+
     struct Circuit { double r = 2200.0, c = 10.0e-9; bool lopsided = false; };      // lopsided: two diodes in series for the positive side
 
     /** Current from the output node to ground through the diodes at voltage v, and its slope. */
-    inline void pair (const Diode& d, bool lopsided, double v, double& i, double& di, double* hintUp = nullptr, double* hintDown = nullptr)
+    inline void pair (const Diode& d, bool lopsided, double v, double& i, double& di, double* hintUp = nullptr, double* hintDown = nullptr, const Table* t = nullptr)
     {
         double a, da, b, db;
-        if (lopsided) { diode (d, 0.5 * v, a, da, hintUp); da *= 0.5; } else diode (d, v, a, da, hintUp);       // two alike in series share the voltage
-        diode (d, -v, b, db, hintDown); i = a - b; di = da + db;
+        if (lopsided) { diode (d, 0.5 * v, a, da, hintUp, t); da *= 0.5; } else diode (d, v, a, da, hintUp, t);       // two alike in series share the voltage
+        diode (d, -v, b, db, hintDown, t); i = a - b; di = da + db;
     }
 
     /** The voltage at which the pair passes this current (the knee, for scaling levels): default 100 microamps. */
@@ -57,9 +88,9 @@ namespace SqClip
     class Clipper
     {
     public:
-        void prepare (double sampleRate, const Diode& diodeIn = {}, const Circuit& circuit = {}) { d = diodeIn; c = circuit; T = 1.0 / sampleRate; reset(); }
+        void prepare (double sampleRate, const Diode& diodeIn = {}, const Circuit& circuit = {}) { d = diodeIn; c = circuit; T = 1.0 / sampleRate; table.prepare (d); reset(); }
         void reset() { v = vBefore = 0.0; ic = 0.0; up = down = 0.0; iterations = 0; }
-        void setParts (const Diode& diodeIn, const Circuit& circuit) { d = diodeIn; c = circuit; }
+        void setParts (const Diode& diodeIn, const Circuit& circuit) { const bool same = diodeIn.is == d.is && diodeIn.n == d.n && diodeIn.rs == d.rs; d = diodeIn; c = circuit; if (! same) table.prepare (d); }
         int lastIterations() const { return iterations; }
         /** Where the capacitor and resistor put the top-end corner for quiet signals, in Hz. */
         static double corner (const Circuit& c) { return 1.0 / (2.0 * 3.14159265358979323846 * c.r * c.c); }
@@ -71,7 +102,7 @@ namespace SqClip
             double x = std::abs (v - vBefore) < 0.05 ? 2.0 * v - vBefore : v;                 // start from where the last two answers point, unless it is moving fast
             for (int it = 0; it < 60; ++it)
             {
-                ++iterations; double id, did; pair (d, c.lopsided, x, id, did, &up, &down);
+                ++iterations; double id, did; pair (d, c.lopsided, x, id, did, &up, &down, &table);
                 const double f = (x - vin) / c.r + id + g * x + ieq, df = 1.0 / c.r + did + g;
                 double step = f / df; const double limit = 0.25; if (step > limit) step = limit; else if (step < -limit) step = -limit;      // the diode law is steep: small strides
                 x -= step; if (std::abs (step) < 1.0e-9) break;
@@ -79,6 +110,6 @@ namespace SqClip
             ic = g * x + ieq; vBefore = v; v = x; return x;
         }
     private:
-        Diode d; Circuit c; double T = 1.0 / 192000.0, v = 0, vBefore = 0, ic = 0, up = 0, down = 0; int iterations = 0;
+        Diode d; Circuit c; Table table; double T = 1.0 / 192000.0, v = 0, vBefore = 0, ic = 0, up = 0, down = 0; int iterations = 0;
     };
 }

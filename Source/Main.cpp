@@ -32,7 +32,7 @@
          {
              const int argc = *_NSGetArgc(); char** argv = *_NSGetArgv();
              for (int i = 1; i < argc; ++i)
-                 for (auto* key : { "PluginScan", "--selftest", "--preset-audit", "--render-faces", "--site-shots", "--make-", "--check-key", "--dump-catalog" })
+                 for (auto* key : { "PluginScan", "--selftest", "--preset-audit", "--render-faces", "--cpu-bench", "--site-shots", "--make-", "--check-key", "--dump-catalog" })
                      if (argv[i] != nullptr && std::strstr (argv[i], key) != nullptr) { juce::Process::setDockIconVisible (false); return; }
          }
      };
@@ -55,7 +55,7 @@ public:
     bool moreThanOneInstanceAllowed() override
     {
         auto cl = getCommandLineParameters();
-        return cl.contains ("--selftest") || cl.contains ("--preset-audit") || cl.contains ("--render-faces") || cl.contains ("--site-shots") || cl.contains ("--make-") || cl.contains ("--check-key") || cl.contains ("--dump-catalog") || cl.contains ("PluginScan");
+        return cl.contains ("--selftest") || cl.contains ("--preset-audit") || cl.contains ("--render-faces") || cl.contains ("--cpu-bench") || cl.contains ("--site-shots") || cl.contains ("--make-") || cl.contains ("--check-key") || cl.contains ("--dump-catalog") || cl.contains ("PluginScan");
     }
 
     void initialise (const juce::String& commandLine) override
@@ -63,7 +63,7 @@ public:
        #if JUCE_MAC
         // Plug-in scanning and the command-line modes are extra copies of this binary: on macOS each would
         // otherwise add its own Squelchmoth icon to the Dock next to the real app.
-        if (commandLine.contains ("PluginScan") || commandLine.contains ("--selftest") || commandLine.contains ("--preset-audit") || commandLine.contains ("--render-faces") || commandLine.contains ("--site-shots")
+        if (commandLine.contains ("PluginScan") || commandLine.contains ("--selftest") || commandLine.contains ("--preset-audit") || commandLine.contains ("--render-faces") || commandLine.contains ("--cpu-bench") || commandLine.contains ("--site-shots")
             || commandLine.contains ("--make-") || commandLine.contains ("--check-key") || commandLine.contains ("--dump-catalog"))
             juce::Process::setDockIconVisible (false);
        #endif
@@ -156,6 +156,17 @@ public:
             return;
         }
 
+        if (commandLine.contains ("--cpu-bench"))
+        {
+            auto args = juce::ArgumentList ("Squelchmoth", commandLine); SelfTestMode::cpuBench = true;
+            for (int i = 0; i < args.size(); ++i)
+            {
+                if (args[i].text == "--cpu-bench" && i + 1 < args.size() && ! args[i + 1].text.startsWith ("--")) SelfTestMode::facesDir = args[i + 1].text.unquoted();
+                if (args[i].text == "--only" && i + 1 < args.size()) SelfTestMode::only = juce::StringArray::fromTokens (args[i + 1].text.unquoted(), ",", "\"");
+            }
+            for (auto& o : SelfTestMode::only) o = o.trim();
+            setApplicationReturnValue (runSelfTest()); quit(); return;
+        }
         if (commandLine.contains ("--render-faces"))
         {
             // Squelchmoth --render-faces [dir] [--only "Plug-in Name,Other Name"]   (design QA: every face to a PNG)

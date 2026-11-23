@@ -1255,6 +1255,12 @@ private:
                  auto p = insertArg (a, err);
                  if (p == nullptr) return ToolResult::error (err);
                  auto filter = str (a, "filter");
+                 if (auto ext = dynamic_cast<te::ExternalPlugin*> (p))     // say plainly why a third-party plug-in shows nothing (1.56)
+                     if (ext->getAudioPluginInstance() == nullptr)
+                         return ToolResult::error ("'" + ext->getName() + "' did not load, so it has no controls to read or set. "
+                                                   + (ext->getLoadError().isNotEmpty() ? "Reason given: " + ext->getLoadError() + ". " : juce::String())
+                                                   + (ext->isMissing() ? "It is not on this computer (or was not found by the last scan). " : juce::String())
+                                                   + "Run Setup > Rescan All Plugins, then try again.");
                  juce::Array<juce::var> out;
                  auto params = p->getAutomatableParameters();
                  for (int i = 0; i < params.size(); ++i)
@@ -1267,7 +1273,12 @@ private:
                  {
                      set (res, "preset", ext->getCurrentProgramName());
                      set (res, "num_presets", ext->getNumPrograms());
+                     set (res, "format", ext->desc.pluginFormatName);
+                     set (res, "maker", ext->desc.manufacturerName);
+                     if (auto* inst = ext->getAudioPluginInstance())
+                         set (res, "parameters_inside_plugin", inst->getParameters().size());
                  }
+                 set (res, "parameters_reachable", params.size());
                  set (res, "parameters", out);
                  return ToolResult::ok (res);
              });

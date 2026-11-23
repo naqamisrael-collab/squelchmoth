@@ -26,8 +26,9 @@ namespace SqTube
         ip = dVpk = dVgk = 0.0;
         const double root = std::sqrt (t.kvb + vpk * vpk);
         const double x = t.kp * (1.0 / t.mu + vgk / root);
-        const double soft = x > 40.0 ? x : std::log1p (std::exp (x));           // ln(1 + e^x)
-        const double sig = x > 40.0 ? 1.0 : 1.0 / (1.0 + std::exp (-x));         // its slope
+        const double ex = std::exp (-std::abs (x)), inv = 1.0 / (1.0 + ex);   // one exponential serves both (1.56)
+        const double soft = std::max (x, 0.0) + std::log1p (ex);                 // ln(1 + e^x)
+        const double sig = x >= 0.0 ? inv : ex * inv;                            // its slope
         const double e1 = vpk / t.kp * soft;
         if (! (e1 > 0.0)) return;
         const double p = std::pow (e1, t.ex);
@@ -212,7 +213,7 @@ namespace SqTube
         ip = is = 0.0; dIp[0] = dIp[1] = dIp[2] = dIs[0] = dIs[1] = dIs[2] = 0.0;
         const double s = std::max (vs, 1.0e-3);                                  // a screen at or below the cathode passes nothing
         const double x = t.kp * (1.0 / t.mu + vg / s);
-        const double soft = x > 40.0 ? x : std::log1p (std::exp (x)), sig = x > 40.0 ? 1.0 : 1.0 / (1.0 + std::exp (-x));
+        const double ex = std::exp (-std::abs (x)), inv = 1.0 / (1.0 + ex), soft = std::max (x, 0.0) + std::log1p (ex), sig = x >= 0.0 ? inv : ex * inv;
         const double e1 = s / t.kp * soft;
         if (e1 > 0.0)
         {
@@ -508,56 +509,72 @@ namespace SqTube
     };
 
     //============================================================================== oversampling
-    /** Runs a process at `factor` times the rate: a windowed-sinc (Kaiser) filter up and the same down. Constant delay of
-        latency() samples at the outer rate. */
+    /** Runs a process at `factor` times the rate (1, 2, 4, 8 or 16). Since 1.56: a cascade of half-band filters, each
+        stage doubling the rate (Kaiser-windowed, 120 dB down outside the band, flat to 20 kHz at 44.1 kHz), up and then
+        the same back down; about a fifth of the arithmetic of the single long filter it replaced. Every half-band filter
+        has its odd taps zero but the middle one, so half the products are skipped. The delay is padded to the same
+        whole number as before - latency() samples at the outer rate (96 when oversampling) - so nothing downstream moves. */
     class Oversampler
     {
     public:
-        void prepare (int factorIn, int tapsPerPhase = 96, double stopDb = 130.0)
+        void prepare (int factorIn, int /*tapsPerPhase*/ = 96, double /*stopDb*/ = 130.0)
         {
-            factor = std::max (1, factorIn); per = tapsPerPhase; const int n = per * factor + 1;      // odd length: the delay is a whole number of outer samples
-            h.assign ((size_t) n, 0.0);
-            if (factor == 1) { h.assign (1, 1.0); per = 0; }
-            else
+            factor = 1; stages = 0; while (factor < std::max (1, std::min (16, factorIn))) { factor *= 2; ++stages; }
+            static const int lengths[4] = { 167, 33, 25, 17 };      // round trips of 83, 16, 12 and 8 samples at each stage's input rate: 83 + 8 + 3 + 1 outer samples
+            int total = 0;
+            for (int k = 0; k < stages; ++k)
             {
-                const double beta = 0.1102 * (stopDb - 8.7), cutoff = 0.5 / factor;      // centred on the outer rate's fold: with 96 taps a phase the response is flat to 20 kHz at 44.1 kHz,
-                                                                       // and what folds back lands only above that
-                auto bessel = [] (double v) { double s = 1.0, term = 1.0; for (int k = 1; k < 60; ++k) { term *= (v / (2.0 * k)) * (v / (2.0 * k)); s += term; if (term < 1.0e-18 * s) break; } return s; };
-                double sum = 0.0;
-                for (int i = 0; i < n; ++i)
-                {
-                    const double m = i - (n - 1) / 2.0, r = 2.0 * i / (n - 1) - 1.0;
-                    const double sinc = std::abs (m) < 1.0e-12 ? 2.0 * cutoff : std::sin (2.0 * 3.14159265358979323846 * cutoff * m) / (3.14159265358979323846 * m);
-                    h[(size_t) i] = sinc * bessel (beta * std::sqrt (std::max (0.0, 1.0 - r * r))) / bessel (beta); sum += h[(size_t) i];
-                }
-                for (auto& v : h) v /= sum;
+                auto& st = stage[k]; const int n = lengths[k], L = (n - 1) / 2; st.L = L; total += L >> k;
+                const double beta = 0.1102 * (120.0 - 8.7); auto bessel = [] (double v) { double s = 1.0, term = 1.0; for (int i = 1; i < 60; ++i) { term *= (v / (2.0 * i)) * (v / (2.0 * i)); s += term; if (term < 1.0e-18 * s) break; } return s; };
+                std::vector<double> h ((size_t) n); double sum = 0.0;
+                for (int j = 0; j < n; ++j) { const int m = j - L; const double r = (double) m / L; const double sinc = m == 0 ? 1.0 : (m % 2 == 0 ? 0.0 : std::sin (3.14159265358979323846 * m / 2.0) / (3.14159265358979323846 * m / 2.0)); h[(size_t) j] = sinc * bessel (beta * std::sqrt (std::max (0.0, 1.0 - r * r))) / bessel (beta); sum += h[(size_t) j]; }
+                for (auto& v : h) v *= 2.0 / sum;                  // gain 2 for the zeros put in going up; halved coming down
+                for (int ph = 0; ph < 2; ++ph) { st.up[ph].clear(); for (int j = ph; j < n; j += 2) if (h[(size_t) j] != 0.0) st.up[ph].push_back ({ (j - ph) / 2, h[(size_t) j] }); }
+                st.down.clear(); for (int j = 0; j < n; ++j) if (h[(size_t) j] != 0.0) st.down.push_back ({ j, 0.5 * h[(size_t) j] });
+                st.upLen = (n + 1) / 2 + 1; st.downLen = n; st.upHist.assign ((size_t) st.upLen * 2, 0.0); st.downHist.assign ((size_t) st.downLen * 2, 0.0); st.upPos = st.downPos = 0; st.even = true;
             }
-            upLen = per + 1; upHist.assign ((size_t) upLen, 0.0); downHist.assign (h.size(), 0.0); upPos = downPos = 0;
+            pad = factor == 1 ? 0 : 96 - total; padLine.assign ((size_t) std::max (1, pad), 0.0); padPos = 0; latencySamples = factor == 1 ? 0 : 96;
         }
-        void reset() { std::fill (upHist.begin(), upHist.end(), 0.0); std::fill (downHist.begin(), downHist.end(), 0.0); upPos = downPos = 0; }
-        /** Delay in samples at the outer rate, both filters together. */
-        int latency() const { return factor == 1 ? 0 : per; }
+        void reset()
+        {
+            for (int k = 0; k < stages; ++k) { auto& st = stage[k]; std::fill (st.upHist.begin(), st.upHist.end(), 0.0); std::fill (st.downHist.begin(), st.downHist.end(), 0.0); st.upPos = st.downPos = 0; st.even = true; }
+            std::fill (padLine.begin(), padLine.end(), 0.0); padPos = 0;
+        }
+        /** Delay in samples at the outer rate, both directions together. */
+        int latency() const { return latencySamples; }
 
         template <typename Fn> double process (double in, Fn&& inner)
         {
             if (factor == 1) return inner (in);
-            upHist[(size_t) upPos] = in; double out = 0.0;
-            const int n = (int) h.size();
-            for (int p = 0; p < factor; ++p)
-            {
-                // phase p of the up filter: taps p, p + factor, ... against the newest inputs first
-                double up = 0.0; int idx = upPos;
-                for (int k = p; k < n; k += factor) { up += h[(size_t) k] * upHist[(size_t) idx]; if (--idx < 0) idx = upLen - 1; }
-                const double y = inner (up * factor);
-                downHist[(size_t) downPos] = y; if (++downPos >= n) downPos = 0;
-                // the output is taken at the first inner sample of the period, which makes the whole delay a whole number of outer samples
-                if (p == 0) { int idx = downPos; for (int k = 0; k < n; ++k) { if (--idx < 0) idx = n - 1; out += h[(size_t) k] * downHist[(size_t) idx]; } }
-            }
-            if (++upPos >= upLen) upPos = 0;
-            return out;
+            // up: each stage turns every sample into two
+            double a[16], b[16]; a[0] = in; int count = 1;
+            for (int k = 0; k < stages; ++k) { auto& st = stage[k]; for (int i = 0; i < count; ++i) up (st, a[i], b[2 * i], b[2 * i + 1]); count *= 2; std::copy (b, b + count, a); }
+            for (int i = 0; i < count; ++i) a[i] = inner (a[i]);
+            // down: each stage keeps one sample in two
+            for (int k = stages - 1; k >= 0; --k) { auto& st = stage[k]; const int half = count / 2; for (int i = 0; i < half; ++i) b[i] = down (st, a[2 * i], a[2 * i + 1]); count = half; std::copy (b, b + count, a); }
+            if (pad <= 0) return a[0];
+            const double out = padLine[(size_t) padPos]; padLine[(size_t) padPos] = a[0]; if (++padPos >= pad) padPos = 0; return out;
         }
 
     private:
-        int factor = 1, per = 1, upLen = 1, upPos = 0, downPos = 0; std::vector<double> h, upHist, downHist;
+        struct Tap { int at; double c; };
+        struct Stage
+        {
+            std::vector<Tap> up[2], down; std::vector<double> upHist, downHist; int L = 0, upLen = 1, downLen = 1, upPos = 0, downPos = 0; bool even = true;
+        };
+        static void up (Stage& st, double x, double& y0, double& y1)
+        {
+            st.upHist[(size_t) st.upPos] = st.upHist[(size_t) (st.upPos + st.upLen)] = x; const double* h = st.upHist.data() + st.upPos + st.upLen;      // h[0] newest, h[-q] q samples ago
+            double s0 = 0.0, s1 = 0.0; for (const auto& t : st.up[0]) s0 += t.c * h[-t.at]; for (const auto& t : st.up[1]) s1 += t.c * h[-t.at];
+            y0 = s0; y1 = s1; if (++st.upPos >= st.upLen) st.upPos = 0;
+        }
+        static double down (Stage& st, double v0, double v1)
+        {
+            st.downHist[(size_t) st.downPos] = st.downHist[(size_t) (st.downPos + st.downLen)] = v0; const double* h = st.downHist.data() + st.downPos + st.downLen;
+            double s = 0.0; for (const auto& t : st.down) s += t.c * h[-t.at];
+            if (++st.downPos >= st.downLen) st.downPos = 0; st.downHist[(size_t) st.downPos] = st.downHist[(size_t) (st.downPos + st.downLen)] = v1; if (++st.downPos >= st.downLen) st.downPos = 0;
+            return s;
+        }
+        Stage stage[4]; int factor = 1, stages = 0, pad = 0, padPos = 0, latencySamples = 0; std::vector<double> padLine;
     };
 }
